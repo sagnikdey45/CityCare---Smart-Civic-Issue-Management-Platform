@@ -1,0 +1,608 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    @apply bg-white;
+  }
+  .dark:root {
+    @apply bg-black;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem
+  }
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.wavet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+    line-height: 0;
+    transform: rotate(180deg);
+}
+
+.wavet svg {
+    position: relative;
+    display: block;
+    width: calc(200% + 1.3px);
+    height: 133px;
+    transform: rotateY(180deg);
+}
+
+.wavet .shape-fill {
+    fill: #FFFFFF;
+}
+
+.wavetd {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+    line-height: 0;
+    transform: rotate(180deg);
+}
+
+.wavetd svg {
+    position: relative;
+    display: block;
+    width: calc(233% + 1.3px);
+    height: 140px;
+    transform: rotateY(180deg);
+}
+
+.wavetd .shape-fill {
+    fill: #111827;
+}
+
+.waveb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+    line-height: 0;
+}
+
+.waveb svg {
+    position: relative;
+    display: block;
+    width: calc(233% + 1.3px);
+    height: 140px;
+    transform: rotateY(180deg);
+}
+
+.waveb .shape-fill {
+    fill: #fafafb;
+}
+
+.wavebd {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+    line-height: 0;
+}
+
+.wavebd svg {
+    position: relative;
+    display: block;
+    width: calc(233% + 1.3px);
+    height: 140px;
+    transform: rotateY(180deg);
+}
+
+.wavebd .shape-fill {
+    fill: #111827;
+}
+
+@layer utilities {
+  /* ===== UTILITIES */
+  .sidebar {
+    @apply w-full max-w-72 flex-col overflow-auto bg-black px-7 py-10;
+  }
+
+  .left-sidebar {
+    @apply hidden lg:flex;
+  }
+
+  .right-sidebar {
+    @apply hidden xl:flex;
+  }
+
+  .clip-text {
+    @apply bg-clip-text text-transparent;
+  }
+
+  .bg-image {
+    @apply bg-black-900 bg-light-rays bg-cover bg-no-repeat;
+  }
+
+  .header {
+    @apply text-32-bold md:text-36-bold;
+  }
+
+  .sub-header {
+    @apply text-18-bold md:text-24-bold;
+  }
+
+  .container {
+    @apply relative flex-1 overflow-y-auto px-[5%];
+  }
+
+  .sub-container {
+    @apply mx-auto flex size-full flex-col py-10;
+  }
+
+  .side-img {
+    @apply hidden min-h-screen object-cover md:block;
+  }
+
+  .copyright {
+    @apply text-14-regular justify-items-end text-center text-dark-600 xl:text-left;
+  }
+
+  /* ==== SUCCESS */
+  .success-img {
+    @apply m-auto flex flex-1 flex-col items-center justify-between gap-10 py-10;
+  }
+
+  .request-details {
+    @apply flex w-full flex-col items-center gap-8 border-y-2 border-dark-400 py-8 md:w-fit md:flex-row;
+  }
+
+  /* ===== ADMIN */
+  .admin-header {
+    @apply sticky top-3 z-20 mx-3 flex items-center justify-between rounded-2xl bg-dark-200 px-[5%] py-5 shadow-lg xl:px-12;
+  }
+
+  .admin-main {
+    @apply flex flex-col items-center space-y-6 px-[5%] pb-12 xl:space-y-12 xl:px-12;
+  }
+
+  .admin-stat {
+    @apply flex w-full flex-col justify-between gap-5 sm:flex-row xl:gap-10;
+  }
+
+  /* ==== FORM */
+  .radio-group {
+    @apply flex h-full flex-1 items-center gap-2 rounded-md border border-dashed border-dark-500 bg-dark-400 p-3;
+  }
+
+  .checkbox-label {
+    @apply cursor-pointer text-sm font-medium text-dark-700 peer-disabled:cursor-not-allowed peer-disabled:opacity-70 md:leading-none;
+  }
+
+  /* ==== File Upload */
+  .file-upload {
+    @apply text-12-regular flex cursor-pointer  flex-col items-center justify-center gap-3 rounded-md border border-dashed border-dark-500 bg-dark-400 p-5;
+  }
+
+  .file-upload_label {
+    @apply flex flex-col justify-center gap-2 text-center text-dark-600;
+  }
+
+  /* ==== Stat Card */
+  .stat-card {
+    @apply flex flex-1 flex-col gap-6 rounded-2xl bg-cover p-6 shadow-lg;
+  }
+
+  /* ==== Status Badge */
+  .status-badge {
+    @apply flex w-fit items-center gap-2 rounded-full px-4 py-2;
+  }
+
+  /* Data Table */
+  .data-table {
+    @apply z-10 w-full overflow-hidden rounded-lg border border-dark-400 shadow-lg;
+  }
+
+  .table-actions {
+    @apply flex w-full items-center justify-between space-x-2 p-4;
+  }
+
+  /* ===== ALIGNMENTS */
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .flex-between {
+    @apply flex items-center justify-between;
+  }
+
+  /* ===== TYPOGRAPHY */
+  .text-36-bold {
+    @apply text-[36px] leading-[40px] font-bold;
+  }
+
+  .text-24-bold {
+    @apply text-[24px] leading-[28px] font-bold;
+  }
+
+  .text-32-bold {
+    @apply text-[32px] leading-[36px] font-bold;
+  }
+
+  .text-18-bold {
+    @apply text-[18px] leading-[24px] font-bold;
+  }
+
+  .text-16-semibold {
+    @apply text-[16px] leading-[20px] font-semibold;
+  }
+
+  .text-16-regular {
+    @apply text-[16px] leading-[20px] font-normal;
+  }
+
+  .text-14-medium {
+    @apply text-[14px] leading-[18px] font-medium;
+  }
+
+  .text-14-regular {
+    @apply text-[14px] leading-[18px] font-normal;
+  }
+
+  .text-12-regular {
+    @apply text-[12px] leading-[16px] font-normal;
+  }
+
+  .text-12-semibold {
+    @apply text-[12px] leading-[16px] font-semibold;
+  }
+
+  /* =====  SHADCN OVERRIDES */
+  .shad-primary-btn {
+    @apply bg-green-500 text-white !important;
+  }
+
+  .shad-danger-btn {
+    @apply bg-red-700 text-white !important;
+  }
+
+  .shad-gray-btn {
+    @apply border border-dark-500 cursor-pointer bg-dark-400 text-white !important;
+  }
+
+  .btn1 {
+  @apply py-4 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 dark:from-blue-600 dark:via-indigo-600 dark:to-teal-600 text-white font-bold hover:shadow-lg hover:dark:shadow-gray-700 hover:bg-gradient-to-r hover:from-pink-600 hover:via-purple-600 hover:to-indigo-600 dark:hover:bg-gradient-to-r dark:hover:from-blue-700 dark:hover:via-indigo-700 dark:hover:to-teal-700 transition-transform transform md:hover:scale-105 hover:backdrop-brightness-125
+}
+
+.btn2 {
+  @apply py-4 rounded-2xl 
+    bg-gradient-to-r from-fuchsia-500 via-purple-500 to-pink-500 dark:from-cyan-600 dark:via-blue-600 dark:to-violet-600 text-white font-bold hover:shadow-lg hover:dark:shadow-gray-700 hover:bg-gradient-to-r hover:from-fuchsia-600 hover:via-purple-600 hover:to-pink-600 dark:hover:bg-gradient-to-r dark:hover:from-cyan-700 dark:hover:via-blue-700 dark:hover:to-violet-700 transition-transform transform md:hover:scale-105 hover:backdrop-brightness-125;
+}
+
+.btn3 {
+  @apply py-4 rounded-2xl bg-gradient-to-r from-blue-400 via-sky-500 to-purple-500 dark:from-indigo-600 dark:via-blue-700 dark:to-teal-600 text-white font-bold hover:shadow-lg hover:dark:shadow-gray-700 hover:bg-gradient-to-r hover:from-blue-500 hover:via-sky-600 hover:to-purple-600 dark:hover:bg-gradient-to-r dark:hover:from-indigo-700 dark:hover:via-blue-800 dark:hover:to-teal-700 transition-transform transform md:hover:scale-105 hover:backdrop-brightness-125
+}
+
+.btn4 {
+  @apply bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 dark:from-blue-700 dark:via-indigo-800 dark:to-purple-800 hover:dark:from-blue-800 hover:dark:via-indigo-900 hover:dark:to-purple-900 text-white font-medium text-sm sm:text-base rounded-full shadow-lg hover:opacity-90 transition-transform transform
+}
+
+.btn5 {
+  @apply w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-400 to-sky-400 dark:from-indigo-600 dark:via-blue-700 dark:to-teal-600 text-white font-bold hover:shadow-lg hover:dark:shadow-gray-700 hover:bg-gradient-to-r hover:from-cyan-500 hover:via-blue-500 hover:to-sky-500  dark:hover:bg-gradient-to-r dark:hover:from-indigo-700 dark:hover:via-blue-800 dark:hover:to-teal-700 transition-transform transform md:hover:scale-105 hover:backdrop-brightness-125
+}
+
+
+.btn6 {
+  @apply rounded-full bg-gradient-to-r from-cyan-400 via-blue-400 to-sky-400 hover:from-cyan-500 hover:via-blue-500 hover:to-sky-500 dark:from-blue-600 dark:via-cyan-500 dark:to-teal-500 hover:dark:from-blue-700 hover:dark:via-cyan-600 hover:dark:to-teal-600 text-white font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-transform duration-300
+}
+
+.btn7 {
+  @apply py-4 rounded-2xl bg-gradient-to-r from-teal-500 via-blue-500 to-indigo-500 dark:from-blue-600 dark:via-cyan-500 dark:to-teal-500 text-white font-bold shadow-lg hover:shadow-[0_0_30px_rgba(0,100,255,0.5)] transition-transform transform hover:scale-105 disabled:opacity-50
+}
+
+.btn8 {
+  @apply py-4 rounded-2xl border-2 border-indigo-500 text-indigo-500 font-bold
+    bg-transparent dark:border-purple-500 dark:text-purple-500  
+    hover:text-white hover:shadow-lg 
+    dark:hover:bg-purple-700 dark:hover:text-white 
+    transition-all duration-300 ease-in-out
+  }
+  
+  .btn9 {
+    @apply px-4 py-2 font-semibold rounded-3xl text-white bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 dark:from-blue-500 dark:via-purple-600 dark:to-pink-500 shadow-xl hover:from-blue-500 hover:to-purple-700 dark:hover:from-purple-600 dark:hover:to-pink-600 transition-transform transform hover:scale-110 hover:backdrop-brightness-125 dark:hover:backdrop-brightness-110
+  }
+  
+  .btn10 {
+    @apply text-sm bg-gradient-to-r from-fuchsia-500 via-blue-600 to-teal-500 text-white font-bold shadow-xl hover:shadow-2xl transition-transform transform hover:scale-[1.04] duration-300 disabled:opacity-50 disabled:cursor-not-allowed dark:from-pink-600 dark:via-purple-700 dark:to-blue-600 dark:text-gray-200 hover:from-purple-600 hover:via-blue-500 hover:to-teal-400 dark:hover:from-pink-700 dark:hover:via-purple-800 dark:hover:to-blue-700 active:scale-95 active:shadow-md
+  }
+
+ .accept {
+  @apply px-4 py-2 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-700 rounded-full
+}
+
+.del1 {
+  @apply py-3 rounded-2xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white font-bold shadow-lg hover:shadow-[0_0_20px_rgba(255,100,100,0.5)] hover:scale-105 active:scale-95 transition-transform transform dark:bg-gradient-to-r dark:from-red-700 dark:via-red-800 dark:to-red-900 dark:shadow-[0_0_20px_rgba(200,50,50,0.5)] dark:hover:shadow-[0_0_30px_rgba(200,50,50,0.7)]
+}
+
+.del2 {
+  @apply text-sm rounded-full text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500 dark:border-gray-300
+}
+
+.del3 {
+  @apply px-4 py-2 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-700 rounded-full
+}
+
+.input-field {
+  @apply w-full border-[2px] border-slate-300 dark:border-dark-500 rounded-3xl shadow-md
+  bg-white text-slate-900 placeholder:text-slate-400
+  dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600
+  transition-all duration-500;
+}
+
+.input-error-field {
+  @apply w-full border-[2px] border-red-400 dark:border-red-600 rounded-3xl shadow-md
+  bg-white text-slate-900 placeholder:text-slate-400
+  dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600
+  transition-all duration-500;
+}
+
+
+
+  .shad-input-label {
+  @apply text-14-medium text-slate-700 dark:text-dark-700 !important;
+}
+
+.shad-input {
+  @apply bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300 
+         dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600 dark:border-dark-500 
+         h-11 focus-visible:ring-0 focus-visible:ring-offset-0 !important;
+}
+
+.shad-input-icon {
+  @apply bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300 
+         dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600 dark:border-dark-500 
+         h-11 focus-visible:ring-0 focus-visible:ring-offset-0 !important;
+}
+
+
+  .shad-textArea {
+    @apply bg-dark-500 rounded-2xl p-2 placeholder:text-dark-600 border-2 border-dark-600 focus-visible:ring-0 focus-visible:ring-offset-0 !important;
+  }
+
+  .shad-combobox-item {
+    @apply data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 !important;
+  }
+
+  .shad-combobox-trigger {
+    @apply h-11 !important;
+  }
+
+  .shad-select-trigger {
+    @apply bg-dark-400  placeholder:text-dark-600 border-dark-500 h-11 focus:ring-0 focus:ring-offset-0 !important;
+  }
+
+  .shad-select-content {
+    @apply bg-dark-400 border-dark-500 !important;
+  }
+
+  .shad-dialog {
+    @apply bg-dark-400 border-dark-500 !important;
+  }
+
+  .shad-dialog button {
+    @apply focus:ring-0 focus:ring-offset-0 focus-visible:border-none focus-visible:outline-none focus-visible:ring-transparent focus-visible:ring-offset-0 !important;
+  }
+
+  .shad-error {
+    @apply text-red-400 !important;
+  }
+
+  .shad-table {
+    @apply rounded-lg overflow-hidden !important;
+  }
+
+  .shad-table-row-header {
+    @apply border-b border-dark-400 text-light-200 hover:bg-transparent !important;
+  }
+
+  .shad-table-row {
+    @apply border-b border-dark-400 text-light-200 !important;
+  }
+
+  .shad-otp {
+    @apply w-full flex justify-between !important;
+  }
+
+  .shad-otp-slot {
+    @apply text-36-bold justify-center flex border border-dark-500 rounded-lg size-16 gap-4 !important;
+  }
+
+  .shad-alert-dialog {
+    @apply space-y-5 bg-dark-400 border-dark-500 outline-none !important;
+  }
+
+  .shad-sheet-content button {
+    @apply top-2 focus:ring-0 focus:ring-offset-0 focus-visible:border-none focus-visible:outline-none focus-visible:ring-transparent focus-visible:ring-offset-0 !important;
+  }
+
+  /* =====  REACT PHONE NUMBER INPUT OVERRIDES */
+  .input-phone {
+    @apply mt-2 h-11 rounded-md px-3 text-sm border bg-dark-400 placeholder:text-dark-600 border-dark-500 !important;
+  }
+
+  /* =====  REACT DATE PICKER OVERRIDES */
+  .date-picker {
+    @apply overflow-hidden border-transparent w-full placeholder:text-dark-600  h-11 text-14-medium rounded-md px-3 outline-none !important;
+  }
+}
+
+/* =====  REACT-DATEPICKER OVERRIDES */
+.react-datepicker-wrapper.date-picker {
+  display: flex;
+  align-items: center;
+}
+
+.react-datepicker,
+.react-datepicker__time,
+.react-datepicker__header,
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker__day,
+.react-datepicker-time__header {
+  background-color: #1a1d21 !important;
+  border-color: #363a3d !important;
+  color: #abb8c4 !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker-time__header {
+  color: #ffffff !important;
+}
+
+.react-datepicker__triangle {
+  fill: #1a1d21 !important;
+  color: #1a1d21 !important;
+  stroke: #1a1d21 !important;
+}
+
+.react-datepicker__time-list-item:hover {
+  background-color: #363a3d !important;
+}
+
+.react-datepicker__input-container input {
+  background-color: #1a1d21 !important;
+  width: 100%;
+  outline: none;
+}
+
+.react-datepicker__day--selected {
+  background-color: #24ae7c !important;
+  color: #ffffff !important;
+  border-radius: 4px;
+}
+
+.react-datepicker__time-list-item--selected {
+  background-color: #24ae7c !important;
+}
+
+.react-datepicker__time-container {
+  border-left: 1px solid #363a3d !important;
+}
+
+.react-datepicker__time-list-item {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* =====  REACT PHONE NUMBER INPUT OVERRIDES */
+.PhoneInputInput {
+  outline: none;
+  margin-left: 4px;
+  background: #1a1d21;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.PhoneInputInput::placeholder {
+  color: #1a1d21;
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
