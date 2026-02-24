@@ -20,9 +20,12 @@ import {
   TrendingUp,
   AlertTriangle,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { PhotoUploadZone } from "./PhotoUploadZone";
 import { Toast } from "./Toast";
+import { FieldOfficerCitizenMessaging } from "./FieldOfficerCitizenMessaging";
 
 const statusColors = {
   pending:
@@ -58,6 +61,8 @@ export function FieldOfficerIssueResolution({
   const [resolutionComment, setResolutionComment] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showMessaging, setShowMessaging] = useState(false);
 
   if (!issue) return null;
 
@@ -160,7 +165,13 @@ export function FieldOfficerIssueResolution({
   return (
     <>
       <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl max-w-7xl w-full max-h-[95vh] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+        <div
+          className={`bg-slate-50 dark:bg-slate-900 rounded-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700 transition-all duration-300 flex flex-col ${
+            isFullscreen
+              ? "max-w-full h-full m-0 rounded-none"
+              : "max-w-7xl h-[95vh]"
+          }`}
+        >
           {/* Header */}
           <div className="sticky top-0 bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 dark:from-blue-700 dark:via-blue-800 dark:to-blue-900 text-white p-6 flex justify-between items-start z-10 shadow-lg">
             <div className="flex-1">
@@ -176,13 +187,28 @@ export function FieldOfficerIssueResolution({
                 {issue.ticket_id}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white/80 hover:text-white hover:bg-white/10 transition-all rounded-lg p-2"
-              aria-label="Close modal"
-            >
-              <X size={24} />
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-white/80 hover:text-white hover:bg-white/10 transition-all rounded-lg p-2"
+                aria-label={
+                  isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                }
+              >
+                {isFullscreen ? (
+                  <Minimize2 size={20} />
+                ) : (
+                  <Maximize2 size={20} />
+                )}
+              </button>
+              <button
+                onClick={onClose}
+                className="text-white/80 hover:text-white hover:bg-white/10 transition-all rounded-lg p-2"
+                aria-label="Close modal"
+              >
+                <X size={24} />
+              </button>
+            </div>
           </div>
 
           {/* Progress Indicator */}
@@ -255,7 +281,7 @@ export function FieldOfficerIssueResolution({
             </div>
           )}
 
-          <div className="overflow-y-auto max-h-[calc(95vh-200px)]">
+          <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
               {/* Left Section - Issue Details */}
               <div className="space-y-6">
@@ -787,7 +813,10 @@ export function FieldOfficerIssueResolution({
                     Quick Actions
                   </h4>
                   <div className="space-y-2">
-                    <button className="w-full flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
+                    <button
+                      onClick={() => setShowMessaging(true)}
+                      className="w-full flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+                    >
                       <div className="flex items-center gap-3">
                         <MessageCircle
                           className="text-blue-600 dark:text-blue-400"
@@ -863,6 +892,19 @@ export function FieldOfficerIssueResolution({
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Messaging Modal */}
+      {showMessaging && (
+        <FieldOfficerCitizenMessaging
+          citizenName={issue.reporter?.full_name || "Citizen"}
+          citizenPhone="+91 98765 43210"
+          citizenEmail={issue.reporter?.email}
+          issueTitle={issue.title}
+          issueId={issue.id}
+          issueLocation={issue.address}
+          onClose={() => setShowMessaging(false)}
         />
       )}
     </>
