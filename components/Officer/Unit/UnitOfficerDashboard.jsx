@@ -40,7 +40,7 @@ import { signOut, useSession } from "next-auth/react";
 import { MessagesCenter } from "@/components/MessageCenter";
 import { mockUsers } from "@/lib/mockData";
 
-export function WardOfficerWorkflow() {
+export function UnitOfficerWorkflow() {
   const { data: session, status } = useSession();
   const { user } = { id: "3" };
   const { resolvedTheme, setTheme } = useTheme();

@@ -45,7 +45,7 @@ The system follows structured workflows, RBAC architecture, and transparency-fir
 - Add public resolution notes
 - Change status (In Progress → Resolved)
 
-### Ward / Unit Officer
+### Unit Officer
 - Verify reported issues
 - Assign issues to field officers
 - Reassign issues if required
@@ -79,7 +79,7 @@ Displays:
 - Interactive Google Maps:
   - Heatmap view
   - Pin view (toggle)
-- Filters (Ward, Category, Status)
+- Filters (Category, Status)
 - Trust & Transparency metrics
 - Shareable issue links
 
@@ -102,7 +102,7 @@ Displays:
 |------|-------------|
 | Citizen | Report, view, upvote, comment |
 | Field Officer | Update assigned issues |
-| Ward Officer | Verify & assign issues |
+| Unit Officer | Verify & assign issues |
 | City Admin | Full system access |
 
 Authentication handled via **NextAuth.js** with role-based route protection.
@@ -149,10 +149,10 @@ Account approval system implemented for officers.
 # Structured Issue Lifecycle
 
 1. Citizen Reports Issue
-2. Ward Officer Verifies
+2. Unit Officer Verifies
 3. Issue Assigned to Field Officer
 4. Field Officer Resolves & Uploads Evidence
-5. Ward Officer Confirms
+5. Unit Officer Confirms
 6. Status Updated Publicly
 7. Citizen Feedback (Optional)
 
