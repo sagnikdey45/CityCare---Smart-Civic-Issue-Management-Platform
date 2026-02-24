@@ -21,7 +21,7 @@ import {
   Plus,
   Loader2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import MediaPreview from "./MediaPreview";
@@ -173,6 +173,25 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
 
   const isVideoDisabled = !!video || uploading;
 
+  /* --------------------------------------------------
+   Sync Local Media State With formData
+-------------------------------------------------- */
+  useEffect(() => {
+    // Sync Photos
+    if (Array.isArray(formData.photos)) {
+      setImages(formData.photos);
+    } else {
+      setImages([]);
+    }
+
+    // Sync Video
+    if (formData.videos) {
+      setVideo(formData.videos);
+    } else {
+      setVideo(null);
+    }
+  }, [formData.photos, formData.videos]);
+
   const uploadFile = async (file) => {
     const url = await generateUploadUrl();
 
@@ -295,7 +314,7 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
   );
 
   const availableSpecs = filteredSpecs.filter(
-    (spec) => !formData.subcategory.includes(spec),
+    (spec) => !formData.subcategory?.includes(spec),
   );
 
   // Add specialisation
@@ -334,10 +353,10 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
 
     if (!value) return;
 
-    if (!formData.tags.includes(value)) {
+    if (!formData.tags?.includes(value)) {
       setFormData((prev) => ({
         ...prev,
-        tags: [...prev.tags, value],
+        tags: [...(prev.tags || []), value],
       }));
     }
 
@@ -947,7 +966,7 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
           </label>
 
           {/* Preview */}
-          {video && (
+          {video?.length > 0 && (
             <div className="relative mt-3 rounded-xl overflow-hidden shadow">
               <MediaPreview storageId={video} isVideo />
 

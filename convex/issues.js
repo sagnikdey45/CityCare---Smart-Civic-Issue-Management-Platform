@@ -52,7 +52,7 @@ export const createIssue = mutation({
 
     isAnonymous: v.boolean(),
 
-    additionalEmail: v.optional(v.string()),
+    additionalEmail: v.optional(v.union(v.string(), v.null())),
 
     // --- Media ---
     photos: v.array(v.id("_storage")),

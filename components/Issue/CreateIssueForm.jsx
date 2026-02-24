@@ -15,13 +15,6 @@ import { useSession } from "next-auth/react";
 
 const IssueForm = () => {
   const { data: session, status } = useSession();
-
-  console.log(
-    "Session data in IssueForm:",
-    session?.user?.id,
-    "Status:",
-    status,
-  );
   const [currentStep, setCurrentStep] = useState(1);
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -220,7 +213,7 @@ const IssueForm = () => {
 
   return (
     <>
-      <Navbar setFormData={setFormData} setCurrentStep={setCurrentStep} />
+      <Navbar formData={formData} setFormData={setFormData} setCurrentStep={setCurrentStep} />
       <div className="mt-20 max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700 shadow-lg mb-4">
@@ -320,7 +313,9 @@ const IssueForm = () => {
       {showPreview && (
         <PreviewModal
           formData={formData}
+          setFormData={setFormData}
           onClose={() => setShowPreview(false)}
+          setCurrentStep={setCurrentStep}
           onSubmit={handleSubmit}
           isSubmitting={isSubmitting}
         />
