@@ -1,8 +1,11 @@
 import React from 'react'
+import { OfficerMessageCenter } from '@/components/Officer/Field/OfficerMessagingCenter'
 
 const page = () => {
   return (
-    <div>page</div>
+    <div>
+      <OfficerMessageCenter />
+   </div>
   )
 }
 
