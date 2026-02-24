@@ -192,9 +192,10 @@ export function CitizenDashboard({
                     </p>
                   </div>
                   <button
-                    onClick={() =>
-                      signOut({ redirect: true, callbackUrl: "/sign-in" })
-                    }
+                    onClick={() => {
+                      signOut({ redirect: true, callbackUrl: "/sign-in" });
+                      localStorage.removeItem("realExpiry");
+                    }}
                     className="w-full flex items-center px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                   >
                     <LogOut size={16} className="mr-3" />

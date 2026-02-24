@@ -24,11 +24,13 @@ export function PublicNavbar() {
       const timer = setTimeout(() => {
         console.warn("Session expired — logging out.");
         signOut({ redirect: true, callbackUrl: "/sign-in" });
+        localStorage.removeItem("realExpiry");
       }, remaining);
 
       return () => clearTimeout(timer);
     } else {
       signOut({ redirect: true, callbackUrl: "/sign-in" });
+      localStorage.removeItem("realExpiry");
     }
   }, [session?.realExpiry]);
 
@@ -169,9 +171,10 @@ export function PublicNavbar() {
 
             <button
               className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-all"
-              onClick={() =>
-                signOut({ redirect: true, callbackUrl: "/sign-in" })
-              }
+              onClick={() => {
+                signOut({ redirect: true, callbackUrl: "/sign-in" });
+                localStorage.removeItem("realExpiry");
+              }}
             >
               Logout
             </button>
@@ -196,16 +199,19 @@ export function PublicNavbar() {
               </p>
 
               <button
-                onClick={() => router.push(`/${userRole.replace("_", "-")}/dashboard`)}
+                onClick={() =>
+                  router.push(`/${userRole.replace("_", "-")}/dashboard`)
+                }
                 className="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-lg hover:shadow-lg transform hover:scale-105 transition-all"
               >
                 Dashboard
               </button>
 
               <button
-                onClick={() =>
-                  signOut({ redirect: true, callbackUrl: "/sign-in" })
-                }
+                onClick={() => {
+                  signOut({ redirect: true, callbackUrl: "/sign-in" });
+                  localStorage.removeItem("realExpiry");
+                }}
                 className="w-full px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all"
               >
                 Logout

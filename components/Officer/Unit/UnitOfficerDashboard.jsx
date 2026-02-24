@@ -705,9 +705,10 @@ export function WardOfficerWorkflow() {
               </div>
 
               <button
-                onClick={() =>
-                  signOut({ redirect: true, callbackUrl: "/sign-in" })
-                }
+                onClick={() => {
+                  signOut({ redirect: true, callbackUrl: "/sign-in" });
+                  localStorage.removeItem("realExpiry");
+                }}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-red-600 text-white rounded-lg font-semibold text-sm hover:shadow-lg hover:from-rose-600 hover:to-red-700 transition-all ring-1 ring-white/10"
               >
                 <LogOut size={18} />
@@ -727,9 +728,10 @@ export function WardOfficerWorkflow() {
 
               <button
                 // onClick={logout}
-                onClick={() =>
-                  signOut({ redirect: true, callbackUrl: "/sign-in" })
-                }
+                onClick={() => {
+                  signOut({ redirect: true, callbackUrl: "/sign-in" });
+                  localStorage.removeItem("realExpiry");
+                }}
                 className="w-full flex items-center justify-center p-2.5 bg-gradient-to-r from-rose-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:from-rose-600 hover:to-red-700 transition-all ring-1 ring-white/10"
                 title="Sign Out"
               >
