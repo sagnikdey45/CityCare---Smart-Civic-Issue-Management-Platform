@@ -47,7 +47,8 @@ const Navbar = ({ formData, setFormData, setCurrentStep }) => {
         priority: "",
         tags: [],
         photos: [],
-        videos: [],
+        videos: null,
+
 
         searchQuery: "",
         address: "",

@@ -183,7 +183,7 @@ const IssueForm = () => {
         priority: "",
         tags: [],
         photos: [],
-        videos: [],
+        videos: null,
 
         searchQuery: "",
         address: "",

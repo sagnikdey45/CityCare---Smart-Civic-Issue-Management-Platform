@@ -115,7 +115,7 @@ const PreviewModal = ({
         priority: "",
         tags: [],
         photos: [],
-        videos: [],
+        videos: null,
 
         searchQuery: "",
         address: "",
