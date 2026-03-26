@@ -114,7 +114,7 @@ export default defineSchema({
     .index("by_unit_officer", ["reportingUnitOfficerId"]),
 
   issues: defineTable({
-    // --- Core ---
+    // Core
     issueCode: v.string(),
 
     title: v.string(),
@@ -130,7 +130,7 @@ export default defineSchema({
 
     tags: v.array(v.string()),
 
-    // --- Location ---
+    // Location
     latitude: v.string(),
     longitude: v.string(),
 
@@ -141,20 +141,20 @@ export default defineSchema({
 
     googleMapUrl: v.string(),
 
-    // --- Reporter ---
+    // Reporter
     reportedBy: v.id("users"),
 
     isAnonymous: v.boolean(),
 
     additionalEmail: v.union(v.string(), v.null()),
 
-    // --- Media ---
+    // Media
     photos: v.array(v.id("_storage")),
 
     // Single videos
     videos: v.union(v.id("_storage"), v.null()),
 
-    // --- Workflow ---
+    // Workflow
     status: v.string(),
 
     assignedUnitOfficer: v.union(v.id("users"), v.null()),
@@ -184,4 +184,42 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_city", ["city"])
     .index("by_category", ["category"]),
+
+  issueUpdates: defineTable({
+    // Reference
+    issueId: v.id("issues"),
+
+    // Workflow status after update
+    status: v.string(),
+
+    // Remarks / notes
+    comment: v.union(v.string(), v.null()),
+
+    // Who performed the update
+    updatedBy: v.id("users"),
+
+    role: v.union(
+      v.literal("citizen"),
+      v.literal("unit_officer"),
+      v.literal("field_officer"),
+      v.literal("admin"),
+    ),
+
+    // Attachments (photos/videos/documents)
+    attachments: v.array(v.id("_storage")),
+
+    // Visibility scope
+    scope: v.union(
+      v.literal("public"), // visible to citizen
+      v.literal("internal"), // officers only
+      v.literal("admin_only"), // admin audit
+    ),
+
+    // Timestamp
+    createdAt: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_issue_status", ["issueId", "status"])
+    .index("by_updated_by", ["updatedBy"])
+    .index("by_role", ["role"]),
 });

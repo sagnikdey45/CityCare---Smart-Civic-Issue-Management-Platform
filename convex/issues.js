@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const CATEGORY_PREFIX = {
@@ -140,5 +140,45 @@ export const createIssue = mutation({
       success: true,
       issueCode,
     };
+  },
+});
+
+
+export const getCitizenDashboardIssues = query({
+  args: {
+    userId: v.id("users"),
+  },
+
+  handler: async (ctx, args) => {
+    // Get citizen profile
+    const citizen = await ctx.db
+      .query("citizens")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (!citizen) return [];
+
+    // Get issues reported by citizen
+    const personalIssues = await ctx.db
+      .query("issues")
+      .withIndex("by_reporter", (q) => q.eq("reportedBy", args.userId))
+      .collect();
+
+    // Get city issues
+    const cityIssues = await ctx.db
+      .query("issues")
+      .withIndex("by_city", (q) => q.eq("city", citizen.city))
+      .collect();
+
+    // Merge without duplicates
+    const issueMap = new Map();
+
+    [...personalIssues, ...cityIssues].forEach((issue) => {
+      issueMap.set(issue._id, issue);
+    });
+
+    return Array.from(issueMap.values()).sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
   },
 });

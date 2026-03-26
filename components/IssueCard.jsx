@@ -1,3 +1,5 @@
+"use client";
+
 import {
   MapPin,
   User,
@@ -7,6 +9,8 @@ import {
   XCircle,
   Loader,
 } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 const statusConfig = {
   pending: {
@@ -53,15 +57,22 @@ const statusConfig = {
 
 const categoryLabels = {
   road: "Road & Infrastructure",
-  lighting: "Street Lighting",
-  waste: "Waste Management",
+  electricity: "Electricity & Lighting",
   water: "Water Supply",
+  sanitation: "Sanitation & Waste",
+  drainage: "Drainage & Sewer",
+  solid_waste: "Solid Waste Management",
+  public_health: "Public Health",
   other: "Other",
 };
 
 export function IssueCard({ issue, onClick }) {
   const config = statusConfig[issue.status];
   const StatusIcon = config.icon;
+
+  const photoUrl = useQuery(api.issuesMedia.getMediaUrl, {
+    storageId: issue?.photos?.[0] || null,
+  });
 
   function getTimeAgo(date) {
     const now = new Date();
@@ -102,9 +113,9 @@ export function IssueCard({ issue, onClick }) {
           </p>
         </div>
 
-        {issue.photoUrl ? (
+        {photoUrl ? (
           <img
-            src={issue.photoUrl}
+            src={photoUrl}
             alt={issue.title}
             className="w-20 h-20 rounded-lg object-cover border-2 border-white shadow-md ml-4"
           />

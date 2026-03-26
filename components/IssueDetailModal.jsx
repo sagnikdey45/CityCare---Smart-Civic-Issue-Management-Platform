@@ -500,15 +500,15 @@ export function IssueDetailModal({ issue, onClose }) {
                       <span className="text-gray-600">Severity:</span>
                       <span
                         className={`font-medium ${
-                          issue.severity === "high"
+                          issue.priority === "high"
                             ? "text-red-600"
-                            : issue.severity === "medium"
+                            : issue.priority === "medium"
                               ? "text-amber-600"
                               : "text-green-600"
                         }`}
                       >
-                        {issue.severity.charAt(0).toUpperCase() +
-                          issue.severity.slice(1)}
+                        {issue.priority.charAt(0).toUpperCase() +
+                          issue.priority.slice(1)}
                       </span>
                     </div>
                   </div>

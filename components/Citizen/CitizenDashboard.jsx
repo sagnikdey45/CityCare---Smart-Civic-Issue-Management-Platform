@@ -12,13 +12,14 @@ import {
   Grid,
   List,
 } from "lucide-react";
-import { getIssues } from "@/lib/mockData";
 import { IssueDetailModal } from "@/components/IssueDetailModal";
 import { IssueCard } from "@/components/IssueCard";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ModeToggle } from "../ModeToggle";
 import { signOut, useSession } from "next-auth/react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 export function CitizenDashboard({
   onReportIssue,
@@ -26,12 +27,7 @@ export function CitizenDashboard({
   unreadCount,
 }) {
   const { data: session, status } = useSession();
-  const user = { id: "1" };
-  const profile = { full_name: "Josh Hazlewood" };
   const router = useRouter();
-  const [issues, setIssues] = useState([]);
-  const [filteredIssues, setFilteredIssues] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -39,89 +35,61 @@ export function CitizenDashboard({
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  useEffect(
-    () => {
-      if (user) {
-        loadIssues();
-      }
-    },
-    [
-      // user
-    ],
+  const issues = useQuery(
+    api.issues.getCitizenDashboardIssues,
+    session?.user?.id ? { userId: session.user.id } : "skip",
   );
 
+  console.log("Fetched issues for dashboard:", issues);
+
+  const formattedIssues = issues
+    ? issues.map((issue) => ({
+        ...issue,
+        id: issue.issueCode,
+        created_at: new Date(issue.createdAt).toISOString(),
+      }))
+    : [];
+
   useEffect(() => {
-    filterIssues();
-  }, [issues, searchTerm, statusFilter, categoryFilter]);
+    if (!selectedIssue || !formattedIssues.length) return;
 
-  async function loadIssues() {
-    if (!user) return;
+    const updated = formattedIssues.find((i) => i.id === selectedIssue.id);
 
-    setLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const data = getIssues()
-        .filter((issue) => issue.reportedBy === user.id)
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-      setIssues(data);
-    } catch (error) {
-      console.error("Error loading issues:", error);
-    } finally {
-      setLoading(false);
+    if (updated && JSON.stringify(updated) !== JSON.stringify(selectedIssue)) {
+      setSelectedIssue(updated);
     }
-  }
+  }, [formattedIssues]);
 
-  function filterIssues() {
-    let filtered = [...issues];
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (issue) =>
-          issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          issue.ticket.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((issue) => issue.status === statusFilter);
-    }
-
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter((issue) => issue.category === categoryFilter);
-    }
-
-    setFilteredIssues(filtered);
-  }
-
-  async function handleSignOut() {
-    try {
-      //   await signOut();
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  }
-
-  const stats = {
-    total: issues.length,
-    pending: issues.filter((i) => i.status === "pending").length,
-    in_progress: issues.filter((i) => i.status === "in_progress").length,
-    resolved: issues.filter((i) => i.status === "resolved").length,
-  };
-
-  if (loading) {
+  if (issues === undefined) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Loading your dashboard...</p>
-        </div>
+        <div className="animate-spin h-12 w-12 border-b-2 border-emerald-600 rounded-full"></div>
       </div>
     );
   }
+
+  const filteredIssues = formattedIssues.filter((issue) => {
+    const matchesSearch =
+      issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      issue.issueCode.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "all" || issue.status === statusFilter;
+
+    const matchesCategory =
+      categoryFilter === "all" || issue.category === categoryFilter;
+
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
+
+  const stats = {
+    total: formattedIssues.length,
+    pending: formattedIssues.filter((i) => i.status === "pending").length,
+    in_progress: formattedIssues.filter((i) => i.status === "in_progress")
+      .length,
+    resolved: formattedIssues.filter((i) => i.status === "resolved").length,
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
@@ -192,10 +160,9 @@ export function CitizenDashboard({
                     </p>
                   </div>
                   <button
-                    onClick={() => {
-                      signOut({ redirect: true, callbackUrl: "/sign-in" });
-                      localStorage.removeItem("realExpiry");
-                    }}
+                    onClick={() =>
+                      signOut({ redirect: true, callbackUrl: "/sign-in" })
+                    }
                     className="w-full flex items-center px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                   >
                     <LogOut size={16} className="mr-3" />
