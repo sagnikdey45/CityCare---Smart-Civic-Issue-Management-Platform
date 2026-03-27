@@ -12,6 +12,7 @@ export default defineSchema({
       v.literal("unit_officer"),
       v.literal("field_officer"),
       v.literal("admin"),
+      v.literal("city_admin"),
     ),
 
     createdAt: v.string(),
