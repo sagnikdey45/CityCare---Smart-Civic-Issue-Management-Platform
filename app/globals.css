@@ -162,6 +162,7 @@
     fill: #111827;
 }
 
+
 @layer utilities {
   /* ===== UTILITIES */
   .sidebar {
@@ -305,6 +306,10 @@
     @apply text-[14px] leading-[18px] font-medium;
   }
 
+  .text-14-bold {
+    @apply text-[14px] leading-[18px] font-bold;
+  }
+
   .text-14-regular {
     @apply text-[14px] leading-[18px] font-normal;
   }
@@ -409,13 +414,19 @@
 
 
   .shad-input-label {
-  @apply text-14-medium text-slate-700 dark:text-dark-700 !important;
+  @apply text-14-bold text-slate-700 dark:text-dark-700 !important;
 }
 
 .shad-input {
-  @apply bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300 
-         dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600 dark:border-dark-500 
-         h-11 focus-visible:ring-0 focus-visible:ring-offset-0 !important;
+  @apply bg-white text-slate-900 placeholder:text-slate-400 
+         border border-emerald-300
+         dark:bg-dark-400 dark:text-white dark:placeholder:text-dark-600 dark:border-emerald-700
+         h-11 transition-all duration-200
+         focus-visible:outline-none 
+         focus-visible:ring-2 focus-visible:ring-emerald-500 
+         focus-visible:border-emerald-500
+         dark:focus-visible:ring-emerald-400 
+         dark:focus-visible:border-emerald-400 !important;
 }
 
 .shad-input-icon {

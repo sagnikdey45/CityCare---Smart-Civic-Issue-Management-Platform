@@ -4,14 +4,12 @@ import React, { useEffect, useState } from "react";
 import {
   Mail,
   Lock,
-  ChevronDown,
-  Check,
   AlertTriangle,
   Eye,
   EyeOff,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
@@ -26,7 +24,6 @@ const SignInPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAlert, setShowAlert] = useState(false);
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -167,70 +164,6 @@ const SignInPage = () => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Role Dropdown */}
-              <div>
-                <label className="shad-input-label block mb-2 text-slate-800 dark:text-white">
-                  Role
-                </label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                    onBlur={() =>
-                      setTimeout(() => {
-                        setShowRoleDropdown(false);
-                      }, 150)
-                    }
-                    className="w-full bg-white dark:bg-dark-400 border border-slate-300 dark:border-dark-500 rounded-lg px-4 py-3 text-left text-slate-900 dark:text-white flex items-center justify-between hover:border-emerald-500 transition-colors"
-                  >
-                    <span className="capitalize">
-                      {formData.role.replace("_", " ")}
-                    </span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-slate-500 dark:text-dark-600 transition-transform ${
-                        showRoleDropdown ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {showRoleDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-dark-400 border border-slate-300 dark:border-dark-500 rounded-lg shadow-lg z-10 overflow-hidden">
-                      <div className="p-3 border-b border-slate-200 dark:border-dark-500">
-                        <span className="text-14-medium text-slate-600 dark:text-dark-700">
-                          Select Role
-                        </span>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        {[
-                          "citizen",
-                          "unit_officer",
-                          "field_officer",
-                          "admin",
-                        ].map((role) => (
-                          <button
-                            key={role}
-                            type="button"
-                            onClick={() => {
-                              setFormData((prev) => ({ ...prev, role }));
-                              setError("");
-                              setShowRoleDropdown(false);
-                            }}
-                            className="w-full p-4 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-dark-500 transition-colors text-left"
-                          >
-                            <span className="text-16-medium text-slate-900 dark:text-white capitalize">
-                              {role.replace("_", " ")}
-                            </span>
-                            {formData.role === role && (
-                              <Check className="w-5 h-5 text-emerald-500" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Email */}
               <div>
                 <label className="shad-input-label block mb-2 text-slate-800 dark:text-white">

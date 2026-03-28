@@ -26,7 +26,11 @@ export default function SessionWatcher() {
         const role =
           session?.user?.role || localStorage.getItem("lastRole") || "citizen";
 
-        router.replace(`/sign-in?expired=true&role=${role}`);
+        if (role === "citizen") {
+          router.replace(`/sign-in?expired=true&role=${role}`);
+        } else {
+          router.replace(`/staff/sign-in?expired=true&role=${role}`);
+        }
       }
     }
   }, []);

@@ -8,10 +8,9 @@ import {
   Shield,
   Zap,
   Award,
-  Heart,
-  Star,
   Sparkles,
   ArrowRight,
+  Users2,
 } from "lucide-react";
 import { Leaderboard } from "./LeaderBoard";
 import Image from "next/image";
@@ -91,6 +90,20 @@ export function LandingPage({ onGetStarted }) {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <button
+                onClick={() => router.push("staff/sign-in")}
+                className="group px-8 py-4 bg-white text-teal-600 
+                     dark:bg-gray-800 dark:text-emerald-300 
+                     rounded-full font-semibold text-lg 
+                     hover:bg-teal-100 dark:hover:bg-teal-800 
+                     transition-all transform hover:scale-105 hover:shadow-2xl 
+                     flex items-center space-x-2"
+              >
+                <Shield className="text-teal-600 dark:text-emerald-400" />
+                <span>Staff Login</span>
+                <ArrowRight />
+              </button>
+
+              <button
                 onClick={() => router.push("sign-up")}
                 className="group px-8 py-4 bg-white text-teal-600 
                      dark:bg-gray-800 dark:text-emerald-300 
@@ -99,6 +112,7 @@ export function LandingPage({ onGetStarted }) {
                      transition-all transform hover:scale-105 hover:shadow-2xl 
                      flex items-center space-x-2"
               >
+                <Users2 className="text-teal-600 dark:text-emerald-400" />
                 <span>Get Started</span>
                 <ArrowRight />
               </button>
