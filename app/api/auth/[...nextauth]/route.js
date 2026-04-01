@@ -43,7 +43,6 @@ const handler = NextAuth({
             return null;
           }
 
-
           // Verify password
           const valid = await compare(credentials.password, user.password);
           if (!valid) return null;
@@ -98,8 +97,6 @@ const handler = NextAuth({
 
         // Provide expiry timestamp to frontend
         session.realExpiry = new Date(token.realExp * 1000).toISOString();
-      } else {
-        session = null; // clear expired sessions
       }
 
       return session;

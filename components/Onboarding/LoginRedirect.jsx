@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 
-export default function LoginRedirect() {
+export default function LoginRedirect({ role = "citizen" }) {
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -14,7 +14,11 @@ export default function LoginRedirect() {
     async function redirectUser() {
       // Not logged in → Go login
       if (status === "unauthenticated") {
-        router.replace("/sign-in");
+        if (role === "admin") {
+          router.replace("/staff/sign-in");
+        } else {
+          router.replace("/sign-in");
+        }
         return;
       }
 
@@ -25,7 +29,11 @@ export default function LoginRedirect() {
         const email = session?.user?.email;
 
         if (!email) {
-          router.replace("/sign-in");
+          if (role === "admin") {
+            router.replace("/staff/sign-in");
+          } else {
+            router.replace("/sign-in");
+          }
           return;
         }
 
@@ -35,7 +43,11 @@ export default function LoginRedirect() {
         });
 
         if (!user) {
-          router.replace("/sign-in");
+          if (role === "admin") {
+            router.replace("/staff/sign-in");
+          } else {
+            router.replace("/sign-in");
+          }
           return;
         }
 
@@ -58,11 +70,19 @@ export default function LoginRedirect() {
             break;
 
           default:
-            router.replace("/sign-in");
+            if (role === "admin") {
+              router.replace("/staff/sign-in");
+            } else {
+              router.replace("/sign-in");
+            }
         }
       } catch (err) {
         console.error("Login redirect error:", err);
-        router.replace("/sign-in");
+        if (role === "admin") {
+          router.replace("/staff/sign-in");
+        } else {
+          router.replace("/sign-in");
+        }
       }
     }
 
