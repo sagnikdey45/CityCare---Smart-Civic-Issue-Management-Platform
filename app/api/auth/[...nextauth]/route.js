@@ -97,6 +97,8 @@ const handler = NextAuth({
 
         // Provide expiry timestamp to frontend
         session.realExpiry = new Date(token.realExp * 1000).toISOString();
+      } else {
+        session = null; // clear expired sessions
       }
 
       return session;
