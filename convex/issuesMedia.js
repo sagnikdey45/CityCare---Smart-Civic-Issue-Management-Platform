@@ -28,3 +28,18 @@ export const deleteMedia = mutation({
     return { success: true };
   },
 });
+
+export const getFileMeta = query({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const url = await ctx.storage.getUrl(args.storageId);
+    const meta = await ctx.db.system.get(args.storageId);
+
+    return {
+      url,
+      contentType: meta?.contentType || "",
+    };
+  },
+});
