@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import {
   X,
   MapPin,
@@ -48,7 +48,7 @@ const statusSteps = [
   },
 ];
 
-export function IssueDetailModal({ issue, onClose }) {
+const IssueDetailModalComponent = ({ issue, onClose }) => {
   console.log("Rendering IssueDetailModal with issue:", issue);
   const [activeTab, setActiveTab] = useState("progress");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -214,18 +214,10 @@ export function IssueDetailModal({ issue, onClose }) {
 
   const currentColors = statusColors[issue.status] || statusColors.pending;
 
-  if (!issueUpdates) {
-    return (
-      <div className="p-6 text-center text-gray-500 dark:text-gray-400">
-        Loading updates...
-      </div>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+    <div className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div
-        className={`bg-white dark:bg-gray-900 border dark:border-white/10 rounded-2xl ${isFullscreen ? "w-full h-full max-w-none max-h-none rounded-none" : "max-w-4xl w-full max-h-[90vh]"} flex flex-col shadow-2xl animate-slideUp overflow-hidden transition-all duration-300`}
+        className={`bg-white dark:bg-gray-900 border dark:border-white/10 rounded-2xl ${isFullscreen ? "w-full h-full max-w-none max-h-none rounded-none" : "max-w-4xl w-full max-h-[90vh]"} flex flex-col shadow-2xl animate-slideUp overflow-hidden transition-all duration-300 contain-content transform-gpu will-change-transform`}
       >
         <div
           className={`relative shrink-0 bg-gradient-to-r ${currentColors.gradient} p-6 text-white`}
@@ -236,14 +228,14 @@ export function IssueDetailModal({ issue, onClose }) {
           <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all backdrop-blur-sm"
+              className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all"
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
               {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
             <button
               onClick={onClose}
-              className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all backdrop-blur-sm"
+              className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all"
               aria-label="Close modal"
             >
               <X size={24} />
@@ -251,7 +243,7 @@ export function IssueDetailModal({ issue, onClose }) {
           </div>
 
           <div className="pr-24 relative z-10">
-            <span className="inline-block px-4 py-1.5 bg-white/20 dark:bg-black/20 backdrop-blur-md rounded-full text-sm font-semibold tracking-wide mb-3 border border-white/20 shadow-sm">
+            <span className="inline-block px-4 py-1.5 bg-white/20 dark:bg-black/20 rounded-full text-sm font-semibold tracking-wide mb-3 border border-white/20 shadow-sm">
               {issue.issueCode}
             </span>
             <h2 className="text-3xl font-bold mb-2 tracking-tight">
@@ -263,8 +255,8 @@ export function IssueDetailModal({ issue, onClose }) {
           </div>
         </div>
 
-        <div className="relative shrink-0 border-b border-gray-200/50 dark:border-white/5 bg-gray-50/50 dark:bg-[#0a0a0a]/50 backdrop-blur-3xl px-4 sm:px-8 py-4 sm:py-5 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.02)] dark:shadow-none transition-all duration-300 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-2 sm:gap-3 bg-gray-200/50 dark:bg-white/5 p-1.5 rounded-2xl w-max border border-gray-300/30 dark:border-white/5 shadow-inner backdrop-blur-md">
+        <div className="relative shrink-0 border-b border-gray-200/50 dark:border-white/5 bg-gray-50/50 dark:bg-[#0a0a0a]/50 px-4 sm:px-8 py-4 sm:py-5 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.02)] dark:shadow-none transition-all duration-300 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 sm:gap-3 bg-gray-200/50 dark:bg-white/5 p-1.5 rounded-2xl w-max border border-gray-300/30 dark:border-white/5 shadow-inner">
             <button
               onClick={() => setActiveTab("progress")}
               className={`flex items-center gap-2.5 px-6 py-2.5 font-extrabold transition-all duration-300 rounded-xl text-sm tracking-wide ${
@@ -354,7 +346,32 @@ export function IssueDetailModal({ issue, onClose }) {
                     Progress Tracker
                   </h3>
 
-                  {issueUpdates.length > 0 ? (
+                  {issueUpdates === undefined ? (
+                    <div className="relative ml-2 sm:ml-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0 w-full animate-pulse"
+                        >
+                          {i !== 2 && (
+                            <div className="absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full bg-gray-200/60 dark:bg-gray-800/60" />
+                          )}
+                          <div className="relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl bg-gray-200/80 dark:bg-gray-800/80 border border-white/20 dark:border-white/10" />
+                          <div className="flex-1 pt-0.5">
+                            <div className="bg-gray-100/50 dark:bg-gray-900/50 rounded-[2rem] p-6 sm:p-8 h-44 border border-gray-200/50 dark:border-white/5">
+                              <div className="flex justify-between mb-5">
+                                <div className="h-7 w-28 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
+                                <div className="h-7 w-32 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
+                              </div>
+                              <div className="h-4 w-full bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
+                              <div className="h-4 w-[90%] bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
+                              <div className="h-4 w-2/3 bg-gray-200/60 dark:bg-gray-800/60 rounded-md" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : issueUpdates.length > 0 ? (
                     <div className="relative ml-2 sm:ml-4">
                       {issueUpdates.map((update, index) => {
                         const isLastUpdate = index === issueUpdates.length - 1;
@@ -389,8 +406,8 @@ export function IssueDetailModal({ issue, onClose }) {
                               />
                             </div>
 
-                            <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1">
-                              <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-3xl border border-gray-200/60 dark:border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] group-hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:group-hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all">
+                            <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1 contain-content transform-gpu will-change-transform">
+                              <div className="bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] group-hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all">
                                 <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
                                   <span
                                     className={`text-xs font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-3 py-1.5 rounded-xl uppercase shadow-sm`}
@@ -435,11 +452,12 @@ export function IssueDetailModal({ issue, onClose }) {
                                       return (
                                         <div
                                           key={i}
-                                          className="relative group/attachment rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-xl shadow-md hover:shadow-2xl transition-all duration-500 aspect-video sm:aspect-auto sm:h-44"
+                                          className="relative group/attachment rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-white/5 shadow-md hover:shadow-2xl transition-all duration-500 aspect-video sm:aspect-auto sm:h-44"
                                         >
                                           {isImage && (
                                             <img
                                               src={url}
+                                              loading="lazy"
                                               className="w-full h-full object-cover group-hover/attachment:scale-110 transition duration-700"
                                             />
                                           )}
@@ -474,7 +492,7 @@ export function IssueDetailModal({ issue, onClose }) {
                                                 setPreviewFile(file);
                                                 setIsPreviewOpen(true);
                                               }}
-                                              className="flex items-center gap-2 opacity-0 group-hover/attachment:opacity-100 scale-90 group-hover/attachment:scale-100 transition-all duration-300 bg-white/90 dark:bg-black/70 backdrop-blur-xl text-black dark:text-white px-5 py-2.5 rounded-xl shadow-2xl font-semibold"
+                                              className="flex items-center gap-2 opacity-0 group-hover/attachment:opacity-100 scale-90 group-hover/attachment:scale-100 transition-all duration-300 bg-white/90 dark:bg-black/70 text-black dark:text-white px-5 py-2.5 rounded-xl shadow-2xl font-semibold"
                                             >
                                               <SearchIcon size={18} /> View
                                             </button>
@@ -622,7 +640,7 @@ export function IssueDetailModal({ issue, onClose }) {
               <div
                 className={`grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 mb-8 mx-auto transition-all duration-500 ${isFullscreen ? "max-w-5xl xl:max-w-[90vw] px-4 sm:px-8" : "max-w-3xl"}`}
               >
-                <div className="relative group bg-white/70 dark:bg-gray-900/40 backdrop-blur-2xl rounded-3xl border border-white/60 dark:border-white/10 p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all duration-500 hover:-translate-y-1 overflow-hidden">
+                <div className="relative group bg-white/70 dark:bg-gray-900/40 rounded-3xl border border-white/60 dark:border-white/10 p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all duration-500 hover:-translate-y-1 overflow-hidden">
                   {/* Decorative mesh gradient */}
                   <div className="absolute -top-16 -right-16 w-32 h-32 bg-blue-500/10 dark:bg-blue-400/10 blur-3xl rounded-full transition-transform duration-700 group-hover:scale-150"></div>
 
@@ -670,7 +688,7 @@ export function IssueDetailModal({ issue, onClose }) {
                   </div>
                 </div>
 
-                <div className="relative group bg-white/70 dark:bg-gray-900/40 backdrop-blur-2xl rounded-3xl border border-white/60 dark:border-white/10 p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all duration-500 hover:-translate-y-1 overflow-hidden">
+                <div className="relative group bg-white/70 dark:bg-gray-900/40 rounded-3xl border border-white/60 dark:border-white/10 p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all duration-500 hover:-translate-y-1 overflow-hidden">
                   {/* Decorative mesh gradient */}
                   <div className="absolute -top-16 -right-16 w-32 h-32 bg-emerald-500/10 dark:bg-emerald-400/10 blur-3xl rounded-full transition-transform duration-700 group-hover:scale-150"></div>
 
@@ -724,7 +742,7 @@ export function IssueDetailModal({ issue, onClose }) {
               </div>
 
               <div
-                className={`relative bg-white/70 dark:bg-gray-900/40 backdrop-blur-3xl rounded-3xl border border-white/60 dark:border-white/10 p-8 sm:p-10 mb-8 mx-auto transition-all duration-500 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] hover:shadow-2xl ${isFullscreen ? "max-w-5xl xl:max-w-7xl mx-4 sm:mx-8" : "max-w-3xl"}`}
+                className={`relative bg-white/70 dark:bg-gray-900/40 rounded-3xl border border-white/60 dark:border-white/10 p-8 sm:p-10 mb-8 mx-auto transition-all duration-500 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] hover:shadow-2xl ${isFullscreen ? "max-w-5xl xl:max-w-7xl mx-4 sm:mx-8" : "max-w-3xl"}`}
               >
                 {/* Decorative background glow */}
                 <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-blue-500/30 dark:via-blue-400/30 to-transparent"></div>
@@ -758,7 +776,7 @@ export function IssueDetailModal({ issue, onClose }) {
                   </div>
 
                   {issue.address && (
-                    <div className="flex items-start sm:items-center gap-3.5 text-sm bg-gradient-to-r from-white/80 to-white/40 dark:from-gray-800/80 dark:to-gray-800/40 p-4 rounded-2xl border border-gray-200/60 dark:border-white/5 shadow-sm backdrop-blur-xl group hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors w-full sm:w-auto">
+                    <div className="flex items-start sm:items-center gap-3.5 text-sm bg-gradient-to-r from-white/80 to-white/40 dark:from-gray-800/80 dark:to-gray-800/40 p-4 rounded-2xl border border-gray-200/60 dark:border-white/5 shadow-sm group hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors w-full sm:w-auto">
                       <div className="mt-0.5 sm:mt-0 p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/10 dark:to-indigo-500/10 border border-blue-100 dark:border-blue-500/20 shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
                         <MapPin
                           size={18}
@@ -775,7 +793,7 @@ export function IssueDetailModal({ issue, onClose }) {
 
               {issue.assignee && (
                 <div
-                  className={`bg-gradient-to-br ${currentColors.light} rounded-2xl border ${currentColors.border} p-6 mb-8 mx-auto shadow-sm backdrop-blur-md transition-all duration-500 ${isFullscreen ? "max-w-5xl xl:max-w-7xl mx-4 sm:mx-8" : "max-w-3xl"}`}
+                  className={`bg-gradient-to-br ${currentColors.light} rounded-2xl border ${currentColors.border} p-6 mb-8 mx-auto shadow-sm transition-all duration-500 ${isFullscreen ? "max-w-5xl xl:max-w-7xl mx-4 sm:mx-8" : "max-w-3xl"}`}
                 >
                   <div className="flex items-center gap-5">
                     <div
@@ -800,12 +818,19 @@ export function IssueDetailModal({ issue, onClose }) {
                 </div>
               )}
 
+              {issue.photos?.length > 0 && safePhotos.length === 0 && (
+                <div className="relative mb-8 h-[550px] w-full rounded-3xl bg-gray-100/50 dark:bg-white/5 animate-pulse border border-gray-200 dark:border-white/10 flex items-center justify-center shadow-xl overflow-hidden contain-content">
+                  <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-gray-200/50 dark:from-white/10 to-transparent"></div>
+                  <ImageIcon className="w-16 h-16 text-gray-300 dark:text-gray-700 animate-[pulse_3s_ease-in-out_infinite]" />
+                </div>
+              )}
+
               {safePhotos.length > 0 && (
-                <div className="relative mb-8">
+                <div className="relative mb-8 contain-content transform-gpu will-change-transform">
                   {/* OUTER GLOW FRAME */}
                   <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-emerald-400/30 via-teal-400/20 to-blue-500/30 blur-2xl opacity-40" />
 
-                  <div className="relative bg-white/70 dark:bg-black/40 backdrop-blur-2xl rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl p-5">
+                  <div className="relative bg-white/70 dark:bg-black/40 rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl p-5">
                     {/* HEADER */}
                     <div className="flex items-center justify-between mb-5">
                       <div className="flex items-center gap-2">
@@ -817,7 +842,7 @@ export function IssueDetailModal({ issue, onClose }) {
                         </h4>
                       </div>
 
-                      <div className="text-xs font-medium px-3 py-1 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur shadow">
+                      <div className="text-xs font-medium px-3 py-1 rounded-full bg-white/60 dark:bg-white/10 shadow">
                         {currentIndex + 1} / {safePhotos.length}
                       </div>
                     </div>
@@ -827,6 +852,7 @@ export function IssueDetailModal({ issue, onClose }) {
                       {/* IMAGE */}
                       <img
                         src={safePhotos[currentIndex]?.url}
+                        loading="lazy"
                         className="w-full h-[420px] object-cover transition duration-700 ease-out group-hover:scale-110"
                       />
 
@@ -841,7 +867,7 @@ export function IssueDetailModal({ issue, onClose }) {
                         <button
                           onClick={prev}
                           className="absolute left-4 top-1/2 -translate-y-1/2
-            group/btn backdrop-blur-xl
+            group/btn
             bg-white/70 dark:bg-black/60
             border border-white/30 dark:border-white/10
             hover:bg-white dark:hover:bg-black/80
@@ -859,7 +885,7 @@ export function IssueDetailModal({ issue, onClose }) {
                         <button
                           onClick={next}
                           className="absolute right-4 top-1/2 -translate-y-1/2
-            group/btn backdrop-blur-xl
+            group/btn
             bg-white/70 dark:bg-black/60
             border border-white/30 dark:border-white/10
             hover:bg-white dark:hover:bg-black/80
@@ -875,7 +901,7 @@ export function IssueDetailModal({ issue, onClose }) {
                       {/* FLOATING ACTION BAR */}
                       <div
                         className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 
-          bg-white/70 dark:bg-black/60 backdrop-blur-xl 
+          bg-white/70 dark:bg-black/60 
           border border-white/30 dark:border-white/10
           px-4 py-2 rounded-full shadow-lg
           opacity-0 group-hover:opacity-100 transition-all duration-300"
@@ -959,7 +985,7 @@ export function IssueDetailModal({ issue, onClose }) {
             )}
         </div>
 
-        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-xl">
+        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80">
           <button
             onClick={onClose}
             className={`w-full px-6 py-3.5 bg-gradient-to-r ${currentColors.gradient} text-white rounded-xl font-bold tracking-wide hover:opacity-90 transition-all shadow-md hover:shadow-lg focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:ring-current`}
@@ -971,7 +997,7 @@ export function IssueDetailModal({ issue, onClose }) {
 
       {isPreviewOpen && previewFile && (
         <div
-          className="fixed inset-0 z-[999] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-fadeIn"
+          className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-6 animate-fadeIn"
           onClick={() => {
             setIsPreviewOpen(false);
             setPreviewFile(null);
@@ -993,6 +1019,7 @@ export function IssueDetailModal({ issue, onClose }) {
             {previewFile.contentType?.startsWith("image") && (
               <img
                 src={previewFile.url}
+                loading="lazy"
                 className="max-h-[85vh] max-w-full object-contain rounded-xl shadow-2xl"
               />
             )}
@@ -1019,4 +1046,11 @@ export function IssueDetailModal({ issue, onClose }) {
       )}
     </div>
   );
-}
+};
+
+// Deep equality constraint targeting the unique issue ID to strictly block devtools and
+// layout cascade re-renders originating from the parent's inline arrow function pointer updates.
+export const IssueDetailModal = memo(
+  IssueDetailModalComponent,
+  (prevProps, nextProps) => prevProps.issue?._id === nextProps.issue?._id,
+);

@@ -82,13 +82,13 @@ const categoryLabels = {
 export function IssueCardSkeleton() {
   return (
     <div className="w-full h-full rounded-[2rem] p-[1.5px] bg-gradient-to-b from-gray-200/50 to-gray-100/10 dark:from-white/10 dark:to-white/5 border border-gray-100 dark:border-white/5 shadow-sm relative overflow-hidden">
-      <div className="relative h-full bg-white/40 dark:bg-[#0a0a0a]/40 backdrop-blur-3xl rounded-[calc(2rem-1.5px)] p-6 sm:p-7 flex flex-col justify-between overflow-hidden">
+      <div className="relative h-full bg-white/40 dark:bg-[#0a0a0a]/40 rounded-[calc(2rem-1.5px)] p-6 sm:p-7 flex flex-col justify-between overflow-hidden">
         {/* Shimmer overlay */}
         <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/50 dark:via-white/5 to-transparent z-20"></div>
 
         <div className="flex flex-wrap items-center gap-2 mb-5">
-          <div className="w-20 h-6 rounded-xl bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur-md"></div>
-          <div className="w-24 h-6 rounded-xl bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur-md"></div>
+          <div className="w-20 h-6 rounded-xl bg-gray-200/80 dark:bg-gray-800/80"></div>
+          <div className="w-24 h-6 rounded-xl bg-gray-200/80 dark:bg-gray-800/80"></div>
         </div>
 
         <div className="flex justify-between items-start gap-4 mb-6">
@@ -159,10 +159,10 @@ const IssueCardComponent = ({ issue, onClick }) => {
       />
 
       {/* Card Edge Border / Outer Capsule */}
-      <div className="relative h-full rounded-[2rem] p-[1.5px] bg-gradient-to-b from-white/90 to-white/10 dark:from-white/20 dark:to-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_30px_60px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] dark:hover:shadow-[0_30px_60px_rgba(0,0,0,0.6)] transition-all duration-500 overflow-hidden backdrop-blur-none">
+      <div className="relative h-full rounded-[2rem] p-[1.5px] bg-gradient-to-b from-white/90 to-white/10 dark:from-white/20 dark:to-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_30px_60px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] dark:hover:shadow-[0_30px_60px_rgba(0,0,0,0.6)] transition-all duration-500 overflow-hidden">
         {/* Dynamic Colored Glass Core */}
         <div
-          className={`relative h-full bg-gradient-to-br ${config.bgGradient} backdrop-blur-3xl rounded-[calc(2rem-1.5px)] p-6 sm:p-7 flex flex-col justify-between overflow-hidden`}
+          className={`relative h-full bg-gradient-to-br ${config.bgGradient} rounded-[calc(2rem-1.5px)] p-6 sm:p-7 flex flex-col justify-between overflow-hidden`}
         >
           {/* Internal Radial Glow */}
           <div
@@ -170,7 +170,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
           />
 
           <div className="flex flex-wrap items-center gap-2 mb-5 relative z-10">
-            <div className="px-3 py-1 bg-white/60 dark:bg-black/40 backdrop-blur-md rounded-xl border border-white/40 dark:border-white/10 shadow-sm flex items-center gap-2">
+            <div className="px-3 py-1 bg-white/60 dark:bg-black/40 rounded-xl border border-white/40 dark:border-white/10 shadow-sm flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 dark:bg-gray-400 animate-pulse"></span>
               <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-gray-700 dark:text-gray-300">
                 #{issue.issueCode}
@@ -178,7 +178,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
             </div>
 
             <div
-              className={`px-3 py-1 rounded-xl border ${config.borderColor} ${config.badgeBg} backdrop-blur-md shadow-sm flex items-center gap-2`}
+              className={`px-3 py-1 rounded-xl border ${config.borderColor} ${config.badgeBg} shadow-sm flex items-center gap-2`}
             >
               <StatusIcon
                 size={14}
@@ -217,7 +217,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
                   <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 transition-colors duration-300"></div>
                 </div>
               ) : (
-                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shadow-[0_4px_15px_rgba(0,0,0,0.1)] border-2 border-white/80 dark:border-white/10 bg-white/50 dark:bg-black/40 backdrop-blur-md flex items-center justify-center">
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shadow-[0_4px_15px_rgba(0,0,0,0.1)] border-2 border-white/80 dark:border-white/10 bg-white/50 dark:bg-black/40 flex items-center justify-center">
                   <ImageIcon className="w-8 h-8 text-gray-400 dark:text-gray-500 drop-shadow-sm group-hover/img:scale-110 transition-transform duration-700" />
                 </div>
               )}
@@ -226,7 +226,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
 
           <div className="space-y-3 mb-8 relative z-10">
             <div className="flex items-center gap-3.5 group/item">
-              <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm backdrop-blur-md group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
+              <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
                 <MapPin
                   size={14}
                   className="text-gray-600 dark:text-gray-400 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors"
@@ -239,7 +239,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
 
             {issue.assignee && (
               <div className="flex items-center gap-3.5 group/item">
-                <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm backdrop-blur-md group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
+                <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
                   <User
                     size={14}
                     className="text-gray-600 dark:text-gray-400 group-hover/item:text-indigo-600 dark:group-hover/item:text-indigo-400 transition-colors"
@@ -255,7 +255,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
             )}
 
             <div className="flex items-center gap-3.5 group/item">
-              <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm backdrop-blur-md group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
+              <div className="w-8 h-8 rounded-xl bg-white/50 dark:bg-black/30 border border-white/40 dark:border-white/5 flex items-center justify-center shadow-sm group-hover/item:bg-white/80 dark:group-hover/item:bg-white/10 transition-colors duration-300">
                 <Clock
                   size={14}
                   className="text-gray-600 dark:text-gray-400 group-hover/item:text-amber-600 dark:group-hover/item:text-amber-400 transition-colors"
@@ -267,7 +267,7 @@ const IssueCardComponent = ({ issue, onClick }) => {
             </div>
           </div>
 
-          <div className="mt-auto relative z-10 bg-white/40 dark:bg-black/30 p-4 sm:p-5 rounded-2xl border border-white/40 dark:border-white/5 shadow-inner backdrop-blur-sm">
+          <div className="mt-auto relative z-10 bg-white/40 dark:bg-black/30 p-4 sm:p-5 rounded-2xl border border-white/40 dark:border-white/5 shadow-inner">
             <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-widest text-gray-600 dark:text-gray-300 mb-3 drop-shadow-sm">
               <span>Resolution Progress</span>
               <span className={`${config.textColor} drop-shadow-md`}>
@@ -287,13 +287,13 @@ const IssueCardComponent = ({ issue, onClick }) => {
           </div>
 
           <div className="mt-5 flex items-center justify-between pt-5 border-t border-gray-300/40 dark:border-white/10 relative z-10">
-            <span className="text-[11px] sm:text-xs uppercase tracking-wider px-3.5 py-1.5 bg-white/70 dark:bg-black/40 rounded-xl border border-white/50 dark:border-white/5 text-gray-700 dark:text-gray-300 font-extrabold shadow-sm transition-colors group-hover:bg-white dark:group-hover:bg-black/60 backdrop-blur-lg">
+            <span className="text-[11px] sm:text-xs uppercase tracking-wider px-3.5 py-1.5 bg-white/70 dark:bg-black/40 rounded-xl border border-white/50 dark:border-white/5 text-gray-700 dark:text-gray-300 font-extrabold shadow-sm transition-colors group-hover:bg-white dark:group-hover:bg-black/60">
               {categoryLabels[issue.category] || "Other"}
             </span>
 
             <div className="flex items-center gap-3">
               {issue.upvotes > 0 && (
-                <span className="text-[11px] sm:text-xs text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1.5 bg-white/80 dark:bg-blue-900/30 px-3 py-1.5 rounded-xl border border-white/80 dark:border-blue-500/30 shadow-sm transition-transform hover:scale-105 cursor-help backdrop-blur-md">
+                <span className="text-[11px] sm:text-xs text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1.5 bg-white/80 dark:bg-blue-900/30 px-3 py-1.5 rounded-xl border border-white/80 dark:border-blue-500/30 shadow-sm transition-transform hover:scale-105 cursor-help">
                   <TrendingUp size={14} strokeWidth={2.5} />
                   <span>
                     {issue.upvotes}{" "}

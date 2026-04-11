@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search,
   PlusCircle,
@@ -11,6 +11,18 @@ import {
   CheckCircle,
   Grid,
   List,
+  MapPin,
+  Zap,
+  Droplets,
+  Trash2,
+  Recycle,
+  Package,
+  HeartPulse,
+  MoreHorizontal,
+  ChevronDown,
+  Check,
+  Clock,
+  XCircle,
 } from "lucide-react";
 import { IssueDetailModal } from "@/components/IssueDetailModal";
 import { IssueCard, IssueCardSkeleton } from "@/components/IssueCard";
@@ -22,6 +34,25 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { TutorialOverlay } from "./TutorialOverlay";
 import { TUTORIAL_STEPS } from "./TutorialSteps";
+
+export const categories = [
+  { value: "road", label: "Road & Infra", icon: MapPin, color: "text-blue-600 dark:text-blue-400" },
+  { value: "electricity", label: "Electricity & Lighting", icon: Zap, color: "text-amber-600 dark:text-amber-400" },
+  { value: "water", label: "Water Supply", icon: Droplets, color: "text-cyan-600 dark:text-cyan-400" },
+  { value: "sanitation", label: "Sanitation & Waste", icon: Trash2, color: "text-emerald-600 dark:text-emerald-400" },
+  { value: "drainage", label: "Drainage & Sewer", icon: Recycle, color: "text-purple-600 dark:text-purple-400" },
+  { value: "solid_waste", label: "Solid Waste Management", icon: Package, color: "text-orange-600 dark:text-orange-400" },
+  { value: "public_health", label: "Public Health", icon: HeartPulse, color: "text-red-600 dark:text-red-400" },
+  { value: "other", label: "Other", icon: MoreHorizontal, color: "text-gray-600 dark:text-gray-400" },
+];
+
+export const statusOptions = [
+  { value: "all", label: "All Statuses", icon: Grid, color: "text-gray-600 dark:text-gray-400" },
+  { value: "pending", label: "Pending Review", icon: AlertCircle, color: "text-amber-600 dark:text-amber-400" },
+  { value: "in_progress", label: "In Progress", icon: Clock, color: "text-blue-600 dark:text-blue-400" },
+  { value: "resolved", label: "Resolved", icon: CheckCircle, color: "text-emerald-600 dark:text-emerald-400" },
+  { value: "rejected", label: "Rejected", icon: XCircle, color: "text-red-600 dark:text-red-400" },
+];
 
 export function CitizenDashboard({
   onReportIssue,
@@ -37,6 +68,20 @@ export function CitizenDashboard({
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
+  
+  // Custom dropdown tracking hooks
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filterRef.current && !filterRef.current.contains(event.target)) {
+        setActiveDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     // For testing purpose: unconditionally run every time the dashboard loads
@@ -120,7 +165,7 @@ export function CitizenDashboard({
       </div>
 
       {/* Prominent Navbar */}
-      <nav className="sticky top-0 z-40 bg-white/95 dark:bg-[#0a0a0a]/90 backdrop-blur-3xl border-b border-gray-300/80 dark:border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.6)] transition-all duration-500">
+      <nav className="sticky top-0 z-40 bg-white/95 dark:bg-[#0a0a0a]/90 border-b border-gray-300/80 dark:border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.6)] transition-all duration-500">
         <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           {/* Logo + Brand */}
           <div
@@ -183,7 +228,7 @@ export function CitizenDashboard({
               </button>
 
               {showProfileMenu && (
-                <div className="absolute right-0 mt-3 w-64 bg-white/95 dark:bg-[#111]/95 backdrop-blur-3xl rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-gray-200/80 dark:border-white/10 py-2 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
+                <div className="absolute right-0 mt-3 w-64 bg-white/95 dark:bg-[#111]/95 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-gray-200/80 dark:border-white/10 py-2 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
                   <div className="px-5 py-4 bg-gray-50/50 dark:bg-white/5 border-b border-gray-200/80 dark:border-white/5">
                     <p className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
                       {session?.user?.name || "User Name"}
@@ -225,14 +270,14 @@ export function CitizenDashboard({
         <div className="relative overflow-hidden rounded-[2.5rem] p-[1.5px] bg-gradient-to-br from-emerald-400/60 to-teal-600/60 dark:from-emerald-500/40 dark:to-teal-500/20 mb-12 shadow-2xl group transition-transform duration-500">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-teal-700 dark:from-emerald-900 dark:to-teal-950 opacity-90 transition-opacity duration-1000" />
           
-          <div className="relative bg-white/10 dark:bg-black/20 backdrop-blur-xl rounded-[calc(2.5rem-1.5px)] p-8 sm:p-12 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8 h-full">
+          <div className="relative bg-white/10 dark:bg-black/20 rounded-[calc(2.5rem-1.5px)] p-8 sm:p-12 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8 h-full">
             
             {/* Dynamic Background Orbs */}
             <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/20 dark:bg-emerald-400/20 blur-[80px] rounded-full mix-blend-overlay animate-[spin_10s_linear_infinite]" />
             <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-teal-300/30 dark:bg-teal-400/20 blur-[60px] rounded-full mix-blend-overlay animate-[spin_8s_linear_infinite_reverse]" />
 
             <div className="relative z-10 max-w-2xl">
-              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/20 dark:bg-black/30 backdrop-blur-md border border-white/30 dark:border-white/10 shadow-sm mb-6 text-emerald-50 dark:text-emerald-200 text-[11px] sm:text-xs font-bold tracking-widest uppercase">
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/20 dark:bg-black/30 border border-white/30 dark:border-white/10 shadow-sm mb-6 text-emerald-50 dark:text-emerald-200 text-[11px] sm:text-xs font-bold tracking-widest uppercase">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
@@ -249,7 +294,7 @@ export function CitizenDashboard({
 
             {/* Decorative Icon Graphic */}
             <div className="hidden lg:flex relative z-10 right-8">
-               <div className="relative w-48 h-48 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-full border border-white/20 dark:border-white/10 flex items-center justify-center shadow-2xl group-hover:scale-105 transition-transform duration-700">
+               <div className="relative w-48 h-48 bg-white/10 dark:bg-black/20 rounded-full border border-white/20 dark:border-white/10 flex items-center justify-center shadow-2xl group-hover:scale-105 transition-transform duration-700">
                   <div className="absolute inset-2 border border-white/30 dark:border-white/10 rounded-full border-dashed animate-[spin_20s_linear_infinite]"></div>
                   <div className="bg-gradient-to-br from-emerald-100 to-teal-50 dark:from-emerald-500/20 dark:to-teal-500/20 p-6 rounded-full shadow-inner border border-white/50 dark:border-white/5">
                      <TrendingUp size={48} className="text-emerald-600 dark:text-emerald-300 drop-shadow-sm" />
@@ -306,7 +351,7 @@ export function CitizenDashboard({
           ].map((stat, i) => (
             <div
               key={i}
-              className={`relative bg-white/95 dark:bg-gray-900/40 bg-gradient-to-br ${stat.gradient} backdrop-blur-2xl p-6 rounded-[2rem] shadow-md border ${stat.border} hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.03)] hover:-translate-y-1.5 transition-all duration-300 group overflow-hidden`}
+              className={`relative bg-white/95 dark:bg-gray-900/40 bg-gradient-to-br ${stat.gradient} p-6 rounded-[2rem] shadow-md border ${stat.border} hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.03)] hover:-translate-y-1.5 transition-all duration-300 group overflow-hidden`}
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 dark:bg-white/5 blur-3xl rounded-full transform translate-x-1/2 -translate-y-1/2 pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
               
@@ -328,79 +373,156 @@ export function CitizenDashboard({
         </div>
 
         {/* Solidified Search & Filters Bar */}
-        <div data-tutorial="search-filters" className="relative z-10 bg-white/95 dark:bg-[#0a0a0a]/80 backdrop-blur-3xl rounded-3xl p-5 mb-10 border border-gray-200/80 dark:border-white/10 shadow-lg dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
-          <div className="flex flex-col xl:flex-row gap-4">
+        <div data-tutorial="search-filters" ref={filterRef} className="relative z-20 bg-gray-50/80 dark:bg-[#0c0c0e] rounded-[24px] p-2.5 sm:p-3 mb-10 border border-gray-200/80 dark:border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col xl:flex-row gap-3 transition-shadow duration-300 hover:shadow-lg">
             
-            <div className="flex-1 relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl blur opacity-0 group-hover:opacity-20 transition-opacity duration-500"></div>
-              <div className="relative flex items-center">
-                <Search
-                  className="absolute left-4 text-gray-500 dark:text-gray-400 group-focus-within:text-emerald-600 transition-colors"
-                  size={20}
-                  strokeWidth={2.5}
-                />
-                <input
-                  type="text"
-                  placeholder="Search your issues by title or ticket ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 bg-gray-50/80 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-2xl text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-inner backdrop-blur-sm transition-all font-medium"
-                />
-              </div>
+          {/* SEARCH INPUT */}
+          <div className="flex-1 relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-400/5 to-teal-500/0 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+            <div className="relative flex items-center bg-white dark:bg-[#151518] border border-gray-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden group-focus-within:border-emerald-500/50 group-focus-within:ring-4 ring-emerald-500/10 transition-all duration-300">
+              <Search
+                className="absolute left-4 text-gray-400 dark:text-gray-500 group-focus-within:text-emerald-500 transition-colors duration-300"
+                size={20}
+                strokeWidth={2.5}
+              />
+              <input
+                type="text"
+                placeholder="Search issues by title or ticket ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none font-medium text-[15px]"
+              />
             </div>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-               <select
-                 value={statusFilter}
-                 onChange={(e) => setStatusFilter(e.target.value)}
-                 className="px-4 py-3.5 bg-gray-50/80 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-2xl text-gray-800 dark:text-gray-200 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-inner backdrop-blur-sm cursor-pointer appearance-none min-w-[160px]"
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
+             {/* STATUS DROPDOWN */}
+             <div className="relative flex-1 sm:min-w-[190px]">
+               <button
+                 onClick={() => setActiveDropdown(activeDropdown === 'status' ? null : 'status')}
+                 className="w-full flex items-center justify-between px-4 py-3.5 bg-white dark:bg-[#151518] border border-gray-200 dark:border-white/5 rounded-2xl text-[15px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:border-gray-300 dark:hover:border-white/10 hover:shadow-md transition-all duration-200 group focus:outline-none"
                >
-                 <option value="all">🚦 All Statuses</option>
-                 <option value="pending">⏳ Pending Review</option>
-                 <option value="in_progress">⚙️ In Progress</option>
-                 <option value="resolved">✅ Resolved</option>
-                 <option value="rejected">❌ Rejected</option>
-               </select>
+                 <div className="flex items-center gap-2.5">
+                   {/* Dynamically render current status icon */}
+                   {(() => {
+                     const opt = statusOptions.find(o => o.value === statusFilter) || statusOptions[0];
+                     const Icon = opt.icon;
+                     return <Icon size={18} strokeWidth={2.5} className={`${opt.color} group-hover:scale-110 transition-transform duration-300`} />;
+                   })()}
+                   <span className="truncate">{statusOptions.find(o => o.value === statusFilter)?.label || "All Statuses"}</span>
+                 </div>
+                 <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 flex-shrink-0 ${activeDropdown === 'status' ? 'rotate-180' : ''}`} />
+               </button>
 
-               <select
-                 value={categoryFilter}
-                 onChange={(e) => setCategoryFilter(e.target.value)}
-                 className="px-4 py-3.5 bg-gray-50/80 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-2xl text-gray-800 dark:text-gray-200 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-inner backdrop-blur-sm cursor-pointer appearance-none min-w-[200px]"
-               >
-                 <option value="all">📋 All Categories</option>
-                 <option value="road">🛣️ Road & Infra</option>
-                 <option value="lighting">💡 Street Lighting</option>
-                 <option value="waste">🗑️ Waste Management</option>
-                 <option value="water">💧 Water Supply</option>
-                 <option value="other">📌 Other</option>
-               </select>
-
-               {/* View Mode Toggle */}
-               <div data-tutorial="view-toggle" className="flex bg-gray-100 dark:bg-black/60 p-1.5 rounded-2xl border border-gray-200 dark:border-white/10 shadow-inner">
-                 <button
-                   onClick={() => setViewMode("grid")}
-                   className={`p-2.5 rounded-xl transition-all duration-300 ${
-                     viewMode === "grid"
-                       ? "bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                       : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                   }`}
-                   aria-label="Grid view"
-                 >
-                   <Grid size={20} strokeWidth={2.5} />
-                 </button>
-                 <button
-                   onClick={() => setViewMode("list")}
-                   className={`p-2.5 rounded-xl transition-all duration-300 ${
-                     viewMode === "list"
-                       ? "bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                       : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                   }`}
-                   aria-label="List view"
-                 >
-                   <List size={20} strokeWidth={2.5} />
-                 </button>
+               {/* Popover */}
+               <div className={`absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#18181b] border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden z-50 transition-all duration-200 transform origin-top ${activeDropdown === 'status' ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
+                 <div className="p-2 space-y-1">
+                   {statusOptions.map((opt) => {
+                     const Icon = opt.icon;
+                     const isActive = statusFilter === opt.value;
+                     return (
+                       <button
+                         key={opt.value}
+                         onClick={() => { setStatusFilter(opt.value); setActiveDropdown(null); }}
+                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive ? 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                       >
+                         <div className="flex items-center gap-3">
+                           <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white dark:bg-black/50 shadow-sm' : 'bg-transparent'}`}>
+                             <Icon size={16} strokeWidth={2.5} className={opt.color} />
+                           </div>
+                           <span>{opt.label}</span>
+                         </div>
+                         {isActive && <Check size={16} strokeWidth={3} className={opt.color} />}
+                       </button>
+                     );
+                   })}
+                 </div>
                </div>
-            </div>
+             </div>
+
+             {/* CATEGORY DROPDOWN */}
+             <div className="relative flex-1 sm:min-w-[220px]">
+               <button
+                 onClick={() => setActiveDropdown(activeDropdown === 'category' ? null : 'category')}
+                 className="w-full flex items-center justify-between px-4 py-3.5 bg-white dark:bg-[#151518] border border-gray-200 dark:border-white/5 rounded-2xl text-[15px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:border-gray-300 dark:hover:border-white/10 hover:shadow-md transition-all duration-200 group focus:outline-none"
+               >
+                 <div className="flex items-center gap-2.5">
+                   {(() => {
+                     const opt = categoryFilter === 'all' ? { icon: Grid, color: "text-gray-500" } : categories.find(o => o.value === categoryFilter);
+                     const Icon = opt.icon || Grid;
+                     return <Icon size={18} strokeWidth={2.5} className={`${opt.color} group-hover:scale-110 transition-transform duration-300`} />;
+                   })()}
+                   <span className="truncate max-w-[130px] text-left">{categoryFilter === 'all' ? 'All Categories' : categories.find(o => o.value === categoryFilter)?.label}</span>
+                 </div>
+                 <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 flex-shrink-0 ${activeDropdown === 'category' ? 'rotate-180' : ''}`} />
+               </button>
+
+               {/* Popover */}
+               <div className={`absolute top-full right-0 w-[240px] mt-2 bg-white dark:bg-[#18181b] border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl overflow-y-auto max-h-[300px] z-50 transition-all duration-200 transform origin-top ${activeDropdown === 'category' ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
+                 <div className="p-2 space-y-1">
+                   {/* All Categories Option */}
+                   <button
+                     onClick={() => { setCategoryFilter('all'); setActiveDropdown(null); }}
+                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${categoryFilter === 'all' ? 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                   >
+                     <div className="flex items-center gap-3">
+                       <div className={`p-1.5 rounded-lg ${categoryFilter === 'all' ? 'bg-white dark:bg-black/50 shadow-sm' : 'bg-transparent'}`}>
+                         <Grid size={16} strokeWidth={2.5} className="text-gray-500" />
+                       </div>
+                       <span>All Categories</span>
+                     </div>
+                     {categoryFilter === 'all' && <Check size={16} strokeWidth={3} className="text-gray-700 dark:text-white" />}
+                   </button>
+                   
+                   <div className="h-px bg-gray-200 dark:bg-white/5 my-1 mx-2" />
+
+                   {categories.map((opt) => {
+                     const Icon = opt.icon;
+                     const isActive = categoryFilter === opt.value;
+                     return (
+                       <button
+                         key={opt.value}
+                         onClick={() => { setCategoryFilter(opt.value); setActiveDropdown(null); }}
+                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive ? 'bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                       >
+                         <div className="flex items-center gap-3">
+                           <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white dark:bg-black/50 shadow-sm' : 'bg-transparent'}`}>
+                             <Icon size={16} strokeWidth={2.5} className={opt.color} />
+                           </div>
+                           <span className="text-left">{opt.label}</span>
+                         </div>
+                         {isActive && <Check size={16} strokeWidth={3} className={opt.color} />}
+                       </button>
+                     );
+                   })}
+                 </div>
+               </div>
+             </div>
+
+             {/* View Mode Segmented Control */}
+             <div data-tutorial="view-toggle" className="flex items-center w-full sm:w-auto bg-gray-100 dark:bg-[#18181b] p-1.5 rounded-2xl border border-gray-200/50 dark:border-white/5 shadow-inner">
+               <button
+                 onClick={() => setViewMode("grid")}
+                 className={`flex-1 sm:flex-none flex items-center justify-center p-2.5 rounded-xl transition-all duration-300 ${
+                   viewMode === "grid"
+                     ? "bg-white dark:bg-[#27272a] text-gray-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 dark:ring-white/10"
+                     : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-white/5"
+                 }`}
+                 aria-label="Grid view"
+               >
+                 <Grid size={18} strokeWidth={viewMode === "grid" ? 3 : 2} className={viewMode === "grid" ? "drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]" : "opacity-80"} />
+               </button>
+               <button
+                 onClick={() => setViewMode("list")}
+                 className={`flex-1 sm:flex-none flex items-center justify-center p-2.5 rounded-xl transition-all duration-300 ${
+                   viewMode === "list"
+                     ? "bg-white dark:bg-[#27272a] text-gray-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 dark:ring-white/10"
+                     : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-white/5"
+                 }`}
+                 aria-label="List view"
+               >
+                 <List size={18} strokeWidth={viewMode === "list" ? 3 : 2} className={viewMode === "list" ? "drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]" : "opacity-80"} />
+               </button>
+             </div>
           </div>
         </div>
 
@@ -420,7 +542,7 @@ export function CitizenDashboard({
             ))}
           </div>
         ) : filteredIssues.length === 0 ? (
-          <div className="relative z-10 text-center py-24 bg-white/95 dark:bg-[#0a0a0a]/80 backdrop-blur-3xl rounded-[2.5rem] border border-gray-200/80 dark:border-white/10 shadow-xl overflow-hidden flex flex-col items-center">
+          <div className="relative z-10 text-center py-24 bg-white/95 dark:bg-[#0a0a0a]/80 rounded-[2.5rem] border border-gray-200/80 dark:border-white/10 shadow-xl overflow-hidden flex flex-col items-center">
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent blur-3xl"></div>
             <div className="relative p-6 bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-[2rem] border border-gray-200 dark:border-white/5 shadow-inner mb-6">
               <AlertCircle
