@@ -177,7 +177,19 @@ export const getCitizenDashboardIssues = query({
       issueMap.set(issue._id, issue);
     });
 
-    return Array.from(issueMap.values()).sort(
+    const uniqueIssues = Array.from(issueMap.values());
+
+    const resolvedIssues = await Promise.all(
+      uniqueIssues.map(async (issue) => {
+        let photoUrl = null;
+        if (issue.photos && issue.photos.length > 0) {
+          photoUrl = await ctx.storage.getUrl(issue.photos[0]);
+        }
+        return { ...issue, photoUrl };
+      })
+    );
+
+    return resolvedIssues.sort(
       (a, b) => b.createdAt - a.createdAt,
     );
   },
