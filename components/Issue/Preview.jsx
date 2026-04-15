@@ -205,121 +205,172 @@ const PreviewModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden animate-slideUp border border-gray-200 dark:border-gray-800 transition-colors">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700 p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Review Your Report</h2>
-          <button
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors disabled:opacity-50"
-          >
-            <X size={24} />
-          </button>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-50">
+      <div className="relative rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl shadow-black/40 max-w-5xl w-full max-h-[92vh] flex flex-col" style={{animation: 'slideUp 0.25s ease-out'}}>
+
+        {/* ── Gradient top accent ── */}
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500 z-10" />
+
+        {/* ── Subtle inner glow ── */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/20 via-transparent to-cyan-50/10 dark:from-emerald-950/15 dark:via-transparent dark:to-transparent pointer-events-none z-0" />
+
+        {/* ── Header ── */}
+        <div className="relative z-10 flex-shrink-0 overflow-hidden">
+          <div className="relative bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700 px-6 py-5 flex items-center justify-between">
+            {/* Ambient orb */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                <ClipboardList className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-white leading-tight">Review Your Report</h2>
+                <p className="text-xs text-white/70 font-medium">Check all details before submitting</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="relative w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-all disabled:opacity-50 hover:scale-110"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
-          {/* Title & Description */}
-          <div>
-            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">
+        {/* ── Scrollable content ── */}
+        <div className="relative z-10 flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+          {/* ── Title & Description ── */}
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-5">
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
+            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 pl-1">
               {formData.title}
             </h3>
-            <p className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+            <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed pl-1">
               {formData.description}
             </p>
           </div>
 
-          {/* Category & Severity */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 transition-colors">
-              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-1">
-                <Tag size={16} />
-                <span className="font-medium">Category</span>
+          {/* ── Section divider ── */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Classification</span>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          </div>
+
+          {/* ── Category & Severity ── */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2 font-bold uppercase tracking-wide">
+                <Tag size={13} />
+                Category
               </div>
-              <p className="text-gray-800 dark:text-gray-100 font-semibold">
+              <p className="text-slate-800 dark:text-slate-100 font-bold text-sm">
                 {getCategoryLabel(formData.category)}
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 transition-colors">
-              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-1">
-                <AlertTriangle size={16} />
-                <span className="font-medium">Severity</span>
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2 font-bold uppercase tracking-wide">
+                <AlertTriangle size={13} />
+                Severity
               </div>
-              <span
-                className={`inline-block px-3 py-1 rounded-lg border-2 font-semibold text-sm ${getSeverityColor(
-                  formData.priority,
-                )}`}
-              >
-                {formData.priority.charAt(0).toUpperCase() +
-                  formData.priority.slice(1)}
+              <span className={`inline-block px-3 py-1 rounded-full border-2 font-bold text-xs ${getSeverityColor(formData.priority)}`}>
+                {formData.priority.charAt(0).toUpperCase() + formData.priority.slice(1)}
               </span>
             </div>
           </div>
 
-          {/* Media Evidence */}
-          {(formData.photos?.length > 0 || formData.videos?.length > 0) && (
-            <div className="space-y-5">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Media Evidence
-              </h4>
+          {/* ── Sub-categories ── */}
+          {formData.subcategory?.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3 font-bold uppercase tracking-wide">
+                <Tag size={13} />
+                Sub-Categories
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.subcategory.map((sub, i) => (
+                  <span key={i} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700/60 text-emerald-700 dark:text-emerald-300">
+                    {sub}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
-              {/* Photos */}
+          {/* ── Tags ── */}
+          {formData.tags?.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3 font-bold uppercase tracking-wide">
+                <Tag size={13} />
+                Tags
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.tags.map((tag, i) => (
+                  <span key={i} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700/60 text-cyan-700 dark:text-cyan-300">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Section divider ── */}
+          {(formData.photos?.length > 0 || formData.videos?.length > 0) && (
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Evidence</span>
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+            </div>
+          )}
+
+          {/* ── Media Evidence ── */}
+          {(formData.photos?.length > 0 || formData.videos?.length > 0) && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-4 space-y-4">
               {formData.photos?.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
                     Photos ({formData.photos.length})
                   </p>
-
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {formData.photos.map((id, index) => (
-                      <div
-                        key={id}
-                        className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm"
-                      >
+                    {formData.photos.map((id) => (
+                      <div key={id} className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
                         <MediaPreview storageId={id} isVideo={false} />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Videos */}
-              {formData.videos?.length > 0 && (
+              {formData.videos && (
                 <div>
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
-                    Video
-                  </p>
-
-                  {formData.videos && (
-                    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
-                      <MediaPreview storageId={formData.videos} isVideo />
-                    </div>
-                  )}
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">Video</p>
+                  <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <MediaPreview storageId={formData.videos} isVideo />
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Location */}
-          <div className="bg-emerald-50 dark:bg-gray-800 rounded-xl p-4 border-2 border-emerald-200 dark:border-emerald-700 transition-colors">
-            <div className="flex items-start gap-3">
-              <MapPin
-                className="text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5"
-                size={20}
-              />
-              <div className="flex-1">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Location
-                </h4>
-                <p className="text-gray-800 dark:text-gray-100 font-medium mb-2">
-                  {formData.address}
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">
-                  {formData.latitude.toFixed(6)},{" "}
-                  {formData.longitude.toFixed(6)}
+          {/* ── Section divider ── */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Location</span>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          </div>
+
+          {/* ── Location card ── */}
+          <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60">
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
+            <div className="flex items-start gap-3 pl-5 pr-4 py-4">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-700/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Location</p>
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">{formData.address}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
                 </p>
               </div>
             </div>
@@ -675,53 +726,40 @@ const PreviewModal = ({
             </div>
           )}
 
-          {/* Contact / Anonymous */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Anonymous Status */}
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-4 border-2 border-emerald-200 dark:border-emerald-700 transition-colors">
-              <div className="flex items-center gap-2 mb-2">
-                <Shield
-                  className="text-emerald-600 dark:text-emerald-400"
-                  size={20}
-                />
+          {/* ── Section divider ── */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Privacy & Contact</span>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          </div>
 
-                <span className="font-semibold text-gray-800 dark:text-gray-100">
-                  Anonymity Status
-                </span>
+          {/* ── Contact / Anonymous ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60 p-4">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
+              <div className="flex items-center gap-2 mb-2 pl-1">
+                <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Anonymity</span>
               </div>
-
-              {formData.isAnonymous ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  This report is submitted anonymously.
-                </p>
-              ) : (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Reporter identity is visible to authorities.
-                </p>
-              )}
+              <p className={`text-sm font-semibold pl-1 ${
+                formData.isAnonymous
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-slate-700 dark:text-slate-200"
+              }`}>
+                {formData.isAnonymous ? "Anonymous report" : "Identity visible to authorities"}
+              </p>
             </div>
 
-            {/* Contact Information */}
-            <div className="bg-gradient-to-r from-cyan-50 to-emerald-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-4 border-2 border-emerald-200 dark:border-emerald-700 transition-colors">
-              <div className="flex items-center gap-2 mb-2">
-                <Mail
-                  className="text-emerald-600 dark:text-emerald-400"
-                  size={20}
-                />
-
-                <span className="font-semibold text-gray-800 dark:text-gray-100">
-                  Contact Information
-                </span>
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-200/70 dark:border-cyan-700/40 bg-cyan-50/60 dark:bg-slate-800/60 p-4">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-cyan-500 to-teal-500" />
+              <div className="flex items-center gap-2 mb-2 pl-1">
+                <Mail className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Contact</span>
               </div>
-
               {formData.additionalEmail ? (
-                <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
-                  {formData.additionalEmail}
-                </p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-all pl-1">{formData.additionalEmail}</p>
               ) : (
-                <p className="text-sm text-gray-500 italic">
-                  No contact details provided.
-                </p>
+                <p className="text-sm text-slate-400 dark:text-slate-500 italic pl-1">No contact details provided</p>
               )}
             </div>
           </div>
@@ -733,50 +771,53 @@ const PreviewModal = ({
           </p>
         )}
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 dark:border-gray-800 p-6 bg-gray-50 dark:bg-gray-900/50 transition-colors">
-          <div className="flex gap-4">
-            {/* Edit Button */}
+        {/* ── Footer ── */}
+        <div className="relative z-10 flex-shrink-0 border-t border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-900/80 px-5 py-4">
+          {hasStrongDuplicate && (
+            <p className="text-center text-xs text-red-600 dark:text-red-400 font-semibold mb-3">
+              A highly similar active issue exists. Please confirm your action.
+            </p>
+          )}
+          <div className="flex gap-3">
             <button
               onClick={onClose}
               disabled={isSubmitting}
-              className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-5 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold text-sm hover:border-emerald-400 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Edit Report
             </button>
 
-            {/* IF Strong Duplicate → Replace Submit */}
             {hasStrongDuplicate ? (
               <>
                 <button
                   onClick={() => setDialogType("cancel")}
                   disabled={isSubmitting}
-                  className="flex-1 px-6 py-3 rounded-xl border-2 border-red-400 text-red-600 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-5 py-3 rounded-2xl border-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold text-sm bg-white/90 dark:bg-slate-800/80 hover:bg-red-50 dark:hover:bg-red-900/20 hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel Submission
                 </button>
-
                 <button
                   onClick={() => setDialogType("submit")}
                   disabled={isSubmitting}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="relative flex-1 overflow-hidden px-5 py-3 rounded-2xl font-bold text-sm text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Submit Anyway
+                  <div className="absolute inset-0 bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-700" />
+                  <span className="relative">Submit Anyway</span>
                 </button>
               </>
             ) : (
               <button
                 onClick={onSubmit}
                 disabled={isSubmitting}
-                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700 text-white font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="relative flex-1 overflow-hidden px-5 py-3 rounded-2xl font-bold text-sm text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-700" />
                 {isSubmitting ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    Submitting...
-                  </>
+                  <><Loader2 className="relative animate-spin" size={18} /><span className="relative">Submitting...</span></>
                 ) : (
-                  "Submit Issue"
+                  <span className="relative">Submit Issue</span>
                 )}
               </button>
             )}

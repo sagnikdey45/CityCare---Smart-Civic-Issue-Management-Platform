@@ -27,7 +27,6 @@ import { api } from "@/convex/_generated/api";
 import MediaPreview from "./MediaPreview";
 import ImageCarousel from "./ImageCarousel";
 import { toast } from "sonner";
-import { set } from "date-fns";
 
 const categories = [
   {
@@ -192,98 +191,179 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
     }
   }, [formData.photos, formData.videos]);
 
+  // ── Upload limits ──────────────────────────────────────────────────────────
+  const MAX_IMAGE_SIZE_MB = 50;
+  const MAX_VIDEO_SIZE_MB = 100;
+  const MAX_IMAGE_BYTES   = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+  const MAX_VIDEO_BYTES   = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+
+  // ── Low-level uploader ────────────────────────────────────────────────────
   const uploadFile = async (file) => {
-    const url = await generateUploadUrl();
+    // Debug log (safe to keep in production — no PII)
+    console.debug(
+      `[upload] ${file.name} | type: ${file.type} | size: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
+    );
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": file.type,
-      },
-      body: file,
-    });
+    // Obtain a short-lived signed upload URL from Convex
+    let url;
+    try {
+      url = await generateUploadUrl();
+    } catch (err) {
+      throw new Error("Could not obtain upload URL. Please try again.");
+    }
 
-    if (!res.ok) throw new Error("Upload failed");
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+    } catch (networkErr) {
+      // Covers: fetch failed, CORS pre-flight blocked, offline
+      console.error("[upload] Network error:", networkErr);
+      throw new Error(
+        "Upload failed due to a network error. Check your connection and try again.",
+      );
+    }
 
-    const { storageId } = await res.json();
+    if (!res.ok) {
+      // Surface specific HTTP failure reasons
+      if (res.status === 413) {
+        throw new Error(
+          `File too large for the server (HTTP 413). Please compress or trim the file and try again.`,
+        );
+      }
+      if (res.status === 403 || res.status === 401) {
+        throw new Error(
+          "Upload URL has expired. Please refresh the page and try again.",
+        );
+      }
+      throw new Error(`Upload failed (HTTP ${res.status}). Please try again.`);
+    }
 
-    return storageId;
+    let json;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error("Upload succeeded but response was malformed.");
+    }
+
+    if (!json?.storageId) {
+      throw new Error("Upload succeeded but no storage ID was returned.");
+    }
+
+    return json.storageId;
   };
 
+  // ── Image upload handler ──────────────────────────────────────────────────
   const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []).filter((f) =>
+      f.type.startsWith("image/"),
+    );
 
     if (!files.length) return;
 
-    setUploading(true);
+    // Pre-validate sizes — reject oversized files before touching the API
+    const valid   = [];
+    const tooBig  = [];
+    for (const f of files) {
+      if (f.size > MAX_IMAGE_BYTES) {
+        tooBig.push(f.name);
+      } else {
+        valid.push(f);
+      }
+    }
 
-    const loadImage = toast.loading("Uploading images...");
+    if (tooBig.length) {
+      toast.warning(
+        `${tooBig.length} file(s) skipped — images must be under ${MAX_IMAGE_SIZE_MB} MB: ${tooBig.join(", ")}`,
+        { duration: 6000 },
+      );
+    }
+
+    if (!valid.length) {
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
+    setUploading(true);
+    const loadImage = toast.loading(`Uploading ${valid.length} image(s)…`);
 
     try {
       const uploaded = [];
 
-      for (const file of files) {
-        if (!file.type.startsWith("image/")) continue;
-
+      for (const file of valid) {
         const id = await uploadFile(file);
         uploaded.push(id);
       }
 
       setImages((prev) => [...prev, ...uploaded]);
-
       setFormData((prev) => ({
         ...prev,
         photos: [...(prev.photos || []), ...uploaded],
       }));
 
       toast.dismiss(loadImage);
-      toast.success("Images uploaded successfully!");
+      toast.success(
+        `${uploaded.length} image${uploaded.length > 1 ? "s" : ""} uploaded successfully!`,
+      );
     } catch (err) {
-      console.error(err);
-      toast.error(`Failed to upload images: ${err.message}`);
+      console.error("[handleImageUpload]", err);
+      toast.dismiss(loadImage);
+      toast.error(err.message || "Failed to upload images. Please try again.");
     } finally {
       setUploading(false);
-
-      // Reset input so same file can be re-uploaded
-      if (imageInputRef.current) {
-        imageInputRef.current.value = "";
-      }
+      if (imageInputRef.current) imageInputRef.current.value = "";
     }
   };
 
+  // ── Video upload handler ──────────────────────────────────────────────────
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
 
-    if (!file || !file.type.startsWith("video/")) return;
+    if (!file) return;
+
+    // Type check
+    if (!file.type.startsWith("video/")) {
+      toast.error("Please select a valid video file.");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+
+    // ⚠️ Frontend size gate — prevents 413 / CORS errors from ever firing
+    if (file.size > MAX_VIDEO_BYTES) {
+      toast.error(
+        `File too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Please upload a shorter or compressed video under ${MAX_VIDEO_SIZE_MB} MB.`,
+        { duration: 8000 },
+      );
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
 
     setUploadingVideo(true);
-
-    const loadVideo = toast.loading("Uploading video...");
+    const loadVideo = toast.loading(
+      `Uploading video (${(file.size / 1024 / 1024).toFixed(1)} MB)…`,
+    );
 
     try {
       const id = await uploadFile(file);
 
       setVideo(id);
-
-      setFormData((prev) => ({
-        ...prev,
-        videos: id,
-      }));
+      setFormData((prev) => ({ ...prev, videos: id }));
 
       toast.dismiss(loadVideo);
       toast.success("Video uploaded successfully!");
     } catch (err) {
-      console.error(err);
-      toast.error(`Failed to upload video: ${err.message}`);
+      console.error("[handleVideoUpload]", err);
+      toast.dismiss(loadVideo);
+      toast.error(err.message || "Failed to upload video. Please try again.");
     } finally {
       setUploadingVideo(false);
-
-      // Reset input
-      if (videoInputRef.current) {
-        videoInputRef.current.value = "";
-      }
+      if (videoInputRef.current) videoInputRef.current.value = "";
     }
   };
+
 
   const removeMedia = async (id, type) => {
     await deleteMedia({ storageId: id });
@@ -390,92 +470,120 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 dark:border-gray-800 transition-colors duration-300">
-      <h2 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mb-6 flex items-center gap-2">
-        <NotebookText />
-        Issue Details
-      </h2>
+    <div className="relative rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl shadow-slate-200/60 dark:shadow-black/40">
+      {/* Gradient top accent */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
+
+      {/* Subtle inner glow */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/30 via-transparent to-cyan-50/20 dark:from-emerald-950/20 dark:via-transparent dark:to-teal-950/10 pointer-events-none" />
+
+      <div className="relative p-6 sm:p-8">
+        {/* Heading */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 via-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 flex-shrink-0">
+            <NotebookText className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 leading-tight">
+              Issue Details
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+              Fill in all required fields to continue
+            </p>
+          </div>
+        </div>
 
       <div className="space-y-6">
-        {/* Title */}
+        {/* ── Title ── */}
         <div>
           <label
             htmlFor="title"
-            className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2"
+            className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide"
           >
-            Issue Title *
+            Issue Title <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             id="title"
             value={formData.title}
             onChange={(e) => handleInput("title", e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 ${
+            className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
               errors.title
-                ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-800"
-                : "border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-800"
-            } bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
+                ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10"
+                : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+            } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
             placeholder="e.g., Broken streetlight on Main Street"
           />
           {errors.title && (
-            <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-              <AlertCircle size={14} />
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+              <AlertCircle size={13} />
               {errors.title}
             </p>
           )}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Be specific and concise
-          </p>
+          <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">Be specific and concise (min 5 characters)</p>
         </div>
 
-        {/* Description */}
+        {/* ── Description ── */}
         <div>
-          <label
-            htmlFor="description"
-            className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2"
-          >
-            Description *
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label
+              htmlFor="description"
+              className="block text-sm font-bold text-slate-700 dark:text-slate-300 tracking-wide"
+            >
+              Description <span className="text-red-500">*</span>
+            </label>
+            <span className={`text-xs font-semibold tabular-nums ${
+              formData.description.length < 20
+                ? "text-amber-500 dark:text-amber-400"
+                : "text-emerald-600 dark:text-emerald-400"
+            }`}>
+              {formData.description.length}/500
+            </span>
+          </div>
           <textarea
             id="description"
             rows={5}
             value={formData.description}
             onChange={(e) => handleInput("description", e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border-2 resize-none transition-all outline-none focus:ring-4 ${
+            className={`w-full px-4 py-3 rounded-xl border-2 resize-none transition-all outline-none focus:ring-4 font-medium leading-relaxed ${
               errors.description
-                ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-800"
-                : "border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-800"
-            } bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
+                ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10"
+                : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+            } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
             placeholder="Describe the issue in detail. What happened? When did you notice it?"
           />
           {errors.description && (
-            <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-              <AlertCircle size={14} />
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+              <AlertCircle size={13} />
               {errors.description}
             </p>
           )}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {formData.description.length}/500 characters (min 20)
-          </p>
         </div>
 
-        {/* Category & Severity */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* ── Section divider ── */}
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Classification</span>
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+        </div>
+
+        {/* ── Category & Severity ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Category */}
           <div className="relative">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-              Category *
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+              Category <span className="text-red-500">*</span>
             </label>
 
             <button
               type="button"
               onClick={() => setShowDropdown((prev) => !prev)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 150)} // small delay
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 ${
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
                 errors.category
-                  ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-800"
-                  : "border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-800"
-              } bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
+                  ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10"
+                  : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+              } text-slate-900 dark:text-slate-100`}
             >
               <span className="flex items-center gap-2">
                 {formData.category ? (
@@ -488,23 +596,23 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
                       return Icon ? (
                         <>
                           <Icon className={`w-5 h-5 ${selected.color}`} />
-                          {selected.label}
+                          <span className="font-semibold">{selected.label}</span>
                         </>
                       ) : (
-                        "Select a category"
+                        <span className="text-slate-400">Select a category</span>
                       );
                     })()}
                   </>
                 ) : (
-                  "Select a category"
+                  <span className="text-slate-400 dark:text-slate-500">Select a category</span>
                 )}
               </span>
-              <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showDropdown ? "rotate-180" : ""}`} />
             </button>
 
-            {/* Dropdown Menu */}
+            {/* Glass dropdown */}
             {showDropdown && (
-              <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden animate-fadeIn">
+              <div className="absolute z-20 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden">
                 {categories.map((cat) => {
                   const Icon = cat.icon;
                   const isSelected = formData.category === cat.value;
@@ -518,13 +626,15 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 text-left text-sm transition-all ${
                         isSelected
-                          ? "bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
-                          : "text-gray-700 dark:text-gray-200 hover:bg-emerald-50/50 dark:hover:bg-gray-700/50"
+                          ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60"
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <Icon className={`w-5 h-5 ${cat.color}`} />
-                        {cat.label}
+                        <span className={`p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 ${isSelected ? "bg-emerald-100 dark:bg-emerald-800/40" : ""}`}>
+                          <Icon className={`w-4 h-4 ${cat.color}`} />
+                        </span>
+                        <span className="font-medium">{cat.label}</span>
                       </span>
                       {isSelected && (
                         <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -536,8 +646,8 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
             )}
 
             {errors.category && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                <AlertCircle size={14} />
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+                <AlertCircle size={13} />
                 {errors.category}
               </p>
             )}
@@ -545,19 +655,19 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
 
           {/* Severity */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-              Severity Level *
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+              Severity Level <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-4">
+            <div className="flex gap-2">
               {severityLevels.map((level) => (
                 <button
                   key={level.value}
                   type="button"
                   onClick={() => handleInput("priority", level.value)}
-                  className={`flex-1 py-3 rounded-xl border-2 font-medium transition-all ${
+                  className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all duration-200 ${
                     formData.priority === level.value
-                      ? `${level.color} ring-4 ring-opacity-60 scale-105`
-                      : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500"
+                      ? `${level.color} ring-4 ring-opacity-60 scale-[1.04] shadow-md`
+                      : "bg-white/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:-translate-y-0.5"
                   }`}
                 >
                   {level.label}
@@ -565,169 +675,73 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
               ))}
             </div>
             {errors.priority && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                <AlertCircle size={14} />
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+                <AlertCircle size={13} />
                 {errors.priority}
               </p>
             )}
           </div>
 
           {formData.category === "other" && (
-            <div className="md:col-span-2">
+            <div className="sm:col-span-2">
               <label
                 htmlFor="otherCategoryName"
-                className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2"
+                className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide"
               >
-                Other Category (If Applicable) *
+                Other Category <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 id="otherCategoryName"
                 value={formData.otherCategoryName}
-                onChange={(e) =>
-                  handleInput("otherCategoryName", e.target.value)
-                }
-                className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 ${
+                onChange={(e) => handleInput("otherCategoryName", e.target.value)}
+                className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
                   errors.otherCategoryName
-                    ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-800"
-                    : "border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-800"
-                } bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
-                placeholder="e.g., Broken streetlight on Main Street"
+                    ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30"
+                    : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+                } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
+                placeholder="Describe the other category..."
               />
               {errors.otherCategoryName && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                  <AlertCircle size={14} />
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+                  <AlertCircle size={13} />
                   {errors.otherCategoryName}
                 </p>
               )}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Be specific and concise
-              </p>
             </div>
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Sub-Categories *
-          </label>
-          <div>
-            <div className="space-y-3">
-              {/* Selected Tags */}
-              {formData.subcategory?.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {formData.subcategory?.map((spec, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/30 rounded-full px-3 py-1"
-                    >
-                      <span className="text-12-medium text-emerald-400">
-                        {spec}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() => removeSpec(spec)}
-                        className="text-emerald-400 hover:text-emerald-300 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Input */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={subcategorySearch}
-                  onChange={(e) => setSpecialisationSearch(e.target.value)}
-                  onKeyPress={handleSpecKeyPress}
-                  placeholder="Type to search or add specialisation..."
-                  className={`w-full p-3 rounded-2xl border-2 transition-all outline-none focus:ring-4 ${
-                    errors.subcategory
-                      ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-800"
-                      : "border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-800"
-                  } bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100`}
-                  onFocus={() => setShowSpecDropdown(true)}
-                  onBlur={() =>
-                    setTimeout(() => setShowSpecDropdown(false), 150)
-                  }
-                />
-
-                {/* Dropdown */}
-                {showSpecDropdown &&
-                  (subcategorySearch || filteredSpecs.length > 0) && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-slate-50 dark:bg-dark-400 border border-dark-500 rounded-lg shadow-lg z-10 overflow-hidden">
-                      <div className="max-h-48 overflow-y-auto">
-                        {/* Add Custom */}
-                        {subcategorySearch &&
-                          !filteredSpecs.includes(subcategorySearch) &&
-                          !formData.subcategory.includes(subcategorySearch) && (
-                            <button
-                              type="button"
-                              onMouseDown={() =>
-                                handleSpecSelect(subcategorySearch)
-                              }
-                              className="w-full p-3 flex items-center gap-3 hover:bg-dark-500 transition-colors text-left border-b border-dark-500"
-                            >
-                              <Plus className="w-4 h-4 text-green-500" />
-
-                              <span className="text-14-regular">
-                                Add "{subcategorySearch}" (Click to add or Press
-                                Enter / Return to add)
-                              </span>
-                            </button>
-                          )}
-
-                        {/* Suggestions */}
-                        {availableSpecs.map((spec) => (
-                          <button
-                            key={spec}
-                            type="button"
-                            onMouseDown={() => handleSpecSelect(spec)}
-                            className="w-full p-3 flex items-center gap-3 hover:bg-slate-200 dark:hover:bg-dark-500 transition-colors text-left"
-                          >
-                            <span className="text-14-regular">{spec}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                {/* Error Message */}
-                {errors.subcategory && (
-                  <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                    <AlertCircle size={14} />
-                    {errors.subcategory}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+        {/* ── Section divider ── */}
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tags & Categories</span>
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
         </div>
 
-        {/* Tags */}
-        <div className="mt-6">
-          <label className="shad-input-label block mb-2">Issue Tags</label>
-
+        {/* ── Sub-Categories ── */}
+        <div>
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+            Sub-Categories <span className="text-red-500">*</span>
+          </label>
           <div className="space-y-3">
-            {/* Selected Tags */}
-            {formData.tags?.length > 0 && (
+            {/* Selected chips */}
+            {formData.subcategory?.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {formData.tags?.map((tag, index) => (
+                {formData.subcategory?.map((spec, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-2 bg-cyan-500/20 border border-cyan-500/30 rounded-full px-3 py-1"
+                    className="group flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700/60 rounded-full px-3 py-1.5 shadow-sm hover:shadow-md transition-all duration-200"
                   >
-                    <span className="text-12-medium text-cyan-400">#{tag}</span>
-
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      {spec}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                      onClick={() => removeSpec(spec)}
+                      className="w-4 h-4 rounded-full bg-emerald-200 dark:bg-emerald-700/50 flex items-center justify-center text-emerald-600 dark:text-emerald-300 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500 transition-all"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </div>
                 ))}
@@ -738,26 +752,118 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
             <div className="relative">
               <input
                 type="text"
+                value={subcategorySearch}
+                onChange={(e) => setSpecialisationSearch(e.target.value)}
+                onKeyPress={handleSpecKeyPress}
+                placeholder="Search or add a sub-category…"
+                className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
+                  errors.subcategory
+                    ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30"
+                    : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+                } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
+                onFocus={() => setShowSpecDropdown(true)}
+                onBlur={() => setTimeout(() => setShowSpecDropdown(false), 150)}
+              />
+
+              {/* Glass dropdown */}
+              {showSpecDropdown && (subcategorySearch || filteredSpecs.length > 0) && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl shadow-black/20 z-20 overflow-hidden">
+                  <div className="max-h-48 overflow-y-auto">
+                    {subcategorySearch &&
+                      !filteredSpecs.includes(subcategorySearch) &&
+                      !formData.subcategory.includes(subcategorySearch) && (
+                        <button
+                          type="button"
+                          onMouseDown={() => handleSpecSelect(subcategorySearch)}
+                          className="w-full px-4 py-3 flex items-center gap-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors text-left border-b border-slate-100 dark:border-slate-700"
+                        >
+                          <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
+                            <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <span className="text-sm text-slate-700 dark:text-slate-200 font-medium">
+                            Add &ldquo;{subcategorySearch}&rdquo;
+                          </span>
+                        </button>
+                      )}
+                    {availableSpecs.map((spec) => (
+                      <button
+                        key={spec}
+                        type="button"
+                        onMouseDown={() => handleSpecSelect(spec)}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+                      >
+                        <span className="text-sm text-slate-700 dark:text-slate-200 font-medium">{spec}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {errors.subcategory && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
+                  <AlertCircle size={13} />
+                  {errors.subcategory}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Tags ── */}
+        <div>
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+            Issue Tags
+            <span className="ml-2 text-xs font-normal text-slate-400">(Optional)</span>
+          </label>
+
+          <div className="space-y-3">
+            {formData.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {formData.tags?.map((tag, index) => (
+                  <div
+                    key={index}
+                    className="group flex items-center gap-1.5 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-300 dark:border-cyan-700/60 rounded-full px-3 py-1.5 shadow-sm hover:shadow-md transition-all duration-200"
+                  >
+                    <span className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">#{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="w-4 h-4 rounded-full bg-cyan-200 dark:bg-cyan-700/50 flex items-center justify-center text-cyan-600 dark:text-cyan-300 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500 transition-all"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <input
+                type="text"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
-                placeholder="Type a tag and press Enter..."
-                className="shad-input w-full p-3 rounded-2xl"
+                placeholder="Type a tag and press Enter…"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200/40 dark:focus:ring-cyan-800/30 outline-none transition-all bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 font-medium"
               />
-
-              {/* Helper */}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Press Enter to add tag • No spaces • Example: pothole, urgent
+              <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+                Press <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-[10px] font-mono">Enter</kbd> to add · No spaces · e.g. pothole, urgent
               </p>
             </div>
           </div>
         </div>
 
-        {/* Photo Upload */}
+        {/* ── Section divider ── */}
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Evidence</span>
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+        </div>
+
+        {/* ── Photo Upload ── */}
         <div>
-          {/* Label */}
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Photo Evidence *
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+            Photo Evidence <span className="text-red-500">*</span>
           </label>
 
           {/* Upload Box */}
@@ -896,10 +1002,11 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
           )}
         </div>
 
-        {/* Video Upload */}
-        <div className="mt-6">
-          <label className="block text-sm font-semibold mb-2">
-            Video (Optional)
+        {/* ── Video Upload ── */}
+        <div className="mt-2">
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+            Video Evidence
+            <span className="ml-2 text-xs font-normal text-slate-400">(Optional)</span>
           </label>
 
           <label
@@ -985,6 +1092,7 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
