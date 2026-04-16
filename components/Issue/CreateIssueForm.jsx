@@ -9,6 +9,7 @@ import AnonymityToggle from "./AnonymityToggle";
 import Navbar from "./Navbar";
 import SuccessModal from "./Success";
 import PreviewModal from "./Preview";
+import SpotlightTutorial from "./SpotlightTutorial";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useSession } from "next-auth/react";
@@ -22,15 +23,20 @@ const IssueForm = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  // Check for tutorial visibility on first load
-  useEffect(() => {
-    const hideTutorial = localStorage.getItem("citycare-hide-tutorial");
-    if (!hideTutorial) {
-      // Small delay for better UX
-      const timer = setTimeout(() => setShowTutorial(true), 1200);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+  // // Always trigger tutorial on load
+  // useEffect(() => {
+  //   // Only run on client
+  //   if (typeof window !== "undefined") {
+  //     // Reset states for a fresh start
+  //     setCurrentStep(1);
+  //     setShowPreview(false);
+      
+  //     const timer = setTimeout(() => {
+  //       setShowTutorial(true);
+  //     }, 500);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, []);
 
   const createIssue = useMutation(api.issues.createIssue);
 
@@ -229,6 +235,7 @@ const IssueForm = () => {
         formData={formData}
         setFormData={setFormData}
         setCurrentStep={setCurrentStep}
+        setShowTutorial={setShowTutorial}
       />
 
       {/* ── Full-page glassmorphism shell ── */}
@@ -369,7 +376,7 @@ const IssueForm = () => {
               <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               {/* Shine swipe */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
-              <span className="relative flex items-center gap-2">
+              <span className="relative flex items-center gap-2" data-tutorial="preview-btn">
                 {currentStep === 3 ? (
                   <>
                     <CheckCircle2 className="w-5 h-5" />
@@ -425,6 +432,15 @@ const IssueForm = () => {
       )}
 
       {showSuccess && <SuccessModal onClose={() => setShowSuccess(false)} />}
+
+      <SpotlightTutorial
+        currentStep={currentStep}
+        setCurrentStep={setCurrentStep}
+        showPreview={showPreview}
+        setShowPreview={setShowPreview}
+        showTutorial={showTutorial}
+        setShowTutorial={setShowTutorial}
+      />
     </>
   );
 };

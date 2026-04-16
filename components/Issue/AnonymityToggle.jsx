@@ -41,7 +41,7 @@ const AnonymityToggle = ({ formData, setFormData, errors }) => {
           {/* Left accent strip */}
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
 
-          <div className="pl-5 pr-5 py-5 flex items-center justify-between gap-4">
+          <div className="pl-5 pr-5 py-5 flex items-center justify-between gap-4" data-tutorial="anonymity-toggle">
             {/* Left: info */}
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <div className="w-9 h-9 rounded-xl bg-white/80 dark:bg-slate-700/60 border border-emerald-200 dark:border-emerald-700/40 flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
@@ -104,7 +104,7 @@ const AnonymityToggle = ({ formData, setFormData, errors }) => {
             </span>
           </div>
 
-          <div className="relative">
+          <div className="relative" data-tutorial="anonymity-email">
             <Mail
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
               size={16}

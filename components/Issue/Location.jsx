@@ -360,6 +360,8 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
           */}
           <div
             ref={autocompleteContainerRef}
+            data-tutorial="location-search"
+            // className={`transition-all ${errors?.address ? "ring-2 ring-red-300 dark:ring-red-500/50 rounded-xl" : ""}`}
             style={{
               position: "relative",
               zIndex: 9999,
@@ -383,6 +385,7 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
               hover:shadow-md hover:shadow-emerald-500/10
               hover:-translate-y-0.5 active:scale-95
               transition-all duration-200"
+            data-tutorial="location-current"
           >
             <Navigation
               size={16}
@@ -402,7 +405,7 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
         </div>
 
         {/* ── Google Map ── */}
-        <div className="relative rounded-2xl overflow-hidden ring-2 ring-emerald-200/60 dark:ring-emerald-700/30 shadow-inner shadow-slate-200 dark:shadow-black/30">
+        <div className="relative rounded-2xl overflow-hidden ring-2 ring-emerald-200/60 dark:ring-emerald-700/30 shadow-inner shadow-slate-200 dark:shadow-black/30" data-tutorial="location-map">
           <div ref={mapRef} className="w-full h-80" />
         </div>
 
@@ -445,17 +448,17 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
                   }
                   className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
                     errors?.[field]
-                      ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10"
-                      : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
+                      ? "border-red-300 dark:border-red-500/50 focus:border-red-500 dark:focus:border-red-400 focus:ring-red-200/40 dark:focus:ring-red-500/20 bg-red-50/30 dark:bg-red-900/10"
+                      : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80"
                   } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
                   placeholder={labelMap[field]}
                 />
 
                 {errors?.[field] && (
-                  <p className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
-                    <AlertCircle size={13} />
+                  <div className="mt-2 text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1.5 font-bold tracking-wide animate-in fade-in slide-in-from-top-1 duration-200 bg-red-50 dark:bg-red-900/10 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900/20">
+                    <AlertCircle size={14} className="flex-shrink-0" />
                     {errors[field]}
-                  </p>
+                  </div>
                 )}
               </div>
             );

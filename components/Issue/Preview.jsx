@@ -239,7 +239,7 @@ const PreviewModal = ({
         </div>
 
         {/* ── Scrollable content ── */}
-        <div className="relative z-10 flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+        <div className="relative z-10 flex-1 overflow-y-auto p-5 sm:p-6 space-y-5" data-tutorial="preview-card">
           {/* ── Title & Description ── */}
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 p-5">
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
@@ -798,6 +798,7 @@ const PreviewModal = ({
                 </button>
                 <button
                   onClick={() => setDialogType("submit")}
+                  data-tutorial="preview-submit"
                   disabled={isSubmitting}
                   className="relative flex-1 overflow-hidden px-5 py-3 rounded-2xl font-bold text-sm text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >

@@ -1,4 +1,4 @@
-import { AlertTriangle, Home, Trash2, Sparkles, FileText } from "lucide-react";
+import { AlertTriangle, Home, Trash2, Sparkles, FileText, HelpCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 
-const Navbar = ({ formData, setFormData, setCurrentStep }) => {
+const Navbar = ({ formData, setFormData, setCurrentStep, setShowTutorial }) => {
   const router = useRouter();
   const deleteMedia = useMutation(api.issuesMedia.deleteMedia);
   const [open, setOpen] = useState(false);
@@ -83,7 +83,7 @@ const Navbar = ({ formData, setFormData, setCurrentStep }) => {
           <div className="flex items-center justify-between h-[68px]">
 
             {/* ── Logo ── */}
-            <Link href="/" className="group flex items-center gap-3">
+            <Link href="/" className="group flex items-center gap-3" data-tutorial="navbar-logo">
               {/* Logo glow ring */}
               <div className="relative flex-shrink-0">
                 <div className="absolute inset-0 bg-emerald-400/40 dark:bg-emerald-500/30 rounded-xl blur-md scale-110 group-hover:scale-125 transition-all duration-300" />
@@ -112,7 +112,8 @@ const Navbar = ({ formData, setFormData, setCurrentStep }) => {
             <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full
               bg-emerald-100 dark:bg-emerald-900/50
               border border-emerald-300 dark:border-emerald-600/60
-              shadow-sm shadow-emerald-500/10">
+              shadow-sm shadow-emerald-500/10"
+              data-tutorial="navbar-status">
               <FileText className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
               <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 tracking-wide">
                 New Issue Report
@@ -121,7 +122,7 @@ const Navbar = ({ formData, setFormData, setCurrentStep }) => {
             </div>
 
             {/* ── Right Actions ── */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5" data-tutorial="navbar-actions">
               <ModeToggle />
 
               {/* Dashboard */}
@@ -137,6 +138,22 @@ const Navbar = ({ formData, setFormData, setCurrentStep }) => {
               >
                 <Home className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
                 <span className="hidden sm:inline">Dashboard</span>
+              </button>
+
+              {/* Tutorial Trigger */}
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="group flex items-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-sm
+                  bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50
+                  border border-emerald-200 dark:border-emerald-700/60
+                  text-emerald-700 dark:text-emerald-300
+                  shadow-sm hover:shadow-md
+                  hover:-translate-y-0.5 active:scale-95
+                  transition-all duration-200"
+                title="Watch Tutorial"
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span className="hidden md:inline">Tutorial</span>
               </button>
 
               {/* Clear — prominent danger button */}
