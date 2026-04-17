@@ -223,4 +223,15 @@ export default defineSchema({
     .index("by_issue_status", ["issueId", "status"])
     .index("by_updated_by", ["updatedBy"])
     .index("by_role", ["role"]),
+
+  notifications: defineTable({
+    userId: v.string(),
+    issueId: v.optional(v.id("issues")),
+    message: v.string(),
+    type: v.optional(v.string()),
+    read: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_unread", ["userId", "read"]),
 });
