@@ -19,13 +19,34 @@ import {
   Maximize2,
   Minimize2,
   SearchIcon,
+  Layout,
   Image as ImageIcon,
   FileText,
+  ChevronDown,
+  ExternalLink,
+  AlertTriangle,
+  MapPinOff,
+  Ghost,
+  MoreHorizontal,
+  CheckCircle2,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { IssueDiscussion } from "./IssueDiscussion";
 import { IssueMessaging } from "./Citizen/IssueMessaging";
-import { useQueries, useQuery } from "convex/react";
+import { useMutation, useQueries, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useSession } from "next-auth/react";
 
 const statusSteps = [
   {
@@ -48,19 +69,61 @@ const statusSteps = [
   },
 ];
 
-const IssueDetailModalComponent = ({ issue, onClose }) => {
-  console.log("Rendering IssueDetailModal with issue:", issue);
+const withdrawalCategories = [
+  {
+    value: "resolved_elsewhere",
+    label: "Resolved elsewhere",
+    icon: ExternalLink,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+  },
+  {
+    value: "reported_by_mistake",
+    label: "Reported by mistake",
+    icon: AlertTriangle,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+  },
+  {
+    value: "entered_wrong_details",
+    label: "Incorrect details",
+    icon: MapPinOff,
+    color: "text-rose-500",
+    bg: "bg-rose-500/10",
+  },
+  {
+    value: "no_longer_relevant",
+    label: "No longer relevant",
+    icon: Ghost,
+    color: "text-slate-500",
+    bg: "bg-slate-500/10",
+  },
+  {
+    value: "other",
+    label: "Other reason",
+    icon: MoreHorizontal,
+    color: "text-blue-500",
+    bg: "bg-blue-500/10",
+  },
+];
+
+const IssueDetailModal = ({ issue, onClose }) => {
   const [activeTab, setActiveTab] = useState("progress");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [withdrawCategory, setWithdrawCategory] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const issueUpdates = useQuery(
     api.issueUpdates.getByIssueId,
     issue ? { issueId: issue._id } : "skip",
   );
+
+  const withdrawIssue = useMutation(api.issues.withdrawIssue);
 
   const photoIds = useMemo(() => issue?.photos || [], [issue?.photos]);
 
@@ -116,15 +179,13 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
     ? [issue.photo_url, ...(issue.additional_photos || [])]
     : issue.additional_photos || [];
 
-  const nextPhoto = () => {
-    setCurrentPhotoIndex((prev) => (prev + 1) % allPhotos.length);
-  };
+  const wordCount = useMemo(() => {
+    return withdrawReason.trim() === ""
+      ? 0
+      : withdrawReason.trim().split(/\s+/).length;
+  }, [withdrawReason]);
 
-  const prevPhoto = () => {
-    setCurrentPhotoIndex(
-      (prev) => (prev - 1 + allPhotos.length) % allPhotos.length,
-    );
-  };
+  const isWithdrawEnabled = withdrawCategory !== "" && wordCount >= 10;
 
   const currentStepIndex =
     issue.status === "resolved"
@@ -210,6 +271,20 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
       circleBorder: "border-red-500 dark:border-red-600",
       lineGradient: "from-red-500 to-red-700 dark:from-red-600 dark:to-red-800",
     },
+    withdrawn: {
+      gradient:
+        "from-slate-500 to-slate-700 dark:from-slate-600 dark:to-slate-800",
+      light:
+        "from-slate-50 to-slate-100/50 dark:from-slate-900/20 dark:to-slate-900/10",
+      border: "border-slate-300 dark:border-slate-700/50",
+      text: "text-slate-600 dark:text-slate-400",
+      bg: "bg-slate-100 dark:bg-slate-900/30",
+      badgeBg: "bg-slate-50 dark:bg-slate-900/40",
+      iconBg: "bg-slate-500 dark:bg-slate-600",
+      circleBorder: "border-slate-500 dark:border-slate-600",
+      lineGradient:
+        "from-slate-500 to-slate-700 dark:from-slate-600 dark:to-slate-800",
+    },
   };
 
   const currentColors = statusColors[issue.status] || statusColors.pending;
@@ -243,9 +318,16 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
           </div>
 
           <div className="pr-24 relative z-10">
-            <span className="inline-block px-4 py-1.5 bg-white/20 dark:bg-black/20 rounded-full text-sm font-semibold tracking-wide mb-3 border border-white/20 shadow-sm">
-              {issue.issueCode}
-            </span>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="inline-block px-4 py-1.5 bg-white/20 dark:bg-black/20 rounded-full text-sm font-semibold tracking-wide border border-white/20 shadow-sm">
+                {issue.issueCode}
+              </span>
+              {issue.status === "withdrawn" && (
+                <span className="inline-block px-3 py-1 bg-slate-100/20 dark:bg-slate-900/40 rounded-full text-[10px] font-black uppercase tracking-widest text-white border border-white/10 shadow-sm">
+                  Withdrawn
+                </span>
+              )}
+            </div>
             <h2 className="text-3xl font-bold mb-2 tracking-tight">
               {issue.title}
             </h2>
@@ -272,44 +354,28 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
               <span>Timeline</span>
             </button>
 
-            {!issue.is_anonymous && (
-              <button
-                onClick={() => setActiveTab("discussion")}
-                className={`flex items-center gap-2.5 px-6 py-2.5 font-extrabold transition-all duration-300 rounded-xl text-sm tracking-wide ${
-                  activeTab === "discussion"
-                    ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] ring-1 ring-black/5 dark:ring-white/10 scale-100"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/5 scale-[0.98] hover:scale-100"
-                }`}
-              >
-                <MessageSquare
-                  size={18}
-                  className={`transition-colors ${activeTab === "discussion" ? "text-blue-600 dark:text-blue-400 drop-shadow-sm" : "opacity-70 group-hover:opacity-100"}`}
-                />
-                <span>Community</span>
-              </button>
-            )}
-
-            {(issue.assignee || issue.unit_officer) && (
-              <button
-                onClick={() => setActiveTab("messages")}
-                className={`flex items-center gap-2.5 px-6 py-2.5 font-extrabold transition-all duration-300 rounded-xl text-sm tracking-wide ${
-                  activeTab === "messages"
-                    ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] ring-1 ring-black/5 dark:ring-white/10 scale-100"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/5 scale-[0.98] hover:scale-100"
-                }`}
-              >
-                <MessageCircle
-                  size={18}
-                  className={`transition-colors ${activeTab === "messages" ? "text-blue-600 dark:text-blue-400 drop-shadow-sm" : "opacity-70 group-hover:opacity-100"}`}
-                />
-                <span>Internal</span>
-              </button>
-            )}
+            {issue.status !== "withdrawn" &&
+              (issue.assignee || issue.unit_officer) && (
+                <button
+                  onClick={() => setActiveTab("messages")}
+                  className={`flex items-center gap-2.5 px-6 py-2.5 font-extrabold transition-all duration-300 rounded-xl text-sm tracking-wide ${
+                    activeTab === "messages"
+                      ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-[0_4px_15px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] ring-1 ring-black/5 dark:ring-white/10 scale-100"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-white/5 scale-[0.98] hover:scale-100"
+                  }`}
+                >
+                  <MessageCircle
+                    size={18}
+                    className={`transition-colors ${activeTab === "messages" ? "text-blue-600 dark:text-blue-400 drop-shadow-sm" : "opacity-70 group-hover:opacity-100"}`}
+                  />
+                  <span>Internal</span>
+                </button>
+              )}
           </div>
         </div>
 
         <div
-          className={`flex-1 min-h-0 overflow-y-auto ${activeTab === "messages" ? "p-0" : "p-6 lg:p-8"}`}
+          className={`flex-1 min-h-0 overflow-y-auto ${activeTab === "messages" ? "p-0" : "p-6 lg:p-8"} ${issue.status === "withdrawn" ? "opacity-75 grayscale-[0.2]" : ""}`}
         >
           {activeTab === "progress" && (
             <div
@@ -337,301 +403,327 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
                   </div>
                 </div>
               ) : (
-                <div className="mb-12">
-                  <h3 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400 mb-10 flex items-center gap-3">
-                    <TrendingUp
-                      className="text-blue-500 dark:text-blue-400"
-                      size={28}
-                    />{" "}
-                    Progress Tracker
-                  </h3>
-
-                  {issueUpdates === undefined ? (
-                    <div className="relative ml-2 sm:ml-4">
-                      {[...Array(3)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0 w-full animate-pulse"
-                        >
-                          {i !== 2 && (
-                            <div className="absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full bg-gray-200/60 dark:bg-gray-800/60" />
-                          )}
-                          <div className="relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl bg-gray-200/80 dark:bg-gray-800/80 border border-white/20 dark:border-white/10" />
-                          <div className="flex-1 pt-0.5">
-                            <div className="bg-gray-100/50 dark:bg-gray-900/50 rounded-[2rem] p-6 sm:p-8 h-44 border border-gray-200/50 dark:border-white/5">
-                              <div className="flex justify-between mb-5">
-                                <div className="h-7 w-28 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
-                                <div className="h-7 w-32 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
-                              </div>
-                              <div className="h-4 w-full bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
-                              <div className="h-4 w-[90%] bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
-                              <div className="h-4 w-2/3 bg-gray-200/60 dark:bg-gray-800/60 rounded-md" />
-                            </div>
-                          </div>
+                <div className="space-y-12">
+                  {issue.status === "withdrawn" && (
+                    <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900/10 dark:to-slate-900/5 rounded-2xl mb-8 border border-slate-200 dark:border-slate-800/30 p-6 shadow-sm">
+                      <div className="flex items-start gap-5">
+                        <div className="bg-slate-500 dark:bg-slate-500/20 shadow-inner p-3 rounded-2xl">
+                          <XCircle
+                            className="text-white dark:text-slate-400"
+                            size={28}
+                          />
                         </div>
-                      ))}
+                        <div>
+                          <h3 className="text-xl font-bold text-slate-950 dark:text-slate-200 mb-2">
+                            Issue Withdrawn
+                          </h3>
+                          <p className="text-slate-700 dark:text-slate-400 leading-relaxed font-medium">
+                            You have withdrawn this issue. No further actions
+                            will be taken by the department.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ) : issueUpdates.length > 0 ? (
-                    <div className="relative ml-2 sm:ml-4">
-                      {issueUpdates.map((update, index) => {
-                        const isLastUpdate = index === issueUpdates.length - 1;
-                        const stepColors = statusColors[update.status];
-                        const StatusIcon =
-                          update.status === "resolved"
-                            ? CheckCircle
-                            : update.status === "in_progress"
-                              ? Clock
-                              : update.status === "rejected"
-                                ? XCircle
-                                : AlertCircle;
+                  )}
 
-                        return (
-                          <div
-                            key={update.id}
-                            className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0"
-                          >
-                            {!isLastUpdate && (
-                              <div
-                                className={`absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full bg-gradient-to-b ${stepColors.lineGradient} opacity-40 dark:opacity-20`}
-                              />
-                            )}
+                  {issue.status !== "withdrawn" && (
+                    <div className="mb-12">
+                      <h3 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400 mb-10 flex items-center gap-3">
+                        <TrendingUp
+                          className="text-blue-500 dark:text-blue-400"
+                          size={28}
+                        />{" "}
+                        Progress Tracker
+                      </h3>
 
+                      {issueUpdates === undefined ? (
+                        <div className="relative ml-2 sm:ml-4">
+                          {[...Array(3)].map((_, i) => (
                             <div
-                              className={`relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center border border-white/20 dark:border-white/10 bg-gradient-to-br ${stepColors.gradient} ${stepColors.iconBg} ${isLastUpdate ? "ring-[8px] ring-current/20 dark:ring-current/30 animate-[pulse_3s_ease-in-out_infinite]" : "group-hover:scale-110 transition-transform duration-500"}`}
+                              key={i}
+                              className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0 w-full animate-pulse"
                             >
-                              <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                              <StatusIcon
-                                size={28}
-                                className="text-white drop-shadow-md relative z-10"
-                              />
-                            </div>
-
-                            <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1 contain-content transform-gpu will-change-transform">
-                              <div className="bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] group-hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all">
-                                <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-                                  <span
-                                    className={`text-xs font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-3 py-1.5 rounded-xl uppercase shadow-sm`}
-                                  >
-                                    {update.status === "in_progress"
-                                      ? "In Progress"
-                                      : update.status === "resolved"
-                                        ? "Resolved"
-                                        : update.status === "rejected"
-                                          ? "Rejected"
-                                          : "Reported"}
-                                  </span>
-                                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-xl">
-                                    <Clock size={16} />
-                                    {new Date(update.createdAt).toLocaleString(
-                                      "en-US",
-                                      {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      },
-                                    )}
-                                  </span>
+                              {i !== 2 && (
+                                <div className="absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full bg-gray-200/60 dark:bg-gray-800/60" />
+                              )}
+                              <div className="relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl bg-gray-200/80 dark:bg-gray-800/80 border border-white/20 dark:border-white/10" />
+                              <div className="flex-1 pt-0.5">
+                                <div className="bg-gray-100/50 dark:bg-gray-900/50 rounded-[2rem] p-6 sm:p-8 h-44 border border-gray-200/50 dark:border-white/5">
+                                  <div className="flex justify-between mb-5">
+                                    <div className="h-7 w-28 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
+                                    <div className="h-7 w-32 bg-gray-200/80 dark:bg-gray-800/80 rounded-xl" />
+                                  </div>
+                                  <div className="h-4 w-full bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
+                                  <div className="h-4 w-[90%] bg-gray-200/60 dark:bg-gray-800/60 rounded-md mb-3" />
+                                  <div className="h-4 w-2/3 bg-gray-200/60 dark:bg-gray-800/60 rounded-md" />
                                 </div>
-                                <p className="text-base sm:text-lg leading-relaxed text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap">
-                                  {update.comment}
-                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : issueUpdates.length > 0 ? (
+                        <div className="relative ml-2 sm:ml-4">
+                          {issueUpdates.map((update, index) => {
+                            const isLastUpdate =
+                              index === issueUpdates.length - 1;
+                            const stepColors = statusColors[update.status];
+                            const StatusIcon =
+                              update.status === "resolved"
+                                ? CheckCircle
+                                : update.status === "in_progress"
+                                  ? Clock
+                                  : update.status === "rejected"
+                                    ? XCircle
+                                    : AlertCircle;
 
-                                {update.attachments?.length > 0 && (
-                                  <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-5">
-                                    {update.attachments.map((file, i) => {
-                                      const { url, contentType } = file;
+                            return (
+                              <div
+                                key={update.id}
+                                className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0"
+                              >
+                                {!isLastUpdate && (
+                                  <div
+                                    className={`absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full bg-gradient-to-b ${stepColors.lineGradient} opacity-40 dark:opacity-20`}
+                                  />
+                                )}
 
-                                      const isImage =
-                                        contentType?.startsWith("image");
-                                      const isVideo =
-                                        contentType?.startsWith("video");
-                                      const isPDF =
-                                        contentType?.includes("pdf");
+                                <div
+                                  className={`relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center border border-white/20 dark:border-white/10 bg-gradient-to-br ${stepColors.gradient} ${stepColors.iconBg} ${isLastUpdate ? "ring-[8px] ring-current/20 dark:ring-current/30 animate-[pulse_3s_ease-in-out_infinite]" : "group-hover:scale-110 transition-transform duration-500"}`}
+                                >
+                                  <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                  <StatusIcon
+                                    size={28}
+                                    className="text-white drop-shadow-md relative z-10"
+                                  />
+                                </div>
 
-                                      return (
-                                        <div
-                                          key={i}
-                                          className="relative group/attachment rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-white/5 shadow-md hover:shadow-2xl transition-all duration-500 aspect-video sm:aspect-auto sm:h-44"
-                                        >
-                                          {isImage && (
-                                            <img
-                                              src={url}
-                                              loading="lazy"
-                                              className="w-full h-full object-cover group-hover/attachment:scale-110 transition duration-700"
-                                            />
-                                          )}
+                                <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1 contain-content transform-gpu will-change-transform">
+                                  <div className="bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] group-hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all">
+                                    <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+                                      <span
+                                        className={`text-xs font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-3 py-1.5 rounded-xl uppercase shadow-sm`}
+                                      >
+                                        {update.status === "in_progress"
+                                          ? "In Progress"
+                                          : update.status === "resolved"
+                                            ? "Resolved"
+                                            : update.status === "rejected"
+                                              ? "Rejected"
+                                              : "Reported"}
+                                      </span>
+                                      <span className="text-sm font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-xl">
+                                        <Clock size={16} />
+                                        {new Date(
+                                          update.createdAt,
+                                        ).toLocaleString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </span>
+                                    </div>
+                                    <p className="text-base sm:text-lg leading-relaxed text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap">
+                                      {update.comment}
+                                    </p>
 
-                                          {isVideo && (
-                                            <div className="relative w-full h-full bg-black">
-                                              <video
-                                                src={url}
-                                                className="w-full h-full object-cover opacity-80"
-                                                muted
-                                              />
-                                              <div className="absolute inset-0 flex items-center justify-center text-white text-3xl group-hover/attachment:scale-125 transition-transform">
-                                                ▶
+                                    {update.attachments?.length > 0 && (
+                                      <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-5">
+                                        {update.attachments.map((file, i) => {
+                                          const { url, contentType } = file;
+
+                                          const isImage =
+                                            contentType?.startsWith("image");
+                                          const isVideo =
+                                            contentType?.startsWith("video");
+                                          const isPDF =
+                                            contentType?.includes("pdf");
+
+                                          return (
+                                            <div
+                                              key={i}
+                                              className="relative group/attachment rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-white/5 shadow-md hover:shadow-2xl transition-all duration-500 aspect-video sm:aspect-auto sm:h-44"
+                                            >
+                                              {isImage && (
+                                                <img
+                                                  src={url}
+                                                  loading="lazy"
+                                                  className="w-full h-full object-cover group-hover/attachment:scale-110 transition duration-700"
+                                                />
+                                              )}
+
+                                              {isVideo && (
+                                                <div className="relative w-full h-full bg-black">
+                                                  <video
+                                                    src={url}
+                                                    className="w-full h-full object-cover opacity-80"
+                                                    muted
+                                                  />
+                                                  <div className="absolute inset-0 flex items-center justify-center text-white text-3xl group-hover/attachment:scale-125 transition-transform">
+                                                    ▶
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {isPDF && (
+                                                <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/10">
+                                                  <span className="text-5xl drop-shadow-md">
+                                                    📄
+                                                  </span>
+                                                  <span className="text-xs mt-3 font-bold text-red-600 dark:text-red-400 tracking-wide uppercase">
+                                                    PDF Document
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                              <div className="absolute inset-0 bg-black/0 group-hover/attachment:bg-black/50 transition duration-300 flex items-center justify-center">
+                                                <button
+                                                  onClick={() => {
+                                                    setPreviewFile(file);
+                                                    setIsPreviewOpen(true);
+                                                  }}
+                                                  className="flex items-center gap-2 opacity-0 group-hover/attachment:opacity-100 scale-90 group-hover/attachment:scale-100 transition-all duration-300 bg-white/90 dark:bg-black/70 text-black dark:text-white px-5 py-2.5 rounded-xl shadow-2xl font-semibold"
+                                                >
+                                                  <SearchIcon size={18} /> View
+                                                </button>
                                               </div>
                                             </div>
-                                          )}
+                                          );
+                                        })}
+                                      </div>
+                                    )}
 
-                                          {isPDF && (
-                                            <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/10">
-                                              <span className="text-5xl drop-shadow-md">
-                                                📄
-                                              </span>
-                                              <span className="text-xs mt-3 font-bold text-red-600 dark:text-red-400 tracking-wide uppercase">
-                                                PDF Document
-                                              </span>
-                                            </div>
-                                          )}
-
-                                          <div className="absolute inset-0 bg-black/0 group-hover/attachment:bg-black/50 transition duration-300 flex items-center justify-center">
-                                            <button
-                                              onClick={() => {
-                                                setPreviewFile(file);
-                                                setIsPreviewOpen(true);
-                                              }}
-                                              className="flex items-center gap-2 opacity-0 group-hover/attachment:opacity-100 scale-90 group-hover/attachment:scale-100 transition-all duration-300 bg-white/90 dark:bg-black/70 text-black dark:text-white px-5 py-2.5 rounded-xl shadow-2xl font-semibold"
-                                            >
-                                              <SearchIcon size={18} /> View
-                                            </button>
-                                          </div>
+                                    {update.updater && (
+                                      <div className="flex items-center gap-4 mt-6 pt-5 border-t border-gray-200/60 dark:border-gray-800/60">
+                                        <div
+                                          className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-[13px] font-black shadow-lg ${
+                                            update.updater.role === "admin"
+                                              ? "bg-gradient-to-br from-orange-500 to-orange-700"
+                                              : update.updater.role ===
+                                                  "unit_officer"
+                                                ? "bg-gradient-to-br from-teal-500 to-teal-700"
+                                                : update.updater.role ===
+                                                    "field_officer"
+                                                  ? "bg-gradient-to-br from-cyan-500 to-cyan-700"
+                                                  : "bg-gradient-to-br from-gray-500 to-gray-700"
+                                          }`}
+                                        >
+                                          {update.updater.fullName
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .slice(0, 2)
+                                            .join("")}
                                         </div>
-                                      );
-                                    })}
+                                        <div className="flex flex-col justify-center">
+                                          <span className="text-gray-900 dark:text-white font-bold text-[15px]">
+                                            {update.updater.fullName}
+                                          </span>
+                                          <span className="text-gray-500 dark:text-gray-400 text-xs tracking-widest font-bold uppercase mt-0.5">
+                                            {update.role.replace("_", " ")}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-
-                                {update.updater && (
-                                  <div className="flex items-center gap-4 mt-6 pt-5 border-t border-gray-200/60 dark:border-gray-800/60">
-                                    <div
-                                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-[13px] font-black shadow-lg ${
-                                        update.updater.role === "admin"
-                                          ? "bg-gradient-to-br from-orange-500 to-orange-700"
-                                          : update.updater.role ===
-                                              "unit_officer"
-                                            ? "bg-gradient-to-br from-teal-500 to-teal-700"
-                                            : update.updater.role ===
-                                                "field_officer"
-                                              ? "bg-gradient-to-br from-cyan-500 to-cyan-700"
-                                              : "bg-gradient-to-br from-gray-500 to-gray-700"
-                                      }`}
-                                    >
-                                      {update.updater.fullName
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .slice(0, 2)
-                                        .join("")}
-                                    </div>
-                                    <div className="flex flex-col justify-center">
-                                      <span className="text-gray-900 dark:text-white font-bold text-[15px]">
-                                        {update.updater.fullName}
-                                      </span>
-                                      <span className="text-gray-500 dark:text-gray-400 text-xs tracking-widest font-bold uppercase mt-0.5">
-                                        {update.role.replace("_", " ")}
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="relative ml-2 sm:ml-4">
-                      {statusSteps.map((step, index) => {
-                        const isCompleted =
-                          index < currentStepIndex ||
-                          (index === currentStepIndex &&
-                            issue.status === "resolved");
-                        const isCurrent =
-                          index === currentStepIndex &&
-                          issue.status !== "resolved";
-                        const Icon = step.icon;
-
-                        const stepColors = statusColors[step.status];
-
-                        return (
-                          <div
-                            key={step.status}
-                            className="group relative flex gap-6 sm:gap-8 pb-12 last:pb-0"
-                          >
-                            {index < statusSteps.length - 1 && (
-                              <div
-                                className={`absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full ${
-                                  isCompleted
-                                    ? `bg-gradient-to-b ${stepColors.lineGradient} opacity-40 dark:opacity-20`
-                                    : "bg-gray-200/50 dark:bg-gray-800 border-x border-dashed border-gray-400/30 dark:border-gray-600/30"
-                                }`}
-                              />
-                            )}
-
-                            <div
-                              className={`relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center border border-white/20 dark:border-white/10 ${
-                                isCompleted
-                                  ? `bg-gradient-to-br ${stepColors.gradient} ${stepColors.iconBg} group-hover:scale-110 transition-transform duration-500`
-                                  : isCurrent
-                                    ? `bg-white dark:bg-gray-900 border-2 ${stepColors.circleBorder} shadow-[0_0_20px_rgba(currentColor,0.3)] animate-[pulse_3s_ease-in-out_infinite]`
-                                    : "bg-gray-50 dark:bg-gray-800/30 border border-gray-300/50 dark:border-gray-700/50"
-                              }`}
-                            >
-                              <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                              <Icon
-                                size={28}
-                                className={
-                                  isCompleted
-                                    ? "text-white drop-shadow-md relative z-10"
-                                    : isCurrent
-                                      ? stepColors.text
-                                      : "text-gray-400 dark:text-gray-600"
-                                }
-                              />
-                            </div>
-
-                            <div className="flex-1 pt-1.5 transform transition-all duration-500 group-hover:-translate-y-1">
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between">
-                                  <h4
-                                    className={`text-lg sm:text-xl font-bold tracking-tight ${
-                                      isCompleted || isCurrent
-                                        ? "text-gray-900 dark:text-white"
-                                        : "text-gray-400 dark:text-gray-600"
-                                    }`}
-                                  >
-                                    {step.label}
-                                  </h4>
-                                  {isCompleted && (
-                                    <span
-                                      className={`text-[11px] font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-2.5 py-1 rounded-lg uppercase shadow-sm`}
-                                    >
-                                      Completed
-                                    </span>
-                                  )}
-                                  {isCurrent && (
-                                    <span
-                                      className={`text-[11px] font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-2.5 py-1 rounded-lg uppercase shadow-sm animate-pulse`}
-                                    >
-                                      In Progress
-                                    </span>
-                                  )}
                                 </div>
-                                <p
-                                  className={`text-[15px] sm:text-base font-medium ${
-                                    isCompleted || isCurrent
-                                      ? "text-gray-600 dark:text-gray-400"
-                                      : "text-gray-400 dark:text-gray-600"
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="relative ml-2 sm:ml-4">
+                          {statusSteps.map((step, index) => {
+                            const isCompleted =
+                              index < currentStepIndex ||
+                              (index === currentStepIndex &&
+                                issue.status === "resolved");
+                            const isCurrent =
+                              index === currentStepIndex &&
+                              issue.status !== "resolved";
+                            const Icon = step.icon;
+
+                            const stepColors = statusColors[step.status];
+
+                            return (
+                              <div
+                                key={step.status}
+                                className="group relative flex gap-6 sm:gap-8 pb-12 last:pb-0"
+                              >
+                                {index < statusSteps.length - 1 && (
+                                  <div
+                                    className={`absolute left-[26px] top-[60px] w-[3px] h-[calc(100%-24px)] rounded-full ${
+                                      isCompleted
+                                        ? `bg-gradient-to-b ${stepColors.lineGradient} opacity-40 dark:opacity-20`
+                                        : "bg-gray-200/50 dark:bg-gray-800 border-x border-dashed border-gray-400/30 dark:border-gray-600/30"
+                                    }`}
+                                  />
+                                )}
+
+                                <div
+                                  className={`relative z-10 flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center border border-white/20 dark:border-white/10 ${
+                                    isCompleted
+                                      ? `bg-gradient-to-br ${stepColors.gradient} ${stepColors.iconBg} group-hover:scale-110 transition-transform duration-500`
+                                      : isCurrent
+                                        ? `bg-white dark:bg-gray-900 border-2 ${stepColors.circleBorder} shadow-[0_0_20px_rgba(currentColor,0.3)] animate-[pulse_3s_ease-in-out_infinite]`
+                                        : "bg-gray-50 dark:bg-gray-800/30 border border-gray-300/50 dark:border-gray-700/50"
                                   }`}
                                 >
-                                  {step.description}
-                                </p>
+                                  <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                  <Icon
+                                    size={28}
+                                    className={
+                                      isCompleted
+                                        ? "text-white drop-shadow-md relative z-10"
+                                        : isCurrent
+                                          ? stepColors.text
+                                          : "text-gray-400 dark:text-gray-600"
+                                    }
+                                  />
+                                </div>
+
+                                <div className="flex-1 pt-1.5 transform transition-all duration-500 group-hover:-translate-y-1">
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-center justify-between">
+                                      <h4
+                                        className={`text-lg sm:text-xl font-bold tracking-tight ${
+                                          isCompleted || isCurrent
+                                            ? "text-gray-900 dark:text-white"
+                                            : "text-gray-400 dark:text-gray-600"
+                                        }`}
+                                      >
+                                        {step.label}
+                                      </h4>
+                                      {isCompleted && (
+                                        <span
+                                          className={`text-[11px] font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-2.5 py-1 rounded-lg uppercase shadow-sm`}
+                                        >
+                                          Completed
+                                        </span>
+                                      )}
+                                      {isCurrent && (
+                                        <span
+                                          className={`text-[11px] font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-2.5 py-1 rounded-lg uppercase shadow-sm animate-pulse`}
+                                        >
+                                          In Progress
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p
+                                      className={`text-[15px] sm:text-base font-medium ${
+                                        isCompleted || isCurrent
+                                          ? "text-gray-600 dark:text-gray-400"
+                                          : "text-gray-400 dark:text-gray-600"
+                                      }`}
+                                    >
+                                      {step.description}
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -985,7 +1077,279 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
             )}
         </div>
 
-        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80">
+        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80 space-y-3">
+          {(issue.status === "pending") && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="w-full px-6 py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white rounded-xl font-bold tracking-wide hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-red-500/20">
+                  Withdraw Issue
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-xl rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
+                {/* Background Mesh Gradient */}
+                <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 overflow-hidden">
+                  <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-rose-500/20 blur-[100px] animate-pulse" />
+                  <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/20 blur-[100px] animate-pulse delay-700" />
+                </div>
+
+                <div className="relative p-8 pt-12 flex flex-col items-center z-10">
+                  {/* Floating Icon Header */}
+                  <div className="flex flex-col items-center text-center mb-10">
+                    <motion.div
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="relative mb-6"
+                    >
+                      <div className="absolute inset-0 bg-red-500/30 blur-3xl rounded-full scale-125" />
+                      <div className="relative w-20 h-20 bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 rounded-3xl flex items-center justify-center shadow-2xl shadow-red-600/40 ring-4 ring-white/10">
+                        <AlertCircle
+                          size={40}
+                          className="text-white fill-white/10"
+                        />
+                      </div>
+                    </motion.div>
+
+                    <AlertDialogHeader className="text-center">
+                      <AlertDialogTitle className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-3 uppercase text-center w-full">
+                        Withdraw Issue
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[15px] leading-relaxed max-w-sm mx-auto text-center">
+                        Provide feedback for withdrawal to help us refine the
+                        CityCare experience.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                  </div>
+
+                  {/* Form Body */}
+                  <div className="w-full space-y-8 px-4">
+                    {/* CUSTOM DROPDOWN */}
+                    <div className="space-y-3 relative">
+                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
+                        Select Category
+                        {withdrawCategory && (
+                          <motion.span
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="text-emerald-500 dark:text-emerald-400"
+                          >
+                            Validated{" "}
+                            <CheckCircle2
+                              size={18}
+                              className="inline-block ml-1"
+                            />
+                          </motion.span>
+                        )}
+                      </label>
+
+                      <div className="relative">
+                        <button
+                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[1.5rem] px-6 py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isDropdownOpen ? "ring-4 ring-red-500/10 border-red-500 dark:border-red-500/50 shadow-2xl" : ""}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            {withdrawCategory ? (
+                              <>
+                                {(() => {
+                                  const selected = withdrawalCategories.find(
+                                    (c) => c.value === withdrawCategory,
+                                  );
+                                  const Icon = selected.icon;
+                                  return (
+                                    <>
+                                      <div
+                                        className={`p-2 rounded-xl ${selected.bg}`}
+                                      >
+                                        <Icon
+                                          size={20}
+                                          className={selected.color}
+                                        />
+                                      </div>
+                                      <span className="font-bold text-base">
+                                        {selected.label}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
+                              </>
+                            ) : (
+                              <>
+                                <div className="p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
+                                  <Layout size={20} className="text-gray-400" />
+                                </div>
+                                <span className="font-bold text-base text-gray-400 dark:text-gray-500">
+                                  Choosing a reason...
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={`text-gray-400 transition-transform duration-500 ${isDropdownOpen ? "rotate-180 text-red-500" : ""}`}
+                            size={20}
+                          />
+                        </button>
+
+                        <AnimatePresence>
+                          {isDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden py-3"
+                            >
+                              {withdrawalCategories.map((cat) => {
+                                const Icon = cat.icon;
+                                return (
+                                  <button
+                                    key={cat.value}
+                                    onClick={() => {
+                                      setWithdrawCategory(cat.value);
+                                      setIsDropdownOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${withdrawCategory === cat.value ? "bg-red-500/5" : ""}`}
+                                  >
+                                    <div
+                                      className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
+                                    >
+                                      <Icon
+                                        size={22}
+                                        className={`${cat.color} drop-shadow-sm`}
+                                      />
+                                    </div>
+                                    <div className="flex flex-col items-start">
+                                      <span
+                                        className={`font-extrabold text-[15px] ${withdrawCategory === cat.value ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}
+                                      >
+                                        {cat.label}
+                                      </span>
+                                    </div>
+                                    {withdrawCategory === cat.value && (
+                                      <motion.div
+                                        layoutId="activeSelect"
+                                        className="ml-auto w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                                      />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+
+                    {/* Progress Textarea */}
+                    <div className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-end px-1">
+                          <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                            Reason Log
+                          </label>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span
+                              className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${wordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
+                            >
+                              {wordCount} / 10 words
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar Container */}
+                        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{
+                              width: `${Math.min((wordCount / 10) * 100, 100)}%`,
+                              backgroundColor:
+                                wordCount >= 10 ? "#10b981" : "#f59e0b",
+                            }}
+                            className="h-full rounded-full shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-colors duration-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="relative group">
+                        <textarea
+                          value={withdrawReason}
+                          onChange={(e) => setWithdrawReason(e.target.value)}
+                          placeholder="Why are you withdrawing this report?"
+                          className="w-full h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[2rem] px-6 py-6 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500/50 transition-all font-bold text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
+                        />
+                      </div>
+
+                      <AnimatePresence>
+                        {wordCount < 10 && withdrawReason.length > 0 && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-2"
+                          >
+                            <AlertTriangle size={12} strokeWidth={3} />
+                            Awaiting {10 - wordCount} more words...
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+
+                  <AlertDialogFooter className="mt-12 flex-col sm:flex-row gap-4 w-full px-4 mb-4">
+                    <AlertDialogCancel
+                      onClick={() => {
+                        setWithdrawCategory("");
+                        setWithdrawReason("");
+                        setIsDropdownOpen(false);
+                      }}
+                      className="w-full sm:w-[35%] rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-xs px-6 py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
+                    >
+                      Dismiss
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={!isWithdrawEnabled}
+                      onClick={async () => {
+                        try {
+                          await withdrawIssue({
+                            issueId: issue._id,
+                            userId: issue.reportedBy,
+                            withdrawalReason: withdrawReason,
+                            withdrawalCategory: withdrawCategory,
+                          });
+
+                          setActiveTab("progress");
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className={`w-full sm:w-[65%] rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs px-6 py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isWithdrawEnabled ? "bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 text-white shadow-red-500/40 border-red-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
+                    >
+                      Confirm Withdrawal
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </div>
+
+                {/* Pulsing Success Glow */}
+                <AnimatePresence>
+                  {isWithdrawEnabled && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 pointer-events-none ring-[12px] ring-emerald-500/10 dark:ring-emerald-500/5 rounded-[3rem] animate-pulse"
+                    />
+                  )}
+                </AnimatePresence>
+
+                {/* Dynamic Bottom Mesh */}
+                <div
+                  className={`absolute bottom-0 left-0 right-0 h-2 transition-all duration-1000 ${isWithdrawEnabled ? "bg-gradient-to-r from-rose-500 via-emerald-500 to-rose-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite]" : "bg-gradient-to-r from-rose-500 via-transparent to-red-600 opacity-20"}`}
+                />
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
           <button
             onClick={onClose}
             className={`w-full px-6 py-3.5 bg-gradient-to-r ${currentColors.gradient} text-white rounded-xl font-bold tracking-wide hover:opacity-90 transition-all shadow-md hover:shadow-lg focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:ring-current`}
@@ -1048,9 +1412,4 @@ const IssueDetailModalComponent = ({ issue, onClose }) => {
   );
 };
 
-// Deep equality constraint targeting the unique issue ID to strictly block devtools and
-// layout cascade re-renders originating from the parent's inline arrow function pointer updates.
-export const IssueDetailModal = memo(
-  IssueDetailModalComponent,
-  (prevProps, nextProps) => prevProps.issue?._id === nextProps.issue?._id,
-);
+export default IssueDetailModal;

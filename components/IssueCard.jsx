@@ -66,6 +66,19 @@ const statusConfig = {
     iconColor: "text-red-600 dark:text-red-400",
     badgeBg: "bg-white/70 dark:bg-red-500/20",
   },
+  withdrawn: {
+    label: "Withdrawn",
+    color: "slate",
+    icon: XCircle,
+    progress: 100,
+    bgGradient:
+      "from-slate-50/95 to-slate-200/80 dark:from-slate-700/20 dark:to-slate-900/40",
+    glowGradient: "from-slate-400 to-slate-600",
+    borderColor: "border-slate-200/80 dark:border-slate-500/30",
+    textColor: "text-slate-700 dark:text-slate-400",
+    iconColor: "text-slate-600 dark:text-slate-400",
+    badgeBg: "bg-white/70 dark:bg-slate-500/20",
+  },
 };
 
 const categoryLabels = {

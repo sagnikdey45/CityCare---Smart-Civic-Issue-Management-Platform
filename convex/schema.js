@@ -158,6 +158,11 @@ export default defineSchema({
     // Workflow
     status: v.string(),
 
+    // Citizen Withdrawal
+    withdrawnAt: v.optional(v.number()),
+    withdrawalReason: v.optional(v.string()),
+    withdrawalCategory: v.optional(v.string()),
+
     assignedUnitOfficer: v.union(v.id("users"), v.null()),
     assignedFieldOfficer: v.union(v.id("users"), v.null()),
 
@@ -213,7 +218,7 @@ export default defineSchema({
     scope: v.union(
       v.literal("field_and_citizen"), // visible to citizen and officers
       v.literal("citizen"), // citizens only
-      v.literal("admin_only"), // admin audit
+      v.literal("admin_only"), // admin only
     ),
 
     // Timestamp

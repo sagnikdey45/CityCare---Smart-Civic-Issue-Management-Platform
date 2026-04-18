@@ -143,7 +143,6 @@ export const createIssue = mutation({
   },
 });
 
-
 export const getCitizenDashboardIssues = query({
   args: {
     userId: v.id("users"),
@@ -186,11 +185,90 @@ export const getCitizenDashboardIssues = query({
           photoUrl = await ctx.storage.getUrl(issue.photos[0]);
         }
         return { ...issue, photoUrl };
-      })
+      }),
     );
 
-    return resolvedIssues.sort(
-      (a, b) => b.createdAt - a.createdAt,
-    );
+    return resolvedIssues.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const withdrawIssue = mutation({
+  args: {
+    issueId: v.id("issues"),
+    userId: v.id("users"),
+    withdrawalReason: v.string(),
+    withdrawalCategory: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+
+    if (!issue) {
+      throw new Error("Issue not found");
+    }
+
+    // Ensure only reporter can withdraw
+    if (issue.reportedBy !== args.userId) {
+      throw new Error("Unauthorized action");
+    }
+
+    // Prevent invalid cases
+    if (
+      issue.status === "resolved" ||
+      issue.status === "rejected" ||
+      issue.status === "withdrawn"
+    ) {
+      throw new Error("Cannot withdraw this issue");
+    }
+
+    // Update issue details
+    await ctx.db.patch(args.issueId, {
+      status: "withdrawn",
+
+      withdrawnAt: Date.now(),
+      withdrawalReason: args.withdrawalReason,
+      withdrawalCategory: args.withdrawalCategory,
+    });
+
+    // Add timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: args.issueId,
+      status: "withdrawn",
+
+      comment: `Issue withdrawn.\nCategory: ${args.withdrawalCategory}\nReason: ${args.withdrawalReason}`,
+
+      updatedBy: args.userId,
+      role: "citizen",
+
+      attachments: [],
+      scope: "citizen",
+
+      createdAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+export const getIssueById = query({
+  args: {
+    issueId: v.id("issues"),
+  },
+
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+
+    if (!issue) return null;
+
+    // Optional: attach photo preview (same logic as dashboard)
+    let photoUrl = null;
+    if (issue.photos && issue.photos.length > 0) {
+      photoUrl = await ctx.storage.getUrl(issue.photos[0]);
+    }
+
+    return {
+      ...issue,
+      photoUrl,
+    };
   },
 });
