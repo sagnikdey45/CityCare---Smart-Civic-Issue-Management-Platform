@@ -29,6 +29,9 @@ import {
   Ghost,
   MoreHorizontal,
   CheckCircle2,
+  Check,
+  RefreshCw,
+  MinusCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IssueDiscussion } from "./IssueDiscussion";
@@ -56,16 +59,64 @@ const statusSteps = [
     description: "Issue submitted and awaiting review",
   },
   {
+    status: "verified",
+    label: "Verified",
+    icon: Check,
+    description: "Issue verified by Unit Officer",
+  },
+  {
+    status: "assigned",
+    label: "Assigned",
+    icon: User,
+    description: "Assigned to Field Officer",
+  },
+  {
     status: "in_progress",
     label: "In Progress",
     icon: Clock,
-    description: "Work has started on resolving this issue",
+    description: "Work is currently ongoing",
   },
   {
-    status: "resolved",
-    label: "Resolved",
+    status: "pending_uo_verification",
+    label: "Pending Verification",
+    icon: AlertCircle,
+    description: "Waiting for Unit Officer verification",
+  },
+  {
+    status: "rework_required",
+    label: "Rework Required",
+    icon: XCircle,
+    description: "Additional work required",
+  },
+  {
+    status: "reopened",
+    label: "Reopened",
+    icon: RefreshCw,
+    description: "Issue reopened after closure",
+  },
+  {
+    status: "escalated",
+    label: "Escalated",
+    icon: TrendingUp,
+    description: "Escalated to higher authority",
+  },
+  {
+    status: "closed",
+    label: "Closed",
     icon: CheckCircle,
-    description: "Issue has been successfully resolved",
+    description: "Issue resolved and closed",
+  },
+  {
+    status: "rejected",
+    label: "Rejected",
+    icon: XCircle,
+    description: "Issue rejected after review",
+  },
+  {
+    status: "withdrawn",
+    label: "Withdrawn",
+    icon: MinusCircle,
+    description: "Issue withdrawn by citizen",
   },
 ];
 
@@ -231,6 +282,36 @@ const IssueDetailModal = ({ issue, onClose }) => {
       lineGradient:
         "from-amber-500 to-yellow-600 dark:from-amber-600 dark:to-yellow-700",
     },
+
+    verified: {
+      gradient: "from-cyan-500 to-blue-600 dark:from-cyan-600 dark:to-blue-700",
+      light:
+        "from-cyan-50 to-blue-50/50 dark:from-cyan-900/20 dark:to-blue-900/10",
+      border: "border-cyan-300 dark:border-cyan-700/50",
+      text: "text-cyan-600 dark:text-cyan-400",
+      bg: "bg-cyan-100 dark:bg-cyan-900/30",
+      badgeBg: "bg-cyan-50 dark:bg-cyan-900/40",
+      iconBg: "bg-cyan-500 dark:bg-cyan-600",
+      circleBorder: "border-cyan-500 dark:border-cyan-600",
+      lineGradient:
+        "from-cyan-500 to-blue-600 dark:from-cyan-600 dark:to-blue-700",
+    },
+
+    assigned: {
+      gradient:
+        "from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700",
+      light:
+        "from-indigo-50 to-purple-50/50 dark:from-indigo-900/20 dark:to-purple-900/10",
+      border: "border-indigo-300 dark:border-indigo-700/50",
+      text: "text-indigo-600 dark:text-indigo-400",
+      bg: "bg-indigo-100 dark:bg-indigo-900/30",
+      badgeBg: "bg-indigo-50 dark:bg-indigo-900/40",
+      iconBg: "bg-indigo-500 dark:bg-indigo-600",
+      circleBorder: "border-indigo-500 dark:border-indigo-600",
+      lineGradient:
+        "from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700",
+    },
+
     in_progress: {
       gradient:
         "from-blue-600 to-indigo-700 dark:from-blue-700 dark:to-indigo-800",
@@ -245,6 +326,66 @@ const IssueDetailModal = ({ issue, onClose }) => {
       lineGradient:
         "from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700",
     },
+
+    pending_uo_verification: {
+      gradient:
+        "from-orange-500 to-amber-600 dark:from-orange-600 dark:to-amber-700",
+      light:
+        "from-orange-50 to-amber-50/50 dark:from-orange-900/20 dark:to-amber-900/10",
+      border: "border-orange-300 dark:border-orange-700/50",
+      text: "text-orange-600 dark:text-orange-400",
+      bg: "bg-orange-100 dark:bg-orange-900/30",
+      badgeBg: "bg-orange-50 dark:bg-orange-900/40",
+      iconBg: "bg-orange-500 dark:bg-orange-600",
+      circleBorder: "border-orange-500 dark:border-orange-600",
+      lineGradient:
+        "from-orange-500 to-amber-600 dark:from-orange-600 dark:to-amber-700",
+    },
+
+    rework_required: {
+      gradient: "from-pink-500 to-rose-600 dark:from-pink-600 dark:to-rose-700",
+      light:
+        "from-pink-50 to-rose-50/50 dark:from-pink-900/20 dark:to-rose-900/10",
+      border: "border-pink-300 dark:border-pink-700/50",
+      text: "text-pink-600 dark:text-pink-400",
+      bg: "bg-pink-100 dark:bg-pink-900/30",
+      badgeBg: "bg-pink-50 dark:bg-pink-900/40",
+      iconBg: "bg-pink-500 dark:bg-pink-600",
+      circleBorder: "border-pink-500 dark:border-pink-600",
+      lineGradient:
+        "from-pink-500 to-rose-600 dark:from-pink-600 dark:to-rose-700",
+    },
+
+    reopened: {
+      gradient:
+        "from-yellow-500 to-orange-600 dark:from-yellow-600 dark:to-orange-700",
+      light:
+        "from-yellow-50 to-orange-50/50 dark:from-yellow-900/20 dark:to-orange-900/10",
+      border: "border-yellow-300 dark:border-yellow-700/50",
+      text: "text-yellow-600 dark:text-yellow-400",
+      bg: "bg-yellow-100 dark:bg-yellow-900/30",
+      badgeBg: "bg-yellow-50 dark:bg-yellow-900/40",
+      iconBg: "bg-yellow-500 dark:bg-yellow-600",
+      circleBorder: "border-yellow-500 dark:border-yellow-600",
+      lineGradient:
+        "from-yellow-500 to-orange-600 dark:from-yellow-600 dark:to-orange-700",
+    },
+
+    escalated: {
+      gradient:
+        "from-red-500 to-orange-600 dark:from-red-600 dark:to-orange-700",
+      light:
+        "from-red-50 to-orange-50/50 dark:from-red-900/20 dark:to-orange-900/10",
+      border: "border-red-300 dark:border-red-700/50",
+      text: "text-red-600 dark:text-red-400",
+      bg: "bg-red-100 dark:bg-red-900/30",
+      badgeBg: "bg-red-50 dark:bg-red-900/40",
+      iconBg: "bg-red-500 dark:bg-red-600",
+      circleBorder: "border-red-500 dark:border-red-600",
+      lineGradient:
+        "from-red-500 to-orange-600 dark:from-red-600 dark:to-orange-700",
+    },
+
     resolved: {
       gradient:
         "from-emerald-500 to-green-600 dark:from-emerald-600 dark:to-green-700",
@@ -259,6 +400,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
       lineGradient:
         "from-emerald-500 to-green-600 dark:from-emerald-600 dark:to-green-700",
     },
+
     rejected: {
       gradient: "from-red-500 to-red-700 dark:from-red-600 dark:to-red-800",
       light:
@@ -271,6 +413,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
       circleBorder: "border-red-500 dark:border-red-600",
       lineGradient: "from-red-500 to-red-700 dark:from-red-600 dark:to-red-800",
     },
+
     withdrawn: {
       gradient:
         "from-slate-500 to-slate-700 dark:from-slate-600 dark:to-slate-800",
@@ -497,19 +640,26 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                   />
                                 </div>
 
-                                <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1 contain-content transform-gpu will-change-transform">
+                                <div className="flex-1 pt-0.5 transform transition-all duration-500 group-hover:-translate-y-1 transform-gpu will-change-transform">
                                   <div className="bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-white/5 rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] group-hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.03)] transition-all">
                                     <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
                                       <span
                                         className={`text-xs font-black tracking-widest ${stepColors.text} ${stepColors.badgeBg} px-3 py-1.5 rounded-xl uppercase shadow-sm`}
                                       >
-                                        {update.status === "in_progress"
-                                          ? "In Progress"
-                                          : update.status === "resolved"
-                                            ? "Resolved"
-                                            : update.status === "rejected"
-                                              ? "Rejected"
-                                              : "Reported"}
+                                        {{
+                                          pending: "Reported",
+                                          verified: "Verified",
+                                          assigned: "Assigned",
+                                          in_progress: "In Progress",
+                                          pending_uo_verification:
+                                            "Pending Verification",
+                                          rework_required: "Rework Required",
+                                          reopened: "Reopened",
+                                          escalated: "Escalated",
+                                          closed: "Closed",
+                                          rejected: "Rejected",
+                                          withdrawn: "Withdrawn",
+                                        }[update.status] || "Reported"}
                                       </span>
                                       <span className="text-sm font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-xl">
                                         <Clock size={16} />
@@ -1078,7 +1228,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
         </div>
 
         <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80 space-y-3">
-          {(issue.status === "pending") && (
+          {issue.status === "pending" && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button className="w-full px-6 py-3.5 bg-gradient-to-r from-rose-500 to-red-600 text-white rounded-xl font-bold tracking-wide hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-red-500/20">

@@ -25,6 +25,7 @@ export default defineSchema({
 
     fullName: v.string(),
     email: v.string(),
+    phone: v.optional(v.string()),
 
     city: v.string(),
     state: v.string(),
@@ -155,6 +156,10 @@ export default defineSchema({
     // Single videos
     videos: v.union(v.id("_storage"), v.null()),
 
+    // Field Officer Reports
+    beforePhotos: v.optional(v.array(v.id("_storage"))),
+    afterPhotos: v.optional(v.array(v.id("_storage"))),
+
     // Workflow
     status: v.string(),
 
@@ -163,8 +168,32 @@ export default defineSchema({
     withdrawalReason: v.optional(v.string()),
     withdrawalCategory: v.optional(v.string()),
 
+    // Assignments
     assignedUnitOfficer: v.union(v.id("users"), v.null()),
     assignedFieldOfficer: v.union(v.id("users"), v.null()),
+
+    // Issue Verification
+    verificationChecklist: v.optional(
+      v.object({
+        locationValid: v.boolean(),
+        hasSufficientEvidence: v.boolean(),
+        notDuplicate: v.boolean(),
+        isWithinJurisdiction: v.boolean(),
+        notes: v.optional(v.string()),
+        verifiedBy: v.id("users"),
+        verifiedAt: v.number(),
+      }),
+    ),
+
+    // Issue Rejection
+    rejection: v.optional(
+      v.object({
+        reason: v.string(),
+        comment: v.string(),
+        rejectedBy: v.id("users"),
+        rejectedAt: v.number(),
+      }),
+    ),
 
     possibleDuplicateIds: v.array(v.id("issues")),
 
@@ -202,7 +231,7 @@ export default defineSchema({
     comment: v.union(v.string(), v.null()),
 
     // Who performed the update
-    updatedBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
 
     role: v.union(
       v.literal("citizen"),
@@ -212,7 +241,7 @@ export default defineSchema({
     ),
 
     // Attachments (photos/videos/documents)
-    attachments: v.array(v.id("_storage")),
+    attachments: v.optional(v.array(v.id("_storage"))),
 
     // Visibility scope
     scope: v.union(

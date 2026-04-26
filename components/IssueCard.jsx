@@ -11,22 +11,54 @@ import {
   TrendingUp,
   Image as ImageIcon,
   ChevronRight,
+  MinusCircle,
+  RefreshCw,
+  Check,
 } from "lucide-react";
 
 const statusConfig = {
   pending: {
-    label: "Pending",
+    label: "Reported",
     color: "amber",
     icon: Clock,
-    progress: 25,
+    progress: 10,
     bgGradient:
-      "from-amber-50/95 to-orange-100/80 dark:from-amber-500/20 dark:to-orange-900/30",
-    glowGradient: "from-amber-400 to-orange-500",
+      "from-amber-50/95 to-yellow-100/80 dark:from-amber-500/20 dark:to-yellow-900/30",
+    glowGradient: "from-amber-400 to-yellow-500",
     borderColor: "border-amber-200/80 dark:border-amber-500/30",
     textColor: "text-amber-700 dark:text-amber-400",
     iconColor: "text-amber-600 dark:text-amber-400",
     badgeBg: "bg-white/70 dark:bg-amber-500/20",
   },
+
+  verified: {
+    label: "Verified",
+    color: "cyan",
+    icon: Check,
+    progress: 25,
+    bgGradient:
+      "from-cyan-50/95 to-blue-100/80 dark:from-cyan-500/20 dark:to-blue-900/30",
+    glowGradient: "from-cyan-400 to-blue-500",
+    borderColor: "border-cyan-200/80 dark:border-cyan-500/30",
+    textColor: "text-cyan-700 dark:text-cyan-400",
+    iconColor: "text-cyan-600 dark:text-cyan-400",
+    badgeBg: "bg-white/70 dark:bg-cyan-500/20",
+  },
+
+  assigned: {
+    label: "Assigned",
+    color: "indigo",
+    icon: User,
+    progress: 40,
+    bgGradient:
+      "from-indigo-50/95 to-purple-100/80 dark:from-indigo-500/20 dark:to-purple-900/30",
+    glowGradient: "from-indigo-400 to-purple-500",
+    borderColor: "border-indigo-200/80 dark:border-indigo-500/30",
+    textColor: "text-indigo-700 dark:text-indigo-400",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
+    badgeBg: "bg-white/70 dark:bg-indigo-500/20",
+  },
+
   in_progress: {
     label: "In Progress",
     color: "blue",
@@ -40,6 +72,63 @@ const statusConfig = {
     iconColor: "text-blue-600 dark:text-blue-400",
     badgeBg: "bg-white/70 dark:bg-blue-500/20",
   },
+
+  pending_uo_verification: {
+    label: "Pending UO Verification",
+    color: "orange",
+    icon: AlertCircle,
+    progress: 75,
+    bgGradient:
+      "from-orange-100/95 to-yellow-100/80 dark:from-orange-600/20 dark:to-yellow-900/30",
+    glowGradient: "from-orange-500 to-yellow-500",
+    borderColor: "border-orange-300/80 dark:border-orange-500/40",
+    textColor: "text-orange-800 dark:text-orange-300",
+    iconColor: "text-orange-700 dark:text-orange-300",
+    badgeBg: "bg-orange-50/80 dark:bg-orange-500/25",
+  },
+
+  rework_required: {
+    label: "Rework Required",
+    color: "pink",
+    icon: XCircle,
+    progress: 55,
+    bgGradient:
+      "from-pink-100/95 to-rose-100/80 dark:from-pink-500/20 dark:to-rose-900/30",
+    glowGradient: "from-pink-400 to-rose-500",
+    borderColor: "border-pink-200/80 dark:border-pink-500/30",
+    textColor: "text-pink-700 dark:text-pink-400",
+    iconColor: "text-pink-600 dark:text-pink-400",
+    badgeBg: "bg-white/70 dark:bg-pink-500/20",
+  },
+
+  reopened: {
+    label: "Reopened",
+    color: "orange",
+    icon: RefreshCw,
+    progress: 50,
+    bgGradient:
+      "from-orange-200/95 to-red-100/80 dark:from-orange-700/20 dark:to-red-900/30",
+    glowGradient: "from-orange-500 to-red-500",
+    borderColor: "border-orange-400/80 dark:border-orange-500/40",
+    textColor: "text-orange-800 dark:text-orange-300",
+    iconColor: "text-orange-700 dark:text-orange-300",
+    badgeBg: "bg-orange-100/80 dark:bg-orange-500/25",
+  },
+
+  escalated: {
+    label: "Escalated",
+    color: "red",
+    icon: TrendingUp,
+    progress: 85,
+    bgGradient:
+      "from-red-50/95 to-orange-100/80 dark:from-red-500/20 dark:to-orange-900/30",
+    glowGradient: "from-red-400 to-orange-500",
+    borderColor: "border-red-200/80 dark:border-red-500/30",
+    textColor: "text-red-700 dark:text-red-400",
+    iconColor: "text-red-600 dark:text-red-400",
+    badgeBg: "bg-white/70 dark:bg-red-500/20",
+  },
+
   resolved: {
     label: "Resolved",
     color: "emerald",
@@ -53,6 +142,7 @@ const statusConfig = {
     iconColor: "text-emerald-600 dark:text-emerald-400",
     badgeBg: "bg-white/70 dark:bg-emerald-500/20",
   },
+
   rejected: {
     label: "Rejected",
     color: "red",
@@ -66,10 +156,11 @@ const statusConfig = {
     iconColor: "text-red-600 dark:text-red-400",
     badgeBg: "bg-white/70 dark:bg-red-500/20",
   },
+
   withdrawn: {
     label: "Withdrawn",
     color: "slate",
-    icon: XCircle,
+    icon: MinusCircle,
     progress: 100,
     bgGradient:
       "from-slate-50/95 to-slate-200/80 dark:from-slate-700/20 dark:to-slate-900/40",

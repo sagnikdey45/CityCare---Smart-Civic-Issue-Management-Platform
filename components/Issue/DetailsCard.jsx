@@ -339,7 +339,11 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
   };
 
   const handleInput = (name, value) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let finalValue = value;
+    if (name === "description" && value.length > 500) {
+      finalValue = value.substring(0, 500);
+    }
+    setFormData((prev) => ({ ...prev, [name]: finalValue }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
@@ -396,6 +400,7 @@ const DetailsCard = ({ formData, setFormData, errors, setErrors }) => {
             <textarea
               id="description"
               rows={5}
+              maxLength={500}
               value={formData.description}
               onChange={(e) => handleInput("description", e.target.value)}
               className={`w-full px-4 py-3 rounded-xl border-2 resize-none transition-all outline-none focus:ring-4 font-medium leading-relaxed ${

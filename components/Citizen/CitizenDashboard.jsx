@@ -272,8 +272,8 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
                 size={22}
               />
               {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-br from-red-500 to-rose-600 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-white dark:border-gray-900 shadow-sm">
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-br from-red-500 to-rose-600 text-white text-[14px] font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white dark:border-gray-900 shadow-sm">
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               )}
             </button>
@@ -771,7 +771,7 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
           <div className="relative z-10 text-center py-24 bg-white/95 dark:bg-[#0a0a0a]/80 rounded-[2.5rem] border border-gray-200/80 dark:border-white/10 shadow-xl overflow-hidden flex flex-col items-center">
             {/* Background Blur - Added pointer-events-none to prevent interception */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent blur-3xl pointer-events-none"></div>
-            
+
             <div className="relative p-6 bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-[2rem] border border-gray-200 dark:border-white/5 shadow-inner mb-6">
               <AlertCircle
                 className="text-gray-500 dark:text-gray-400"
@@ -779,19 +779,19 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
                 strokeWidth={1.5}
               />
             </div>
-            
+
             <h3 className="relative z-10 text-2xl font-extrabold text-gray-900 dark:text-white mb-3 tracking-tight">
               {issues.length === 0
                 ? "Your Dashboard is Empty"
                 : "No matching issues"}
             </h3>
-            
+
             <p className="relative z-10 text-gray-600 dark:text-gray-400 font-medium max-w-sm mb-8 text-[15px]">
               {issues.length === 0
                 ? "You haven't reported any civic issues yet. Be the change you want to see in your city."
                 : "Try adjusting your filters or search terms to find what you're looking for."}
             </p>
-            
+
             {issues.length === 0 && (
               <button
                 onClick={() => router.push("/citizen/report")}
