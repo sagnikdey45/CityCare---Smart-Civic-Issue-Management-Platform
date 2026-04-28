@@ -50,6 +50,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useSession } from "next-auth/react";
+import { title } from "framer-motion/client";
 
 const statusSteps = [
   {
@@ -158,6 +159,51 @@ const withdrawalCategories = [
   },
 ];
 
+const reopenCategories = [
+  {
+    value: "not_resolved",
+    label: "Issue not resolved properly",
+    icon: AlertTriangle,
+    color: "text-red-500",
+    bg: "bg-red-500/10",
+  },
+  {
+    value: "reoccurred",
+    label: "Issue has reoccurred",
+    icon: RefreshCw,
+    color: "text-orange-500",
+    bg: "bg-orange-500/10",
+  },
+  {
+    value: "partial_fix",
+    label: "Partially fixed",
+    icon: MinusCircle,
+    color: "text-yellow-500",
+    bg: "bg-yellow-500/10",
+  },
+  {
+    value: "incorrect_resolution",
+    label: "Marked resolved incorrectly",
+    icon: XCircle,
+    color: "text-rose-500",
+    bg: "bg-rose-500/10",
+  },
+  {
+    value: "wrong_rejection",
+    label: "Issue was wrongly rejected",
+    icon: XCircle,
+    color: "text-rose-500",
+    bg: "bg-rose-500/10",
+  },
+  {
+    value: "other",
+    label: "Other reason",
+    icon: MoreHorizontal,
+    color: "text-blue-500",
+    bg: "bg-blue-500/10",
+  },
+];
+
 const IssueDetailModal = ({ issue, onClose }) => {
   const [activeTab, setActiveTab] = useState("progress");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -168,13 +214,20 @@ const IssueDetailModal = ({ issue, onClose }) => {
   const [withdrawCategory, setWithdrawCategory] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [reopenCategory, setReopenCategory] = useState("");
+  const [reopenReason, setReopenReason] = useState("");
+  const [isReopenDropdownOpen, setIsReopenDropdownOpen] = useState(false);
 
   const issueUpdates = useQuery(
     api.issueUpdates.getByIssueId,
     issue ? { issueId: issue._id } : "skip",
   );
 
+  // Mutation for withdrawing an issue
   const withdrawIssue = useMutation(api.issues.withdrawIssue);
+
+  // Mutation for reopening an issue (which is closed, resolved or rejected)
+  const reopenIssue = useMutation(api.issues.reopenIssue);
 
   const photoIds = useMemo(() => issue?.photos || [], [issue?.photos]);
 
@@ -237,6 +290,14 @@ const IssueDetailModal = ({ issue, onClose }) => {
   }, [withdrawReason]);
 
   const isWithdrawEnabled = withdrawCategory !== "" && wordCount >= 10;
+
+  const reopenWordCount = useMemo(() => {
+    return reopenReason.trim() === ""
+      ? 0
+      : reopenReason.trim().split(/\s+/).length;
+  }, [reopenReason]);
+
+  const isReopenEnabled = reopenCategory !== "" && reopenWordCount >= 10;
 
   const currentStepIndex =
     issue.status === "resolved"
@@ -1228,6 +1289,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
         </div>
 
         <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/80 space-y-3">
+          {/* Issue Withdrawal Modal */}
           {issue.status === "pending" && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -1348,43 +1410,45 @@ const IssueDetailModal = ({ issue, onClose }) => {
                               initial={{ opacity: 0, y: 10, scale: 0.95 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden py-3"
+                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
                             >
-                              {withdrawalCategories.map((cat) => {
-                                const Icon = cat.icon;
-                                return (
-                                  <button
-                                    key={cat.value}
-                                    onClick={() => {
-                                      setWithdrawCategory(cat.value);
-                                      setIsDropdownOpen(false);
-                                    }}
-                                    className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${withdrawCategory === cat.value ? "bg-red-500/5" : ""}`}
-                                  >
-                                    <div
-                                      className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
+                              <div className="py-3 max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                {withdrawalCategories.map((cat) => {
+                                  const Icon = cat.icon;
+                                  return (
+                                    <button
+                                      key={cat.value}
+                                      onClick={() => {
+                                        setWithdrawCategory(cat.value);
+                                        setIsDropdownOpen(false);
+                                      }}
+                                      className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${withdrawCategory === cat.value ? "bg-red-500/5" : ""}`}
                                     >
-                                      <Icon
-                                        size={22}
-                                        className={`${cat.color} drop-shadow-sm`}
-                                      />
-                                    </div>
-                                    <div className="flex flex-col items-start">
-                                      <span
-                                        className={`font-extrabold text-[15px] ${withdrawCategory === cat.value ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}
+                                      <div
+                                        className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
                                       >
-                                        {cat.label}
-                                      </span>
-                                    </div>
-                                    {withdrawCategory === cat.value && (
-                                      <motion.div
-                                        layoutId="activeSelect"
-                                        className="ml-auto w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                                      />
-                                    )}
-                                  </button>
-                                );
-                              })}
+                                        <Icon
+                                          size={22}
+                                          className={`${cat.color} drop-shadow-sm`}
+                                        />
+                                      </div>
+                                      <div className="flex flex-col items-start">
+                                        <span
+                                          className={`font-extrabold text-[15px] ${withdrawCategory === cat.value ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}
+                                        >
+                                          {cat.label}
+                                        </span>
+                                      </div>
+                                      {withdrawCategory === cat.value && (
+                                        <motion.div
+                                          layoutId="activeSelect"
+                                          className="ml-auto w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                                        />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -1495,6 +1559,289 @@ const IssueDetailModal = ({ issue, onClose }) => {
                 {/* Dynamic Bottom Mesh */}
                 <div
                   className={`absolute bottom-0 left-0 right-0 h-2 transition-all duration-1000 ${isWithdrawEnabled ? "bg-gradient-to-r from-rose-500 via-emerald-500 to-rose-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite]" : "bg-gradient-to-r from-rose-500 via-transparent to-red-600 opacity-20"}`}
+                />
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
+          {/* Issue Reopen Modal */}
+          {["resolved", "closed", "rejected"].includes(issue.status) && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="w-full px-6 py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold tracking-wide hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-orange-500/20">
+                  Reopen Issue
+                </button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent className="max-w-xl rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
+                {/* Background Mesh Gradient */}
+                <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 overflow-hidden">
+                  <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-orange-500/20 blur-[100px] animate-pulse" />
+                  <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-amber-500/20 blur-[100px] animate-pulse delay-700" />
+                </div>
+
+                <div className="relative p-8 pt-12 flex flex-col items-center z-10">
+                  {/* Floating Icon Header */}
+                  <div className="flex flex-col items-center text-center mb-10">
+                    <motion.div
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="relative mb-6"
+                    >
+                      <div className="absolute inset-0 bg-orange-500/30 blur-3xl rounded-full scale-125" />
+                      <div className="relative w-20 h-20 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-600/40 ring-4 ring-white/10">
+                        <RefreshCw
+                          size={40}
+                          className="text-white fill-white/10"
+                        />
+                      </div>
+                    </motion.div>
+
+                    <AlertDialogHeader className="text-center">
+                      <AlertDialogTitle className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-3 uppercase text-center w-full">
+                        Reopen Issue
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[15px] leading-relaxed max-w-sm mx-auto text-center">
+                        Provide a reason and explain why this issue still exists
+                        to reopen it.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                  </div>
+
+                  {/* Form Body */}
+                  <div className="w-full space-y-8 px-4">
+                    {/* CUSTOM DROPDOWN */}
+                    <div className="space-y-3 relative">
+                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
+                        Select Category
+                        {reopenCategory && (
+                          <motion.span
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="text-emerald-500 dark:text-emerald-400"
+                          >
+                            Validated{" "}
+                            <CheckCircle2
+                              size={18}
+                              className="inline-block ml-1"
+                            />
+                          </motion.span>
+                        )}
+                      </label>
+
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setIsReopenDropdownOpen(!isReopenDropdownOpen)
+                          }
+                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[1.5rem] px-6 py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isReopenDropdownOpen ? "ring-4 ring-orange-500/10 border-orange-500 dark:border-orange-500/50 shadow-2xl" : ""}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            {reopenCategory ? (
+                              <>
+                                {(() => {
+                                  const selected = reopenCategories.find(
+                                    (c) => c.value === reopenCategory,
+                                  );
+                                  const Icon = selected.icon;
+                                  return (
+                                    <>
+                                      <div
+                                        className={`p-2 rounded-xl ${selected.bg}`}
+                                      >
+                                        <Icon
+                                          size={20}
+                                          className={selected.color}
+                                        />
+                                      </div>
+                                      <span className="font-bold text-base">
+                                        {selected.label}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
+                              </>
+                            ) : (
+                              <>
+                                <div className="p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
+                                  <Layout size={20} className="text-gray-400" />
+                                </div>
+                                <span className="font-bold text-base text-gray-400 dark:text-gray-500">
+                                  Choosing a reason...
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={`text-gray-400 transition-transform duration-500 ${isReopenDropdownOpen ? "rotate-180 text-orange-500" : ""}`}
+                            size={20}
+                          />
+                        </button>
+
+                        <AnimatePresence>
+                          {isReopenDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
+                            >
+                              <div className="py-3 max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                {reopenCategories.map((cat) => {
+                                  const Icon = cat.icon;
+                                  return (
+                                    <button
+                                      key={cat.value}
+                                      onClick={() => {
+                                        setReopenCategory(cat.value);
+                                        setIsReopenDropdownOpen(false);
+                                      }}
+                                      className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${reopenCategory === cat.value ? "bg-orange-500/5" : ""}`}
+                                    >
+                                      <div
+                                        className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
+                                      >
+                                        <Icon
+                                          size={22}
+                                          className={`${cat.color} drop-shadow-sm`}
+                                        />
+                                      </div>
+                                      <div className="flex flex-col items-start">
+                                        <span
+                                          className={`font-extrabold text-[15px] ${reopenCategory === cat.value ? "text-orange-500" : "text-gray-800 dark:text-gray-200"}`}
+                                        >
+                                          {cat.label}
+                                        </span>
+                                      </div>
+                                      {reopenCategory === cat.value && (
+                                        <motion.div
+                                          layoutId="activeSelectReopen"
+                                          className="ml-auto w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+                                        />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+
+                    {/* Progress Textarea */}
+                    <div className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-end px-1">
+                          <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                            Reason Log
+                          </label>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span
+                              className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${reopenWordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
+                            >
+                              {reopenWordCount} / 10 words
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar Container */}
+                        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{
+                              width: `${Math.min((reopenWordCount / 10) * 100, 100)}%`,
+                              backgroundColor:
+                                reopenWordCount >= 10 ? "#10b981" : "#f59e0b",
+                            }}
+                            className="h-full rounded-full shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-colors duration-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="relative group">
+                        <textarea
+                          value={reopenReason}
+                          onChange={(e) => setReopenReason(e.target.value)}
+                          placeholder="Why should this issue be reopened?"
+                          className="w-full h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[2rem] px-6 py-6 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500/50 transition-all font-bold text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
+                        />
+                      </div>
+
+                      <AnimatePresence>
+                        {reopenWordCount < 10 && reopenReason.length > 0 && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-2"
+                          >
+                            <AlertTriangle size={12} strokeWidth={3} />
+                            Awaiting {10 - reopenWordCount} more words...
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+
+                  <AlertDialogFooter className="mt-12 flex-col sm:flex-row gap-4 w-full px-4 mb-4">
+                    <AlertDialogCancel
+                      onClick={() => {
+                        setReopenCategory("");
+                        setReopenReason("");
+                        setIsReopenDropdownOpen(false);
+                      }}
+                      className="w-full sm:w-[35%] rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-xs px-6 py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
+                    >
+                      Dismiss
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={!isReopenEnabled}
+                      onClick={async () => {
+                        await reopenIssue({
+                          issueId: issue._id,
+                          userId: issue.reportedBy,
+                          reason: reopenReason,
+                          category: reopenCategory,
+                        });
+
+                        console.log("Reopen Issue Workflow:", {
+                          issueId: issue._id,
+                          userId: issue.reportedBy,
+                          reason: reopenReason,
+                          category: reopenCategory,
+                        });
+
+                        setReopenCategory("");
+                        setReopenReason("");
+                        setIsReopenDropdownOpen(false);
+                      }}
+                      className={`w-full sm:w-[65%] rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs px-6 py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isReopenEnabled ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white shadow-orange-500/40 border-orange-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
+                    >
+                      Confirm Reopen
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </div>
+
+                {/* Pulsing Success Glow */}
+                <AnimatePresence>
+                  {isReopenEnabled && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 pointer-events-none ring-[12px] ring-emerald-500/10 dark:ring-emerald-500/5 rounded-[3rem] animate-pulse"
+                    />
+                  )}
+                </AnimatePresence>
+
+                {/* Dynamic Bottom Mesh */}
+                <div
+                  className={`absolute bottom-0 left-0 right-0 h-2 transition-all duration-1000 ${isReopenEnabled ? "bg-gradient-to-r from-orange-500 via-emerald-500 to-orange-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite]" : "bg-gradient-to-r from-orange-500 via-transparent to-amber-500 opacity-20"}`}
                 />
               </AlertDialogContent>
             </AlertDialog>

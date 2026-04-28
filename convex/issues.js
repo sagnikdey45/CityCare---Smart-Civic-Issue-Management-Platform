@@ -242,6 +242,63 @@ export const withdrawIssue = mutation({
   },
 });
 
+export const reopenIssue = mutation({
+  args: {
+    issueId: v.id("issues"),
+    userId: v.id("users"),
+    reason: v.string(),
+    category: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) throw new Error("Issue not found");
+
+    // Changes issue status to "reopened" and logs the reason + category for reopening
+    await ctx.db.patch(args.issueId, {
+      status: "reopened",
+      isReopened: true,
+      reopenCount: (issue.reopenCount || 0) + 1,
+      reopenReason: args.reason,
+      reopenCategory: args.category,
+    });
+
+    // Adds the Issue Update for reopening with reason and category details
+    await ctx.db.insert("issueUpdates", {
+      issueId: args.issueId,
+      status: "reopened",
+      comment: `Issue reopened.\nCategory: ${args.category.toUpperCase().replace("_", " ")}\nReason: ${args.reason}`,
+      updatedBy: args.userId,
+      role: "citizen",
+      attachments: [],
+      scope: "field_and_citizen",
+      createdAt: Date.now(),
+    });
+
+    // Notification for Citizen
+    await ctx.db.insert("notifications", {
+      userId: issue.reportedBy,
+      issueId: args.issueId,
+      message: `The Issue "${issue.title}" with Issue Code: ${issue.issueCode} has been reopened by the citizen.`,
+      type: "reopened",
+      read: false,
+      createdAt: Date.now(),
+    });
+
+    // Notification for Unit Officer
+    if (issue.assignedUnitOfficer) {
+      await ctx.db.insert("notifications", {
+        userId: issue.assignedUnitOfficer,
+        issueId: args.issueId,
+        message: `The Issue "${issue.title}" with Issue Code: ${issue.issueCode} has been reopened by the citizen.`,
+        type: "reopened",
+        read: false,
+        createdAt: Date.now(),
+      });
+    }
+  },
+});
+
 export const getIssueById = query({
   args: {
     issueId: v.id("issues"),
