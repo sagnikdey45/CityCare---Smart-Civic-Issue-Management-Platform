@@ -137,6 +137,8 @@ export const verifyIssue = mutation({
 
     UOName: v.string(),
 
+    status: v.string(),
+
     verifiedBy: v.id("users"),
 
     issueName: v.string(),
@@ -162,37 +164,71 @@ export const verifyIssue = mutation({
       slaDeadline: args.slaDeadline,
     });
 
-    // Add the Issue Timeline Update
-    await ctx.db.insert("issueUpdates", {
-      issueId: args.issueId,
-      status: "verified",
-      comment: `Issue verified by Unit Officer ${args.UOName} and ready for assignment.`,
-      role: "unit_officer",
-      attachments: [],
-      updatedBy: args.verifiedBy,
-      scope: "field_and_citizen",
-      createdAt: Date.now(),
-    });
+    if (args.status === "reopened") {
+      // Add the Issue Timeline Update for the reopened issues
+      await ctx.db.insert("issueUpdates", {
+        issueId: args.issueId,
+        status: "verified",
+        comment: `Issue verified again by Unit Officer ${args.UOName} after reopening and ready for assignment.`,
+        role: "unit_officer",
+        attachments: [],
+        updatedBy: args.verifiedBy,
+        scope: "field_and_citizen",
+        createdAt: Date.now(),
+      });
 
-    // Add Notification to Citizen
-    await ctx.db.insert("notifications", {
-      userId: args.reporterId, // citizen
-      issueId: args.issueId,
-      message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been successfully verified by the Unit Officer ${args.UOName} and will be assigned shortly.`,
-      type: "verified",
-      read: false,
-      createdAt: Date.now(),
-    });
+      // Add Notification to Citizen for the reopened issues
+      await ctx.db.insert("notifications", {
+        userId: args.reporterId, // citizen
+        issueId: args.issueId,
+        message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been successfully verified again by the Unit Officer ${args.UOName} after reopening and will be assigned shortly.`,
+        type: "verified",
+        read: false,
+        createdAt: Date.now(),
+      });
 
-    // Add Notification to Unit Officer
-    await ctx.db.insert("notifications", {
-      userId: args.verifiedBy,
-      issueId: args.issueId,
-      message: `You have successfully verified the issue "${args.issueName}" with Issue Code "${args.issueCode}".`,
-      type: "verified",
-      read: false,
-      createdAt: Date.now(),
-    });
+      // Add Notification to Unit Officer for the reopenened issues
+      await ctx.db.insert("notifications", {
+        userId: args.verifiedBy,
+        issueId: args.issueId,
+        message: `You have successfully verified again the issue "${args.issueName}" with Issue Code "${args.issueCode}" after reopening.`,
+        type: "verified",
+        read: false,
+        createdAt: Date.now(),
+      });
+    } else {
+      // Add the Issue Timeline Update for the verified issues
+      await ctx.db.insert("issueUpdates", {
+        issueId: args.issueId,
+        status: "verified",
+        comment: `Issue verified by Unit Officer ${args.UOName} and ready for assignment.`,
+        role: "unit_officer",
+        attachments: [],
+        updatedBy: args.verifiedBy,
+        scope: "field_and_citizen",
+        createdAt: Date.now(),
+      });
+
+      // Add Notification to Citizen for the verified issues
+      await ctx.db.insert("notifications", {
+        userId: args.reporterId, // citizen
+        issueId: args.issueId,
+        message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been successfully verified by the Unit Officer ${args.UOName} and will be assigned shortly.`,
+        type: "verified",
+        read: false,
+        createdAt: Date.now(),
+      });
+
+      // Add Notification to Unit Officer for the verified issues
+      await ctx.db.insert("notifications", {
+        userId: args.verifiedBy,
+        issueId: args.issueId,
+        message: `You have successfully verified the issue "${args.issueName}" with Issue Code "${args.issueCode}".`,
+        type: "verified",
+        read: false,
+        createdAt: Date.now(),
+      });
+    }
   },
 });
 
@@ -203,6 +239,7 @@ export const rejectIssue = mutation({
     reason: v.string(),
     comment: v.string(),
     UOName: v.string(),
+    status: v.string(),
     rejectedBy: v.id("users"),
     issueName: v.string(),
     reporterId: v.id("users"),
@@ -236,37 +273,71 @@ export const rejectIssue = mutation({
       assignedFieldOfficer: null,
     });
 
-    // Add the Issue Timeline Update
-    await ctx.db.insert("issueUpdates", {
-      issueId: args.issueId,
-      status: "rejected",
-      comment: `The Issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected by the Unit Officer ${args.UOName}.\nReason: ${args.reason}\nComment: ${args.comment}`,
-      updatedBy: args.rejectedBy,
-      role: "unit_officer",
-      attachments: [],
-      scope: "citizen",
-      createdAt: now,
-    });
+    if (args.status === "reopened") {
+      // Add the Issue Timeline Update for reopened issue
+      await ctx.db.insert("issueUpdates", {
+        issueId: args.issueId,
+        status: "rejected",
+        comment: `The Issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected again by the Unit Officer ${args.UOName} after issue reopened by citizen.\nReason: ${args.reason}\nComment: ${args.comment}`,
+        updatedBy: args.rejectedBy,
+        role: "unit_officer",
+        attachments: [],
+        scope: "citizen",
+        createdAt: now,
+      });
 
-    // Add Notification to Citizen
-    await ctx.db.insert("notifications", {
-      userId: args.reporterId, // citizen
-      issueId: args.issueId,
-      message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected by the Unit Officer ${args.UOName}.`,
-      type: "rejected",
-      read: false,
-      createdAt: now,
-    });
+      // Add Notification to Citizen for reopened issue
+      await ctx.db.insert("notifications", {
+        userId: args.reporterId, // citizen
+        issueId: args.issueId,
+        message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected again by the Unit Officer ${args.UOName} after issue reopened by citizen`,
+        type: "rejected",
+        read: false,
+        createdAt: now,
+      });
 
-    // Add Notification to Unit Officer
-    await ctx.db.insert("notifications", {
-      userId: args.rejectedBy,
-      issueId: args.issueId,
-      message: `You have successfully rejected the issue "${args.issueName}" with Issue Code "${args.issueCode}".`,
-      type: "rejected",
-      read: false,
-      createdAt: now,
-    });
+      // Add Notification to Unit Officer for reopened issue
+      await ctx.db.insert("notifications", {
+        userId: args.rejectedBy,
+        issueId: args.issueId,
+        message: `You have successfully rejected again after reopening of the issue "${args.issueName}" with Issue Code "${args.issueCode}".`,
+        type: "rejected",
+        read: false,
+        createdAt: now,
+      });
+    } else {
+      // Add the Issue Timeline Update for rejected issue
+      await ctx.db.insert("issueUpdates", {
+        issueId: args.issueId,
+        status: "rejected",
+        comment: `The Issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected by the Unit Officer ${args.UOName}.\nReason: ${args.reason}\nComment: ${args.comment}`,
+        updatedBy: args.rejectedBy,
+        role: "unit_officer",
+        attachments: [],
+        scope: "citizen",
+        createdAt: now,
+      });
+
+      // Add Notification to Citizen for rejected issue
+      await ctx.db.insert("notifications", {
+        userId: args.reporterId, // citizen
+        issueId: args.issueId,
+        message: `Your issue "${args.issueName}" with Issue Code "${args.issueCode}" has been rejected by the Unit Officer ${args.UOName}.`,
+        type: "rejected",
+        read: false,
+        createdAt: now,
+      });
+
+      // Add Notification to Unit Officer for rejected issue
+      await ctx.db.insert("notifications", {
+        userId: args.rejectedBy,
+        issueId: args.issueId,
+        message: `You have successfully rejected the issue "${args.issueName}" with Issue Code "${args.issueCode}".`,
+        type: "rejected",
+        read: false,
+        createdAt: now,
+      });
+    }
 
     return { success: true };
   },

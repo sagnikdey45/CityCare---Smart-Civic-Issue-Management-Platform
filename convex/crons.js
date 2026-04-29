@@ -7,7 +7,7 @@ const crons = cronJobs();
 // crons.interval(
 //   "auto assign civic issues",
 //   { minutes: 30 },
-//   internal.issues.autoAssignIssues,
+//   internal.officerAssign.autoAssignIssues,
 // );
 
 export default crons;

@@ -682,7 +682,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
 
                             return (
                               <div
-                                key={update.id}
+                                key={index}
                                 className="group relative flex gap-6 sm:gap-8 pb-14 last:pb-0"
                               >
                                 {!isLastUpdate && (
@@ -1297,16 +1297,16 @@ const IssueDetailModal = ({ issue, onClose }) => {
                   Withdraw Issue
                 </button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="max-w-xl rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
+              <AlertDialogContent className="w-[95vw] sm:w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-[2rem] sm:rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
                 {/* Background Mesh Gradient */}
                 <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 overflow-hidden">
                   <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-rose-500/20 blur-[100px] animate-pulse" />
                   <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/20 blur-[100px] animate-pulse delay-700" />
                 </div>
 
-                <div className="relative p-8 pt-12 flex flex-col items-center z-10">
+                <div className="relative w-full p-5 sm:p-8 pt-8 sm:pt-12 flex flex-col items-center z-10 flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                   {/* Floating Icon Header */}
-                  <div className="flex flex-col items-center text-center mb-10">
+                  <div className="flex flex-col items-center text-center mb-6 sm:mb-10">
                     <motion.div
                       animate={{ y: [0, -8, 0] }}
                       transition={{
@@ -1314,22 +1314,19 @@ const IssueDetailModal = ({ issue, onClose }) => {
                         repeat: Infinity,
                         ease: "easeInOut",
                       }}
-                      className="relative mb-6"
+                      className="relative mb-5 sm:mb-6"
                     >
                       <div className="absolute inset-0 bg-red-500/30 blur-3xl rounded-full scale-125" />
-                      <div className="relative w-20 h-20 bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 rounded-3xl flex items-center justify-center shadow-2xl shadow-red-600/40 ring-4 ring-white/10">
-                        <AlertCircle
-                          size={40}
-                          className="text-white fill-white/10"
-                        />
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-2xl shadow-red-600/40 ring-4 ring-white/10">
+                        <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white/10" />
                       </div>
                     </motion.div>
 
                     <AlertDialogHeader className="text-center">
-                      <AlertDialogTitle className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-3 uppercase text-center w-full">
+                      <AlertDialogTitle className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-2 sm:mb-3 uppercase text-center w-full">
                         Withdraw Issue
                       </AlertDialogTitle>
-                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[15px] leading-relaxed max-w-sm mx-auto text-center">
+                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[13px] sm:text-[15px] leading-relaxed max-w-[90%] sm:max-w-sm mx-auto text-center">
                         Provide feedback for withdrawal to help us refine the
                         CityCare experience.
                       </AlertDialogDescription>
@@ -1337,10 +1334,10 @@ const IssueDetailModal = ({ issue, onClose }) => {
                   </div>
 
                   {/* Form Body */}
-                  <div className="w-full space-y-8 px-4">
+                  <div className="w-full space-y-6 sm:space-y-8 px-2 sm:px-4">
                     {/* CUSTOM DROPDOWN */}
                     <div className="space-y-3 relative">
-                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
+                      <label className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
                         Select Category
                         {withdrawCategory && (
                           <motion.span
@@ -1349,10 +1346,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                             className="text-emerald-500 dark:text-emerald-400"
                           >
                             Validated{" "}
-                            <CheckCircle2
-                              size={18}
-                              className="inline-block ml-1"
-                            />
+                            <CheckCircle2 className="inline-block ml-1 w-4 h-4 sm:w-5 sm:h-5" />
                           </motion.span>
                         )}
                       </label>
@@ -1360,9 +1354,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
                       <div className="relative">
                         <button
                           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[1.5rem] px-6 py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isDropdownOpen ? "ring-4 ring-red-500/10 border-red-500 dark:border-red-500/50 shadow-2xl" : ""}`}
+                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-2xl sm:rounded-[1.5rem] px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isDropdownOpen ? "ring-4 ring-red-500/10 border-red-500 dark:border-red-500/50 shadow-2xl" : ""}`}
                         >
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3 sm:gap-4">
                             {withdrawCategory ? (
                               <>
                                 {(() => {
@@ -1373,14 +1367,13 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                   return (
                                     <>
                                       <div
-                                        className={`p-2 rounded-xl ${selected.bg}`}
+                                        className={`p-1.5 sm:p-2 rounded-xl ${selected.bg}`}
                                       >
                                         <Icon
-                                          size={20}
-                                          className={selected.color}
+                                          className={`w-4 h-4 sm:w-5 sm:h-5 ${selected.color}`}
                                         />
                                       </div>
-                                      <span className="font-bold text-base">
+                                      <span className="font-bold text-[14px] sm:text-base">
                                         {selected.label}
                                       </span>
                                     </>
@@ -1389,18 +1382,17 @@ const IssueDetailModal = ({ issue, onClose }) => {
                               </>
                             ) : (
                               <>
-                                <div className="p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
-                                  <Layout size={20} className="text-gray-400" />
+                                <div className="p-1.5 sm:p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
+                                  <Layout className="text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                                 </div>
-                                <span className="font-bold text-base text-gray-400 dark:text-gray-500">
+                                <span className="font-bold text-[14px] sm:text-base text-gray-400 dark:text-gray-500">
                                   Choosing a reason...
                                 </span>
                               </>
                             )}
                           </div>
                           <ChevronDown
-                            className={`text-gray-400 transition-transform duration-500 ${isDropdownOpen ? "rotate-180 text-red-500" : ""}`}
-                            size={20}
+                            className={`text-gray-400 transition-transform duration-500 w-4 h-4 sm:w-5 sm:h-5 ${isDropdownOpen ? "rotate-180 text-red-500" : ""}`}
                           />
                         </button>
 
@@ -1410,9 +1402,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
                               initial={{ opacity: 0, y: 10, scale: 0.95 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
+                              className="absolute top-full left-0 right-0 mt-2 sm:mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-2xl sm:rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
                             >
-                              <div className="py-3 max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                              <div className="py-2 sm:py-3 max-h-[200px] sm:max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                                 {withdrawalCategories.map((cat) => {
                                   const Icon = cat.icon;
                                   return (
@@ -1422,19 +1414,18 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                         setWithdrawCategory(cat.value);
                                         setIsDropdownOpen(false);
                                       }}
-                                      className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${withdrawCategory === cat.value ? "bg-red-500/5" : ""}`}
+                                      className={`w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${withdrawCategory === cat.value ? "bg-red-500/5" : ""}`}
                                     >
                                       <div
-                                        className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
+                                        className={`p-2 sm:p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
                                       >
                                         <Icon
-                                          size={22}
-                                          className={`${cat.color} drop-shadow-sm`}
+                                          className={`w-4 h-4 sm:w-5 sm:h-5 ${cat.color} drop-shadow-sm`}
                                         />
                                       </div>
                                       <div className="flex flex-col items-start">
                                         <span
-                                          className={`font-extrabold text-[15px] ${withdrawCategory === cat.value ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}
+                                          className={`font-extrabold text-[13px] sm:text-[15px] text-left ${withdrawCategory === cat.value ? "text-red-500" : "text-gray-800 dark:text-gray-200"}`}
                                         >
                                           {cat.label}
                                         </span>
@@ -1442,7 +1433,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                       {withdrawCategory === cat.value && (
                                         <motion.div
                                           layoutId="activeSelect"
-                                          className="ml-auto w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                                          className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
                                         />
                                       )}
                                     </button>
@@ -1456,15 +1447,15 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     </div>
 
                     {/* Progress Textarea */}
-                    <div className="space-y-4">
-                      <div className="space-y-3">
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="space-y-2 sm:space-y-3">
                         <div className="flex justify-between items-end px-1">
-                          <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                          <label className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
                             Reason Log
                           </label>
-                          <div className="flex flex-col items-end gap-1.5">
+                          <div className="flex flex-col items-end gap-1 sm:gap-1.5">
                             <span
-                              className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${wordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
+                              className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${wordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
                             >
                               {wordCount} / 10 words
                             </span>
@@ -1472,7 +1463,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                         </div>
 
                         {/* Progress Bar Container */}
-                        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
+                        <div className="h-1 sm:h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{
@@ -1490,7 +1481,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                           value={withdrawReason}
                           onChange={(e) => setWithdrawReason(e.target.value)}
                           placeholder="Why are you withdrawing this report?"
-                          className="w-full h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[2rem] px-6 py-6 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500/50 transition-all font-bold text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
+                          className="w-full h-32 sm:h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-2xl sm:rounded-[2rem] px-4 sm:px-6 py-4 sm:py-6 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500/50 transition-all font-bold text-[13px] sm:text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
                         />
                       </div>
 
@@ -1500,9 +1491,12 @@ const IssueDetailModal = ({ issue, onClose }) => {
                             initial={{ opacity: 0, y: -5 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
-                            className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-2"
+                            className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-1.5 sm:gap-2"
                           >
-                            <AlertTriangle size={12} strokeWidth={3} />
+                            <AlertTriangle
+                              strokeWidth={3}
+                              className="w-3 h-3"
+                            />
                             Awaiting {10 - wordCount} more words...
                           </motion.p>
                         )}
@@ -1510,14 +1504,14 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     </div>
                   </div>
 
-                  <AlertDialogFooter className="mt-12 flex-col sm:flex-row gap-4 w-full px-4 mb-4">
+                  <AlertDialogFooter className="mt-8 sm:mt-12 flex-col sm:flex-row gap-3 sm:gap-4 w-full px-2 sm:px-4 mb-2 sm:mb-4">
                     <AlertDialogCancel
                       onClick={() => {
                         setWithdrawCategory("");
                         setWithdrawReason("");
                         setIsDropdownOpen(false);
                       }}
-                      className="w-full sm:w-[35%] rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-xs px-6 py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
+                      className="w-full sm:w-[35%] rounded-xl sm:rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
                     >
                       Dismiss
                     </AlertDialogCancel>
@@ -1537,7 +1531,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                           console.error(err);
                         }
                       }}
-                      className={`w-full sm:w-[65%] rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs px-6 py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isWithdrawEnabled ? "bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 text-white shadow-red-500/40 border-red-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
+                      className={`w-full sm:w-[65%] rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isWithdrawEnabled ? "bg-gradient-to-br from-rose-500 via-red-600 to-rose-700 text-white shadow-red-500/40 border-red-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
                     >
                       Confirm Withdrawal
                     </AlertDialogAction>
@@ -1573,16 +1567,16 @@ const IssueDetailModal = ({ issue, onClose }) => {
                 </button>
               </AlertDialogTrigger>
 
-              <AlertDialogContent className="max-w-xl rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
+              <AlertDialogContent className="w-[95vw] sm:w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-[2rem] sm:rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
                 {/* Background Mesh Gradient */}
                 <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 overflow-hidden">
                   <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-orange-500/20 blur-[100px] animate-pulse" />
                   <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-amber-500/20 blur-[100px] animate-pulse delay-700" />
                 </div>
 
-                <div className="relative p-8 pt-12 flex flex-col items-center z-10">
+                <div className="relative w-full p-5 sm:p-8 pt-8 sm:pt-12 flex flex-col items-center z-10 flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                   {/* Floating Icon Header */}
-                  <div className="flex flex-col items-center text-center mb-10">
+                  <div className="flex flex-col items-center text-center mb-6 sm:mb-10">
                     <motion.div
                       animate={{ y: [0, -8, 0] }}
                       transition={{
@@ -1590,22 +1584,19 @@ const IssueDetailModal = ({ issue, onClose }) => {
                         repeat: Infinity,
                         ease: "easeInOut",
                       }}
-                      className="relative mb-6"
+                      className="relative mb-5 sm:mb-6"
                     >
                       <div className="absolute inset-0 bg-orange-500/30 blur-3xl rounded-full scale-125" />
-                      <div className="relative w-20 h-20 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-600/40 ring-4 ring-white/10">
-                        <RefreshCw
-                          size={40}
-                          className="text-white fill-white/10"
-                        />
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-600/40 ring-4 ring-white/10">
+                        <RefreshCw className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white/10" />
                       </div>
                     </motion.div>
 
                     <AlertDialogHeader className="text-center">
-                      <AlertDialogTitle className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-3 uppercase text-center w-full">
+                      <AlertDialogTitle className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-2 sm:mb-3 uppercase text-center w-full">
                         Reopen Issue
                       </AlertDialogTitle>
-                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[15px] leading-relaxed max-w-sm mx-auto text-center">
+                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[13px] sm:text-[15px] leading-relaxed max-w-[90%] sm:max-w-sm mx-auto text-center">
                         Provide a reason and explain why this issue still exists
                         to reopen it.
                       </AlertDialogDescription>
@@ -1613,10 +1604,10 @@ const IssueDetailModal = ({ issue, onClose }) => {
                   </div>
 
                   {/* Form Body */}
-                  <div className="w-full space-y-8 px-4">
+                  <div className="w-full space-y-6 sm:space-y-8 px-2 sm:px-4">
                     {/* CUSTOM DROPDOWN */}
                     <div className="space-y-3 relative">
-                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
+                      <label className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 flex justify-between px-1">
                         Select Category
                         {reopenCategory && (
                           <motion.span
@@ -1625,10 +1616,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                             className="text-emerald-500 dark:text-emerald-400"
                           >
                             Validated{" "}
-                            <CheckCircle2
-                              size={18}
-                              className="inline-block ml-1"
-                            />
+                            <CheckCircle2 className="inline-block ml-1 w-4 h-4 sm:w-5 sm:h-5" />
                           </motion.span>
                         )}
                       </label>
@@ -1638,9 +1626,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
                           onClick={() =>
                             setIsReopenDropdownOpen(!isReopenDropdownOpen)
                           }
-                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[1.5rem] px-6 py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isReopenDropdownOpen ? "ring-4 ring-orange-500/10 border-orange-500 dark:border-orange-500/50 shadow-2xl" : ""}`}
+                          className={`w-full bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-2xl sm:rounded-[1.5rem] px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between group transition-all duration-500 hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-xl hover:shadow-black/5 ${isReopenDropdownOpen ? "ring-4 ring-orange-500/10 border-orange-500 dark:border-orange-500/50 shadow-2xl" : ""}`}
                         >
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3 sm:gap-4">
                             {reopenCategory ? (
                               <>
                                 {(() => {
@@ -1651,14 +1639,13 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                   return (
                                     <>
                                       <div
-                                        className={`p-2 rounded-xl ${selected.bg}`}
+                                        className={`p-1.5 sm:p-2 rounded-xl ${selected.bg}`}
                                       >
                                         <Icon
-                                          size={20}
-                                          className={selected.color}
+                                          className={`w-4 h-4 sm:w-5 sm:h-5 ${selected.color}`}
                                         />
                                       </div>
-                                      <span className="font-bold text-base">
+                                      <span className="font-bold text-[14px] sm:text-base">
                                         {selected.label}
                                       </span>
                                     </>
@@ -1667,18 +1654,17 @@ const IssueDetailModal = ({ issue, onClose }) => {
                               </>
                             ) : (
                               <>
-                                <div className="p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
-                                  <Layout size={20} className="text-gray-400" />
+                                <div className="p-1.5 sm:p-2 rounded-xl bg-gray-200 dark:bg-gray-700/50">
+                                  <Layout className="text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                                 </div>
-                                <span className="font-bold text-base text-gray-400 dark:text-gray-500">
+                                <span className="font-bold text-[14px] sm:text-base text-gray-400 dark:text-gray-500">
                                   Choosing a reason...
                                 </span>
                               </>
                             )}
                           </div>
                           <ChevronDown
-                            className={`text-gray-400 transition-transform duration-500 ${isReopenDropdownOpen ? "rotate-180 text-orange-500" : ""}`}
-                            size={20}
+                            className={`text-gray-400 transition-transform duration-500 w-4 h-4 sm:w-5 sm:h-5 ${isReopenDropdownOpen ? "rotate-180 text-orange-500" : ""}`}
                           />
                         </button>
 
@@ -1688,9 +1674,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
                               initial={{ opacity: 0, y: 10, scale: 0.95 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full left-0 right-0 mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
+                              className="absolute top-full left-0 right-0 mt-2 sm:mt-3 bg-white/95 dark:bg-[#121214]/95 border-2 border-gray-200 dark:border-white/20 rounded-2xl sm:rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
                             >
-                              <div className="py-3 max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                              <div className="py-2 sm:py-3 max-h-[200px] sm:max-h-[240px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                                 {reopenCategories.map((cat) => {
                                   const Icon = cat.icon;
                                   return (
@@ -1700,19 +1686,18 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                         setReopenCategory(cat.value);
                                         setIsReopenDropdownOpen(false);
                                       }}
-                                      className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${reopenCategory === cat.value ? "bg-orange-500/5" : ""}`}
+                                      className={`w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all duration-300 group hover:bg-gray-100 dark:hover:bg-white/5 ${reopenCategory === cat.value ? "bg-orange-500/5" : ""}`}
                                     >
                                       <div
-                                        className={`p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
+                                        className={`p-2 sm:p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 ${cat.bg}`}
                                       >
                                         <Icon
-                                          size={22}
-                                          className={`${cat.color} drop-shadow-sm`}
+                                          className={`w-4 h-4 sm:w-5 sm:h-5 ${cat.color} drop-shadow-sm`}
                                         />
                                       </div>
                                       <div className="flex flex-col items-start">
                                         <span
-                                          className={`font-extrabold text-[15px] ${reopenCategory === cat.value ? "text-orange-500" : "text-gray-800 dark:text-gray-200"}`}
+                                          className={`font-extrabold text-[13px] sm:text-[15px] text-left ${reopenCategory === cat.value ? "text-orange-500" : "text-gray-800 dark:text-gray-200"}`}
                                         >
                                           {cat.label}
                                         </span>
@@ -1720,7 +1705,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                                       {reopenCategory === cat.value && (
                                         <motion.div
                                           layoutId="activeSelectReopen"
-                                          className="ml-auto w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+                                          className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
                                         />
                                       )}
                                     </button>
@@ -1734,15 +1719,15 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     </div>
 
                     {/* Progress Textarea */}
-                    <div className="space-y-4">
-                      <div className="space-y-3">
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="space-y-2 sm:space-y-3">
                         <div className="flex justify-between items-end px-1">
-                          <label className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                          <label className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
                             Reason Log
                           </label>
-                          <div className="flex flex-col items-end gap-1.5">
+                          <div className="flex flex-col items-end gap-1 sm:gap-1.5">
                             <span
-                              className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${reopenWordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
+                              className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border transition-all ${reopenWordCount >= 10 ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" : "text-amber-500 border-amber-500/20 bg-amber-500/10"}`}
                             >
                               {reopenWordCount} / 10 words
                             </span>
@@ -1750,7 +1735,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                         </div>
 
                         {/* Progress Bar Container */}
-                        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
+                        <div className="h-1 sm:h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/5">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{
@@ -1768,7 +1753,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                           value={reopenReason}
                           onChange={(e) => setReopenReason(e.target.value)}
                           placeholder="Why should this issue be reopened?"
-                          className="w-full h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-[2rem] px-6 py-6 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500/50 transition-all font-bold text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
+                          className="w-full h-32 sm:h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-2xl sm:rounded-[2rem] px-4 sm:px-6 py-4 sm:py-6 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500/50 transition-all font-bold text-[13px] sm:text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
                         />
                       </div>
 
@@ -1778,9 +1763,12 @@ const IssueDetailModal = ({ issue, onClose }) => {
                             initial={{ opacity: 0, y: -5 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -5 }}
-                            className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-2"
+                            className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400/80 ml-2 flex items-center gap-1.5 sm:gap-2"
                           >
-                            <AlertTriangle size={12} strokeWidth={3} />
+                            <AlertTriangle
+                              strokeWidth={3}
+                              className="w-3 h-3"
+                            />
                             Awaiting {10 - reopenWordCount} more words...
                           </motion.p>
                         )}
@@ -1788,14 +1776,14 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     </div>
                   </div>
 
-                  <AlertDialogFooter className="mt-12 flex-col sm:flex-row gap-4 w-full px-4 mb-4">
+                  <AlertDialogFooter className="mt-8 sm:mt-12 flex-col sm:flex-row gap-3 sm:gap-4 w-full px-2 sm:px-4 mb-2 sm:mb-4">
                     <AlertDialogCancel
                       onClick={() => {
                         setReopenCategory("");
                         setReopenReason("");
                         setIsReopenDropdownOpen(false);
                       }}
-                      className="w-full sm:w-[35%] rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-xs px-6 py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
+                      className="w-full sm:w-[35%] rounded-xl sm:rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
                     >
                       Dismiss
                     </AlertDialogCancel>
@@ -1820,7 +1808,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                         setReopenReason("");
                         setIsReopenDropdownOpen(false);
                       }}
-                      className={`w-full sm:w-[65%] rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs px-6 py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isReopenEnabled ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white shadow-orange-500/40 border-orange-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
+                      className={`w-full sm:w-[65%] rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${isReopenEnabled ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white shadow-orange-500/40 border-orange-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
                     >
                       Confirm Reopen
                     </AlertDialogAction>
