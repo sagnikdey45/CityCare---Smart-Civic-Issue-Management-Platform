@@ -142,27 +142,3 @@ export const assignFieldOfficersToUnitOfficers = internalMutation({
     };
   },
 });
-
-export const getAssignedFieldOfficers = query({
-  args: {
-    userId: v.id("users"),
-  },
-
-  handler: async (ctx, args) => {
-    // Find Unit Officer using userId
-    const unitOfficer = await ctx.db
-      .query("unitOfficers")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .unique();
-
-    if (!unitOfficer) return [];
-
-    // Fetch Field Officers using stored _id
-    const fieldOfficers = await Promise.all(
-      unitOfficer.assignedFieldOfficers.map((foId) => ctx.db.get(foId)),
-    );
-
-    // Clean nulls (if any)
-    return fieldOfficers.filter(Boolean);
-  },
-});

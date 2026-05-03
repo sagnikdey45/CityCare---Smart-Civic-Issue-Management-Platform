@@ -235,7 +235,6 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
 
     role: v.union(
-      v.literal("citizen"),
       v.literal("unit_officer"),
       v.literal("field_officer"),
       v.literal("admin"),
@@ -262,6 +261,7 @@ export default defineSchema({
   notifications: defineTable({
     userId: v.string(),
     issueId: v.optional(v.id("issues")),
+    title: v.optional(v.string()),
     message: v.string(),
     type: v.optional(v.string()),
     read: v.boolean(),
