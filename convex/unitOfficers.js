@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { Id } from './_generated/dataModel';
 
 export const getUnitOfficerByUserId = query({
   args: { userId: v.id('users') },
@@ -77,7 +78,7 @@ export const getIssueById = query({
     if (issue.assignedFieldOfficer) {
       const fo = await ctx.db
         .query('fieldOfficers')
-        .withIndex('by_user', (q) => q.eq('userId', issue.assignedFieldOfficer))
+        .withIndex('by_user', (q) => q.eq('userId', issue.assignedFieldOfficer as Id<'users'>))
         .unique();
 
       if (fo) {
@@ -200,7 +201,7 @@ export const verifyIssue = mutation({
         role: 'unit_officer',
         attachments: [],
         updatedBy: args.verifiedBy,
-        scope: 'field_and_citizen',
+        scope: 'officer_and_citizen',
         createdAt: Date.now(),
       });
 
@@ -232,7 +233,7 @@ export const verifyIssue = mutation({
         role: 'unit_officer',
         attachments: [],
         updatedBy: args.verifiedBy,
-        scope: 'field_and_citizen',
+        scope: 'officer_and_citizen',
         createdAt: Date.now(),
       });
 
@@ -429,7 +430,7 @@ export const assignIssueToFieldOfficer = mutation({
     if (args.isReassign && issue.assignedFieldOfficer) {
       const prevFO = await ctx.db
         .query('fieldOfficers')
-        .withIndex('by_user', (q) => q.eq('userId', issue.assignedFieldOfficer))
+        .withIndex('by_user', (q) => q.eq('userId', issue.assignedFieldOfficer as Id<'users'>))
         .unique();
 
       if (prevFO) {
@@ -481,7 +482,7 @@ export const assignIssueToFieldOfficer = mutation({
       role: 'unit_officer',
       attachments: [],
       updatedBy: args.assignedBy,
-      scope: 'field_and_citizen',
+      scope: 'officer_and_citizen',
       createdAt: now,
     });
 

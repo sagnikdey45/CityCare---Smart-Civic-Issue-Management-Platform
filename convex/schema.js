@@ -235,6 +235,7 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
 
     role: v.union(
+      v.literal("citizen"),
       v.literal("unit_officer"),
       v.literal("field_officer"),
       v.literal("admin"),
@@ -245,7 +246,7 @@ export default defineSchema({
 
     // Visibility scope
     scope: v.union(
-      v.literal("field_and_citizen"), // visible to citizen and officers
+      v.literal("officer_and_citizen"), // visible to citizen and officers
       v.literal("citizen"), // citizens only
       v.literal("admin_only"), // admin only
     ),
