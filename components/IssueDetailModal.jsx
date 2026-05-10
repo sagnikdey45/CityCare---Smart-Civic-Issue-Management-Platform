@@ -32,6 +32,8 @@ import {
   Check,
   RefreshCw,
   MinusCircle,
+  Star,
+  StarHalf,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IssueDiscussion } from "./IssueDiscussion";
@@ -49,8 +51,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useSession } from "next-auth/react";
-import { title } from "framer-motion/client";
 
 const statusSteps = [
   {
@@ -217,6 +217,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
   const [reopenCategory, setReopenCategory] = useState("");
   const [reopenReason, setReopenReason] = useState("");
   const [isReopenDropdownOpen, setIsReopenDropdownOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [feedbackReason, setFeedbackReason] = useState("");
 
   const issueUpdates = useQuery(
     api.issueUpdates.getByIssueId,
@@ -559,7 +562,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
             </button>
 
             {issue.status !== "withdrawn" &&
-              (issue.assignee || issue.unit_officer) && (
+              (issue.assignedUnitOfficer || issue.assignedFieldOfficer) && (
                 <button
                   onClick={() => setActiveTab("messages")}
                   className={`flex items-center gap-2.5 px-6 py-2.5 font-extrabold transition-all duration-300 rounded-xl text-sm tracking-wide ${
@@ -572,7 +575,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     size={18}
                     className={`transition-colors ${activeTab === "messages" ? "text-blue-600 dark:text-blue-400 drop-shadow-sm" : "opacity-70 group-hover:opacity-100"}`}
                   />
-                  <span>Internal</span>
+                  <span>Internal Messaging</span>
                 </button>
               )}
           </div>
@@ -1281,7 +1284,7 @@ const IssueDetailModal = ({ issue, onClose }) => {
           )}
 
           {activeTab === "messages" &&
-            (issue.assignee || issue.unit_officer) && (
+            (issue.assignedUnitOfficer || issue.assignedFieldOfficer) && (
               <div className="h-full">
                 <IssueMessaging issue={issue} />
               </div>
@@ -1553,6 +1556,192 @@ const IssueDetailModal = ({ issue, onClose }) => {
                 {/* Dynamic Bottom Mesh */}
                 <div
                   className={`absolute bottom-0 left-0 right-0 h-2 transition-all duration-1000 ${isWithdrawEnabled ? "bg-gradient-to-r from-rose-500 via-emerald-500 to-rose-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite]" : "bg-gradient-to-r from-rose-500 via-transparent to-red-600 opacity-20"}`}
+                />
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
+          {/* Issue Feedback Modal */}
+          {issue.status === "resolved" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="w-full px-6 py-3.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-bold tracking-wide hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-purple-500/20">
+                  Provide Feedback
+                </button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent className="w-[95vw] sm:w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-[2rem] sm:rounded-[3rem] border-white/20 dark:border-white/10 shadow-2xl bg-white/95 dark:bg-[#0c0c0e]/95 p-0 overflow-hidden border">
+                {/* Background Mesh Gradient */}
+                <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 overflow-hidden">
+                  <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-purple-500/20 blur-[100px] animate-pulse" />
+                  <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[100px] animate-pulse delay-700" />
+                </div>
+
+                <div className="relative w-full p-5 sm:p-8 pt-8 sm:pt-12 flex flex-col items-center z-10 flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  {/* Floating Icon Header */}
+                  <div className="flex flex-col items-center text-center mb-6 sm:mb-10">
+                    <motion.div
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="relative mb-5 sm:mb-6"
+                    >
+                      <div className="absolute inset-0 bg-purple-500/30 blur-3xl rounded-full scale-125" />
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-purple-500 via-indigo-500 to-purple-600 rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-2xl shadow-purple-600/40 ring-4 ring-white/10">
+                        <Star className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white/20" />
+                      </div>
+                    </motion.div>
+
+                    <AlertDialogHeader className="text-center">
+                      <AlertDialogTitle className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight mb-2 sm:mb-3 uppercase text-center w-full">
+                        Provide Feedback
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-500 dark:text-gray-400 font-bold text-[13px] sm:text-[15px] leading-relaxed max-w-[90%] sm:max-w-sm mx-auto text-center">
+                        Rate your experience and let us know how we did
+                        resolving your issue.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                  </div>
+
+                  {/* Form Body */}
+                  <div className="w-full space-y-6 sm:space-y-8 px-2 sm:px-4">
+                    {/* Interactive Star Rating */}
+                    <div className="flex flex-col items-center space-y-4">
+                      <label className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                        Select Rating
+                      </label>
+                      <div className="flex items-center gap-2 sm:gap-4 bg-gray-50 dark:bg-gray-800/30 p-4 sm:p-5 rounded-[2rem] border-2 border-gray-200 dark:border-white/10 shadow-inner">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const ratingValue = hoverRating || feedbackRating;
+                          return (
+                            <div
+                              key={star}
+                              className="relative cursor-pointer select-none touch-none"
+                              onMouseLeave={() => setHoverRating(0)}
+                            >
+                              {/* Left half hit box */}
+                              <div
+                                className="absolute left-0 top-0 w-1/2 h-full z-10"
+                                onMouseEnter={() => setHoverRating(star - 0.5)}
+                                onClick={() => setFeedbackRating(star - 0.5)}
+                                onTouchStart={(e) => {
+                                  e.preventDefault();
+                                  setFeedbackRating(star - 0.5);
+                                }}
+                              />
+                              {/* Right half hit box */}
+                              <div
+                                className="absolute right-0 top-0 w-1/2 h-full z-10"
+                                onMouseEnter={() => setHoverRating(star)}
+                                onClick={() => setFeedbackRating(star)}
+                                onTouchStart={(e) => {
+                                  e.preventDefault();
+                                  setFeedbackRating(star);
+                                }}
+                              />
+
+                              <div className="relative w-10 h-10 sm:w-12 sm:h-12 transition-transform duration-200 hover:scale-110 active:scale-95">
+                                {ratingValue >= star ? (
+                                  <Star className="w-full h-full text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
+                                ) : ratingValue >= star - 0.5 ? (
+                                  <div className="relative w-full h-full text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">
+                                    <StarHalf className="absolute top-0 left-0 w-full h-full fill-amber-400 z-10" />
+                                    <Star className="absolute top-0 left-0 w-full h-full text-gray-300 dark:text-gray-600" />
+                                  </div>
+                                ) : (
+                                  <Star className="w-full h-full text-gray-300 dark:text-gray-600" />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <AnimatePresence mode="wait">
+                        {feedbackRating > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="text-amber-500 font-extrabold text-lg flex items-center gap-2"
+                          >
+                            {feedbackRating.toFixed(1)} / 5.0
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Feedback Textarea */}
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="flex justify-between items-end px-1">
+                        <label className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                          Your Comments{" "}
+                          <span className="text-gray-400/70 lowercase tracking-normal font-medium ml-1">
+                            (optional)
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="relative group">
+                        <textarea
+                          value={feedbackReason}
+                          onChange={(e) => setFeedbackReason(e.target.value)}
+                          placeholder="Tell us what you liked or how we can improve..."
+                          className="w-full h-32 sm:h-40 bg-gray-50 dark:bg-gray-800/30 border-2 border-gray-300 dark:border-white/20 text-gray-900 dark:text-white rounded-2xl sm:rounded-[2rem] px-4 sm:px-6 py-4 sm:py-6 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500/50 transition-all font-bold text-[13px] sm:text-sm resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 shadow-inner"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <AlertDialogFooter className="mt-8 sm:mt-12 flex-col sm:flex-row gap-3 sm:gap-4 w-full px-2 sm:px-4 pb-4 mb-4 sm:mb-6">
+                    <AlertDialogCancel
+                      onClick={() => {
+                        setFeedbackRating(0);
+                        setHoverRating(0);
+                        setFeedbackReason("");
+                      }}
+                      className="w-full sm:w-[35%] rounded-xl sm:rounded-[1.5rem] border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-gray-800/50 font-black uppercase tracking-widest text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto hover:bg-white dark:hover:bg-gray-700 transition-all shadow-lg hover:shadow-black/5"
+                    >
+                      Dismiss
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={feedbackRating === 0}
+                      onClick={async () => {
+                        console.log("Feedback Workflow:", {
+                          issueId: issue._id,
+                          userId: issue.reportedBy,
+                          rating: feedbackRating,
+                          feedback: feedbackReason,
+                        });
+
+                        setFeedbackRating(0);
+                        setHoverRating(0);
+                        setFeedbackReason("");
+                      }}
+                      className={`w-full sm:w-[65%] rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[11px] sm:text-xs px-4 sm:px-6 py-4 sm:py-5 h-auto transition-all duration-500 shadow-2xl border-2 ring-offset-0 ${feedbackRating > 0 ? "bg-gradient-to-br from-purple-500 via-indigo-500 to-purple-600 text-white shadow-purple-500/40 border-purple-400/30 hover:scale-[1.03] active:scale-95 translate-y-0" : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700 opacity-50 shadow-none translate-y-1"}`}
+                    >
+                      Submit Feedback
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </div>
+
+                {/* Pulsing Success Glow */}
+                <AnimatePresence>
+                  {feedbackRating > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 pointer-events-none ring-[12px] ring-purple-500/10 dark:ring-purple-500/5 rounded-[3rem] animate-pulse"
+                    />
+                  )}
+                </AnimatePresence>
+
+                {/* Dynamic Top Mesh */}
+                <div
+                  className={`absolute top-0 left-0 right-0 h-2 z-50 transition-all duration-1000 ${feedbackRating > 0 ? "bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite]" : "bg-gradient-to-r from-purple-500 via-transparent to-indigo-500 opacity-20"}`}
                 />
               </AlertDialogContent>
             </AlertDialog>
