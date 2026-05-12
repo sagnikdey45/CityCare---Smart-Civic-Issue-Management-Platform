@@ -10,6 +10,15 @@ import {
   Clock,
   Trash2,
   Sparkles,
+  Settings,
+  RotateCcw,
+  CheckCircle,
+  ArrowUpCircle,
+  AlertTriangle,
+  UserCheck,
+  Clock3,
+  SendHorizontal,
+  XCircle,
 } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -26,6 +35,7 @@ const notificationMeta = {
     unreadBorder: "border-blue-200/70 dark:border-blue-500/30",
     label: "Status",
   },
+
   upvote: {
     Icon: TrendingUp,
     gradient: "from-emerald-500 to-teal-500",
@@ -36,6 +46,7 @@ const notificationMeta = {
     unreadBorder: "border-emerald-200/70 dark:border-emerald-500/30",
     label: "Upvote",
   },
+
   comment: {
     Icon: MessageSquare,
     gradient: "from-amber-500 to-orange-500",
@@ -46,16 +57,156 @@ const notificationMeta = {
     unreadBorder: "border-amber-200/70 dark:border-amber-500/30",
     label: "Comment",
   },
-  assignment: {
-    Icon: Bell,
-    gradient: "from-violet-500 to-purple-600",
+
+  assigned: {
+    Icon: UserCheck,
+    gradient: "from-cyan-600 to-sky-500",
+    glow: "shadow-cyan-500/30",
+    dot: "bg-cyan-600",
+    pill: "bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/25",
+    accent: "from-cyan-500/20 to-sky-500/10",
+    unreadBorder: "border-sky-200/70 dark:border-sky-500/30",
+    label: "Assignment",
+  },
+
+  sla_alert: {
+    Icon: AlertTriangle,
+    gradient: "from-red-600 to-rose-500",
+    glow: "shadow-red-500/30",
+    dot: "bg-red-600",
+    pill: "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/25",
+    accent: "from-red-500/20 to-rose-500/10",
+    unreadBorder: "border-red-200/70 dark:border-red-500/30",
+    label: "SLA Alert",
+  },
+
+  rework: {
+    Icon: RotateCcw,
+    gradient: "from-orange-500 to-amber-500",
+    glow: "shadow-orange-500/30",
+    dot: "bg-orange-500",
+    pill: "bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-500/25",
+    accent: "from-orange-500/20 to-amber-500/10",
+    unreadBorder: "border-orange-200/70 dark:border-orange-500/30",
+    label: "Rework Required",
+  },
+
+  escalation: {
+    Icon: ArrowUpCircle,
+    gradient: "from-violet-600 to-purple-600",
     glow: "shadow-violet-500/30",
-    dot: "bg-violet-500",
+    dot: "bg-violet-600",
     pill: "bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/25",
     accent: "from-violet-500/20 to-purple-500/10",
     unreadBorder: "border-violet-200/70 dark:border-violet-500/30",
-    label: "Assigned",
+    label: "Escalated",
   },
+
+  verified: {
+    Icon: CheckCircle,
+    gradient: "from-emerald-600 to-green-500",
+    glow: "shadow-emerald-500/30",
+    dot: "bg-emerald-600",
+    pill: "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/25",
+    accent: "from-emerald-500/20 to-green-500/10",
+    unreadBorder: "border-emerald-200/70 dark:border-emerald-500/30",
+    label: "Verification",
+  },
+
+  in_progress: {
+    Icon: Clock3,
+    gradient: "from-blue-500 to-indigo-500",
+    glow: "shadow-blue-500/30",
+    dot: "bg-blue-500",
+    pill: "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/25",
+    accent: "from-blue-500/20 to-indigo-500/10",
+    unreadBorder: "border-blue-200/70 dark:border-blue-500/30",
+    label: "In Progress",
+  },
+
+  submitted_for_review: {
+    Icon: SendHorizontal,
+    gradient: "from-purple-500 to-fuchsia-500",
+    glow: "shadow-purple-500/30",
+    dot: "bg-purple-500",
+    pill: "bg-purple-50 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/25",
+    accent: "from-purple-500/20 to-fuchsia-500/10",
+    unreadBorder: "border-purple-200/70 dark:border-purple-500/30",
+    label: "Submitted for Review",
+  },
+
+  resolution: {
+    Icon: CheckCheck,
+    gradient: "from-teal-500 to-emerald-500",
+    glow: "shadow-teal-500/30",
+    dot: "bg-teal-500",
+    pill: "bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/25",
+    accent: "from-teal-500/20 to-emerald-500/10",
+    unreadBorder: "border-teal-200/70 dark:border-teal-500/30",
+    label: "Resolution",
+  },
+
+  reopened: {
+    Icon: RotateCcw,
+    gradient: "from-pink-500 to-rose-500",
+    glow: "shadow-pink-500/30",
+    dot: "bg-pink-500",
+    pill: "bg-pink-50 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300 hover:bg-pink-100 dark:hover:bg-pink-500/25",
+    accent: "from-pink-500/20 to-rose-500/10",
+    unreadBorder: "border-pink-200/70 dark:border-pink-500/30",
+    label: "Issue Reopened",
+  },
+
+  message: {
+    Icon: MessageSquare,
+    gradient: "from-blue-500 to-indigo-500",
+    glow: "shadow-blue-500/30",
+    dot: "bg-blue-500",
+    pill: "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/25",
+    accent: "from-blue-500/20 to-indigo-500/10",
+    unreadBorder: "border-blue-200/70 dark:border-blue-500/30",
+    label: "Citizen Message",
+  },
+
+  rejected: {
+    Icon: XCircle,
+    gradient: "from-red-600 to-rose-500",
+    glow: "shadow-red-500/30",
+    dot: "bg-red-600",
+    pill: "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/25",
+    accent: "from-red-500/20 to-rose-500/10",
+    unreadBorder: "border-red-200/70 dark:border-red-500/30",
+    label: "Rejected",
+  },
+
+  system: {
+    Icon: Settings,
+    gradient: "from-slate-500 to-gray-500",
+    glow: "shadow-slate-500/25",
+    dot: "bg-slate-500",
+    pill: "bg-slate-50 dark:bg-slate-500/15 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-500/25",
+    accent: "from-slate-500/20 to-gray-500/10",
+    unreadBorder: "border-slate-200/70 dark:border-slate-500/30",
+    label: "System Update",
+  },
+};
+
+const notificationTextColor = {
+  status: "text-blue-600 dark:text-blue-400",
+  upvote: "text-emerald-600 dark:text-emerald-400",
+  comment: "text-amber-600 dark:text-amber-400",
+  assigned: "text-cyan-600 dark:text-cyan-400",
+  sla_alert: "text-red-600 dark:text-red-400",
+  rework: "text-orange-600 dark:text-orange-400",
+  escalation: "text-violet-600 dark:text-violet-400",
+  verified: "text-emerald-600 dark:text-emerald-400",
+  in_progress: "text-blue-600 dark:text-blue-400",
+  submitted_for_review: "text-purple-600 dark:text-purple-400",
+  resolution: "text-teal-600 dark:text-teal-400",
+  reopened: "text-pink-600 dark:text-pink-400",
+  rejected: "text-red-600 dark:text-red-400",
+  message: "text-blue-600 dark:text-blue-400",
+  system: "text-slate-600 dark:text-slate-400",
 };
 
 function getNotificationType(message) {
@@ -121,6 +272,8 @@ export function NotificationsPanel({ isOpen, onClose, notifications }) {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const filteredNotifications =
     filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
+
+  // if (!notifications) return <div>No notifications...</div>;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -313,8 +466,8 @@ export function NotificationsPanel({ isOpen, onClose, notifications }) {
           ) : (
             <div className="p-3 space-y-2">
               {filteredNotifications.map((notification, idx) => {
-                const type = getNotificationType(notification.message);
-                const meta = notificationMeta[type];
+                const type = notification?.type;
+                const meta = notificationMeta[notification?.type || "status"];
                 const { Icon } = meta;
 
                 return (
@@ -361,7 +514,8 @@ export function NotificationsPanel({ isOpen, onClose, notifications }) {
                             className={`text-[10px] font-bold uppercase tracking-wider ${
                               notification.read
                                 ? "text-slate-400 dark:text-slate-500"
-                                : `text-${type === "upvote" ? "emerald" : type === "comment" ? "amber" : type === "assignment" ? "violet" : "blue"}-600 dark:text-${type === "upvote" ? "emerald" : type === "comment" ? "amber" : type === "assignment" ? "violet" : "blue"}-400`
+                                : (notificationTextColor[type] ??
+                                  "text-blue-600 dark:text-blue-400")
                             }`}
                           >
                             {meta.label}

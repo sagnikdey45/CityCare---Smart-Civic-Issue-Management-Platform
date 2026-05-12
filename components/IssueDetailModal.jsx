@@ -232,6 +232,9 @@ const IssueDetailModal = ({ issue, onClose }) => {
   // Mutation for reopening an issue (which is closed, resolved or rejected)
   const reopenIssue = useMutation(api.issues.reopenIssue);
 
+  // Mutation for submitting feedback for an issue (which is resolved)
+  const submitIssueFeedback = useMutation(api.issues.submitIssueFeedback);
+
   const photoIds = useMemo(() => issue?.photos || [], [issue?.photos]);
 
   const photoQueries = useMemo(() => {
@@ -1709,6 +1712,13 @@ const IssueDetailModal = ({ issue, onClose }) => {
                     <AlertDialogAction
                       disabled={feedbackRating === 0}
                       onClick={async () => {
+                        await submitIssueFeedback({
+                          issueId: issue._id,
+                          userId: issue.reportedBy,
+                          rating: feedbackRating,
+                          feedback: feedbackReason,
+                        });
+
                         console.log("Feedback Workflow:", {
                           issueId: issue._id,
                           userId: issue.reportedBy,

@@ -171,7 +171,7 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
     session?.user?.id ? { userId: session.user.id } : "skip",
   );
 
-  console.log("Fetched issues for dashboard:", issues);
+  // console.log("Fetched issues for dashboard:", issues);
 
   const formattedIssues = issues
     ? issues.map((issue) => ({
