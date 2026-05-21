@@ -186,6 +186,7 @@ export const getCitizenDashboardIssues = query({
           if (fo) {
             fieldOfficerDetails = {
               id: fo._id,
+              role: "field_officer",
               userId: fo.userId,
               fullName: fo.fullName,
               email: fo.email,
@@ -215,6 +216,7 @@ export const getCitizenDashboardIssues = query({
           if (uo) {
             unitOfficerDetails = {
               id: uo._id,
+              role: "unit_officer",
               userId: uo.userId,
               fullName: uo.fullName,
               email: uo.email,
