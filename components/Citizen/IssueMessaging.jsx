@@ -42,12 +42,13 @@ export function IssueMessaging({ issue }) {
   const previousMessagesLength = useRef(0);
 
   const citizenId = user?.id;
+  const issueId = issue?._id || issue?.id;
 
   const messages = useQuery(
     api.messages.getCitizenIssueMessages,
-    (issue?._id || issue?.id) && citizenId
+    issueId && citizenId
       ? {
-          issueId: issue?._id || issue?.id,
+          issueId,
           citizenId,
           unitOfficerId: issue?.assignedUnitOfficer?.userId ?? undefined,
           fieldOfficerId: issue?.assignedFieldOfficer?.userId ?? undefined,
@@ -56,6 +57,7 @@ export function IssueMessaging({ issue }) {
   );
 
   const sendMessage = useMutation(api.messages.sendMessage);
+  const markMessagesAsRead = useMutation(api.messages.markMessagesAsRead);
 
   const currentOfficerUserId =
     selectedOfficer === "field"
@@ -71,6 +73,35 @@ export function IssueMessaging({ issue }) {
             msg.recipientId === user?.id),
       )
     : undefined;
+
+  useEffect(() => {
+    if (
+      !issueId ||
+      !citizenId ||
+      !currentOfficerUserId ||
+      !filteredMessages ||
+      filteredMessages.length === 0
+    ) {
+      return;
+    }
+
+    const hasUnread = filteredMessages.some(
+      (msg) =>
+        msg.senderId === currentOfficerUserId &&
+        msg.recipientId === citizenId &&
+        msg.isRead === false
+    );
+
+    if (hasUnread) {
+      markMessagesAsRead({
+        issueId,
+        currentUserId: citizenId,
+        senderId: currentOfficerUserId,
+      }).catch((err) => {
+        console.error("Failed to mark messages as read:", err);
+      });
+    }
+  }, [selectedOfficer, filteredMessages, issueId, citizenId, currentOfficerUserId, markMessagesAsRead]);
 
   useEffect(() => {
     if (filteredMessages?.length > previousMessagesLength.current) {
@@ -105,7 +136,7 @@ export function IssueMessaging({ issue }) {
     setSending(true);
     try {
       await sendMessage({
-        issueId: issue?._id || issue?.id,
+        issueId,
         senderId: user.id,
         recipientId: recipientId,
         message: content.trim(),
@@ -121,6 +152,7 @@ export function IssueMessaging({ issue }) {
       setSending(false);
     }
   }
+
 
   function formatTime(timestamp) {
     if (!timestamp) return "";
