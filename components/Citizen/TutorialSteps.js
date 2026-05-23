@@ -32,7 +32,7 @@ export const TUTORIAL_STEPS = [
   {
     target: "search-filters",
     title: "Quick Search & Filters",
-    description: "Use these powerful tools to quickly sift through your dashboard by ticket ID, resolution status, or specific category.",
+    description: "Use these powerful tools to quickly shift through your dashboard by ticket ID, resolution status, or specific category.",
     icon: Search,
     placement: "bottom"
   },
