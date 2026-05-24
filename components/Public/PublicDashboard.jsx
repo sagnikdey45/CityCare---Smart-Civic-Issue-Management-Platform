@@ -38,405 +38,12 @@ import {
   HeatmapLayer,
 } from "@react-google-maps/api";
 import IssueDiscussionForum from "./IssueDiscussionForum";
-
-const DUMMY_ISSUES = [
-  {
-    id: "1",
-    issueCode: "VNS-2024-001",
-    title: "Pothole on Lanka Road near BHU Gate",
-    description:
-      "Large pothole causing traffic issues and accidents. Water accumulation during monsoon makes it dangerous for two-wheelers.",
-    category: "road",
-    status: "resolved",
-    ward: "Lanka",
-    address: "BHU Lanka Gate, Main Road",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221005",
-    latitude: 25.2677,
-    longitude: 82.9913,
-    createdAt: "2024-01-15T10:30:00Z",
-    reviewedAt: "2024-01-16T14:20:00Z",
-    resolvedAt: "2024-01-20T16:45:00Z",
-    upvotes: 45,
-    citizenRating: 4.5,
-    publicCompletionNote:
-      "Pothole filled with hot mix asphalt. Road surface leveled and compacted. Quality verification completed.",
-    photosBefore: [
-      "https://images.pexels.com/photos/6589045/pexels-photo-6589045.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/1004665/pexels-photo-1004665.jpeg",
-    ],
-  },
-  {
-    id: "2",
-    issueCode: "VNS-2024-002",
-    title: "Street Light Not Working at Assi Ghat",
-    description:
-      "Multiple street lights near Assi Ghat have been non-functional for over a week, creating safety concerns for evening visitors.",
-    category: "lighting",
-    status: "resolved",
-    ward: "Assi",
-    address: "Assi Ghat Road, Near Ghat Steps",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221005",
-    latitude: 25.282,
-    longitude: 83.0047,
-    createdAt: "2024-01-10T08:15:00Z",
-    reviewedAt: "2024-01-11T09:30:00Z",
-    resolvedAt: "2024-01-13T18:20:00Z",
-    upvotes: 67,
-    citizenRating: 5.0,
-    publicCompletionNote:
-      "Replaced 4 LED bulbs and repaired electrical wiring. All lights tested and functional.",
-    photosBefore: [
-      "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/2108845/pexels-photo-2108845.jpeg",
-    ],
-  },
-  {
-    id: "3",
-    issueCode: "VNS-2024-003",
-    title: "Garbage Accumulation at Godowlia Market",
-    description:
-      "Overflowing garbage bins and street waste creating unhygienic conditions in the busy market area.",
-    category: "waste",
-    status: "resolved",
-    ward: "Chowk",
-    address: "Godowlia Chowk, Market Area",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221001",
-    latitude: 25.3095,
-    longitude: 82.9858,
-    createdAt: "2024-01-18T07:00:00Z",
-    reviewedAt: "2024-01-18T11:30:00Z",
-    resolvedAt: "2024-01-19T15:00:00Z",
-    upvotes: 89,
-    citizenRating: 4.2,
-    publicCompletionNote:
-      "Cleared 500kg of waste. Sanitized area with disinfectant. Installed 2 additional bins. Scheduled daily pickups.",
-    photosBefore: [
-      "https://images.pexels.com/photos/2768961/pexels-photo-2768961.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/4098778/pexels-photo-4098778.jpeg",
-    ],
-  },
-  {
-    id: "4",
-    issueCode: "VNS-2024-004",
-    title: "Water Leakage at Sigra Crossing",
-    description:
-      "Continuous water leakage from underground pipe causing road damage and water wastage.",
-    category: "water",
-    status: "resolved",
-    ward: "Sigra",
-    address: "Sigra Main Crossing, Near Police Station",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221010",
-    latitude: 25.3176,
-    longitude: 82.9739,
-    createdAt: "2024-01-12T06:45:00Z",
-    reviewedAt: "2024-01-13T10:15:00Z",
-    resolvedAt: "2024-01-16T14:30:00Z",
-    upvotes: 52,
-    citizenRating: 4.8,
-    publicCompletionNote:
-      "Replaced damaged 6-inch pipeline section. Restored road surface. Water supply normalized.",
-    photosBefore: [
-      "https://images.pexels.com/photos/2306203/pexels-photo-2306203.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/1194025/pexels-photo-1194025.jpeg",
-    ],
-  },
-  {
-    id: "5",
-    issueCode: "VNS-2024-005",
-    title: "Damaged Footpath at Cantt Station",
-    description:
-      "Broken tiles and uneven surface on footpath causing difficulty for pedestrians and senior citizens.",
-    category: "road",
-    status: "resolved",
-    ward: "Cantt",
-    address: "Cantt Railway Station, Platform Road",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221002",
-    latitude: 25.2854,
-    longitude: 82.9649,
-    createdAt: "2024-01-20T09:20:00Z",
-    reviewedAt: "2024-01-21T13:45:00Z",
-    resolvedAt: "2024-01-25T17:00:00Z",
-    upvotes: 34,
-    citizenRating: 4.0,
-    publicCompletionNote:
-      "Replaced damaged paver blocks. Leveled footpath surface. Added ramp for accessibility.",
-    photosBefore: [
-      "https://images.pexels.com/photos/7233390/pexels-photo-7233390.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/2251247/pexels-photo-2251247.jpeg",
-    ],
-  },
-  {
-    id: "6",
-    issueCode: "VNS-2024-006",
-    title: "Illegal Construction Blocking Drainage",
-    description:
-      "New construction has blocked public drainage system causing water logging during rains.",
-    category: "other",
-    status: "rejected",
-    ward: "Maldahiya",
-    address: "Maldahiya Colony, Lane 4",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221002",
-    latitude: 25.2945,
-    longitude: 82.9789,
-    createdAt: "2024-01-14T11:00:00Z",
-    reviewedAt: "2024-01-15T15:30:00Z",
-    rejectedAt: "2024-01-16T10:00:00Z",
-    upvotes: 23,
-    rejectionReason:
-      "Issue falls under municipal building department jurisdiction. Forwarded to appropriate authority for legal action.",
-    photosBefore: [
-      "https://images.pexels.com/photos/1438406/pexels-photo-1438406.jpeg",
-    ],
-    photosAfter: [],
-  },
-  {
-    id: "7",
-    issueCode: "VNS-2024-007",
-    title: "Stray Animals on Dashashwamedh Road",
-    description:
-      "Stray dogs and cattle causing traffic disruption and safety concerns near the main ghat.",
-    category: "other",
-    status: "rejected",
-    ward: "Dashashwamedh",
-    address: "Dashashwamedh Ghat Road, Main Entrance",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221001",
-    latitude: 25.307,
-    longitude: 83.0105,
-    createdAt: "2024-01-08T07:30:00Z",
-    reviewedAt: "2024-01-09T12:00:00Z",
-    rejectedAt: "2024-01-10T09:15:00Z",
-    upvotes: 41,
-    rejectionReason:
-      "Animal welfare issues managed by dedicated department. Complaint forwarded to Animal Husbandry Department.",
-    photosBefore: [
-      "https://images.pexels.com/photos/1619690/pexels-photo-1619690.jpeg",
-    ],
-    photosAfter: [],
-  },
-  {
-    id: "8",
-    issueCode: "VNS-2024-008",
-    title: "Open Manhole at Luxa Road",
-    description:
-      "Dangerous open manhole without cover or warning signs posing serious accident risk.",
-    category: "road",
-    status: "resolved",
-    ward: "Luxa",
-    address: "Luxa Main Road, Near Crossing",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221010",
-    latitude: 25.3156,
-    longitude: 82.9856,
-    createdAt: "2024-01-22T10:15:00Z",
-    reviewedAt: "2024-01-22T14:30:00Z",
-    resolvedAt: "2024-01-23T11:00:00Z",
-    upvotes: 78,
-    citizenRating: 5.0,
-    publicCompletionNote:
-      "Emergency response initiated. Heavy-duty manhole cover installed. Surrounding area marked with reflective paint.",
-    photosBefore: [
-      "https://images.pexels.com/photos/3933772/pexels-photo-3933772.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/1004665/pexels-photo-1004665.jpeg",
-    ],
-  },
-  {
-    id: "9",
-    issueCode: "VNS-2024-009",
-    title: "Park Maintenance at Ravindrapuri",
-    description:
-      "Community park needs maintenance - broken swings, overgrown grass, and non-functional lights.",
-    category: "other",
-    status: "resolved",
-    ward: "Ravindrapuri",
-    address: "Ravindrapuri Colony Park, Sector B",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221005",
-    latitude: 25.2789,
-    longitude: 82.9634,
-    createdAt: "2024-01-05T08:00:00Z",
-    reviewedAt: "2024-01-06T10:30:00Z",
-    resolvedAt: "2024-01-12T16:00:00Z",
-    upvotes: 56,
-    citizenRating: 4.3,
-    publicCompletionNote:
-      "Repaired play equipment. Trimmed grass and plants. Fixed 6 park lights. Painted benches.",
-    photosBefore: [
-      "https://images.pexels.com/photos/1445416/pexels-photo-1445416.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/1308940/pexels-photo-1308940.jpeg",
-    ],
-  },
-  {
-    id: "10",
-    issueCode: "VNS-2024-010",
-    title: "Broken Street Light at Pandeypur",
-    description:
-      "Main road street light pole damaged in accident, needs replacement urgently.",
-    category: "lighting",
-    status: "resolved",
-    ward: "Pandeypur",
-    address: "Pandeypur Main Road, Near Temple",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221004",
-    latitude: 25.2934,
-    longitude: 83.0234,
-    createdAt: "2024-01-17T06:30:00Z",
-    reviewedAt: "2024-01-18T09:00:00Z",
-    resolvedAt: "2024-01-21T15:30:00Z",
-    upvotes: 38,
-    citizenRating: 4.7,
-    publicCompletionNote:
-      "Installed new LED street light pole with solar backup. Upgraded to energy-efficient system.",
-    photosBefore: [
-      "https://images.pexels.com/photos/3566187/pexels-photo-3566187.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/2246475/pexels-photo-2246475.jpeg",
-    ],
-  },
-  {
-    id: "11",
-    issueCode: "VNS-2024-011",
-    title: "Noise Pollution from Market",
-    description:
-      "Excessive loudspeaker noise from market vendors causing disturbance to residents.",
-    category: "other",
-    status: "rejected",
-    ward: "Chowk",
-    address: "Chowk Market Area, Central Zone",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221001",
-    latitude: 25.3089,
-    longitude: 82.9876,
-    createdAt: "2024-01-11T09:45:00Z",
-    reviewedAt: "2024-01-12T11:20:00Z",
-    rejectedAt: "2024-01-13T14:00:00Z",
-    upvotes: 19,
-    rejectionReason:
-      "Noise pollution complaints handled by police department. Case transferred to local police station.",
-    photosBefore: [
-      "https://images.pexels.com/photos/1309766/pexels-photo-1309766.jpeg",
-    ],
-    photosAfter: [],
-  },
-  {
-    id: "12",
-    issueCode: "VNS-2024-012",
-    title: "Waterlogging at Lanka Crossing",
-    description:
-      "Poor drainage causing severe waterlogging during monsoon affecting traffic and shops.",
-    category: "water",
-    status: "resolved",
-    ward: "Lanka",
-    address: "Lanka Crossing, Main Market",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221005",
-    latitude: 25.2689,
-    longitude: 82.9945,
-    createdAt: "2024-01-09T07:15:00Z",
-    reviewedAt: "2024-01-10T10:45:00Z",
-    resolvedAt: "2024-01-14T16:20:00Z",
-    upvotes: 94,
-    citizenRating: 4.6,
-    publicCompletionNote:
-      "Cleaned drainage system. Installed new 12-inch drain pipes. Added 3 new drainage points. Tested during artificial flooding.",
-    photosBefore: [
-      "https://images.pexels.com/photos/2480072/pexels-photo-2480072.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/1415268/pexels-photo-1415268.jpeg",
-    ],
-  },
-  {
-    id: "13",
-    issueCode: "VNS-2024-013",
-    title: "Encroachment on Public Road",
-    description:
-      "Shop owners have encroached footpath space with permanent structures.",
-    category: "other",
-    status: "rejected",
-    ward: "Sigra",
-    address: "Sigra Market Road, Section C",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221010",
-    latitude: 25.3189,
-    longitude: 82.9756,
-    createdAt: "2024-01-19T08:30:00Z",
-    reviewedAt: "2024-01-20T12:15:00Z",
-    rejectedAt: "2024-01-21T10:30:00Z",
-    upvotes: 28,
-    rejectionReason:
-      "Encroachment removal requires legal proceedings. Case forwarded to Municipal Enforcement Squad.",
-    photosBefore: [
-      "https://images.pexels.com/photos/2681319/pexels-photo-2681319.jpeg",
-    ],
-    photosAfter: [],
-  },
-  {
-    id: "14",
-    issueCode: "VNS-2024-014",
-    title: "Waste Bin Overflow at Assi",
-    description:
-      "Public waste bins overflowing daily, creating unhygienic conditions near residential area.",
-    category: "waste",
-    status: "resolved",
-    ward: "Assi",
-    address: "Assi Gali, Near Main Square",
-    city: "Varanasi",
-    state: "Uttar Pradesh",
-    postal: "221005",
-    latitude: 25.2834,
-    longitude: 83.0067,
-    createdAt: "2024-01-16T06:00:00Z",
-    reviewedAt: "2024-01-17T09:30:00Z",
-    resolvedAt: "2024-01-19T14:45:00Z",
-    upvotes: 61,
-    citizenRating: 4.4,
-    publicCompletionNote:
-      "Increased pickup frequency to twice daily. Added 4 new large capacity bins. Deployed dedicated cleaning staff.",
-    photosBefore: [
-      "https://images.pexels.com/photos/3584570/pexels-photo-3584570.jpeg",
-    ],
-    photosAfter: [
-      "https://images.pexels.com/photos/4098779/pexels-photo-4098779.jpeg",
-    ],
-  },
-];
+import { useSession } from "next-auth/react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 export function PublicDashboard() {
+  const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
@@ -461,8 +68,71 @@ export function PublicDashboard() {
     libraries,
   });
 
+  const [cityName, setCityName] = useState("Loading...");
+
+  const citizenCityQuery = useQuery(
+    api.issues.getCitizenCityByUserId,
+    session?.user?.id ? { userId: session.user.id } : "skip"
+  );
+
+  const publicIssues = useQuery(
+    api.publicIssues.getCityPublicIssues,
+    cityName !== "Loading..." ? { city: cityName } : "skip"
+  );
+
   useEffect(() => {
-    const cityName = "Varanasi"; // Later you can pass this dynamically
+    let active = true;
+
+    if (session?.user?.id) {
+      if (citizenCityQuery?.city) {
+        setCityName(citizenCityQuery.city);
+      } else if (citizenCityQuery === null) {
+        setCityName("Varanasi");
+      }
+    } else if (status !== "loading") {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            if (!active) return;
+            const { latitude, longitude } = position.coords;
+            try {
+              const res = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
+              );
+              const data = await res.json();
+
+              let foundCity = "Varanasi";
+              if (data.results && data.results.length > 0) {
+                for (let component of data.results[0].address_components) {
+                  if (component.types.includes("locality")) {
+                    foundCity = component.long_name;
+                    break;
+                  }
+                }
+              }
+              if (active) setCityName(foundCity);
+            } catch (err) {
+              console.error("Reverse geocoding failed", err);
+              if (active) setCityName("Varanasi");
+            }
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            if (active) setCityName("Varanasi");
+          }
+        );
+      } else {
+        setCityName("Varanasi");
+      }
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [session, status, citizenCityQuery]);
+
+  useEffect(() => {
+    if (cityName === "Loading...") return;
 
     const geocodeCity = async () => {
       try {
@@ -486,31 +156,38 @@ export function PublicDashboard() {
     };
 
     geocodeCity();
-  }, []);
+  }, [cityName]);
+
+  const idFromUrl = searchParams.get("id");
+  const cityFromUrl = searchParams.get("city");
+
+  const urlSpecificIssue = useQuery(
+    api.publicIssues.getCityPublicIssueByIssueCode,
+    (cityFromUrl || cityName !== "Loading...") && idFromUrl
+      ? { city: cityFromUrl || cityName, issueCode: idFromUrl }
+      : "skip"
+  );
 
   useEffect(() => {
-    const idFromUrl = searchParams.get("id");
-
     if (idFromUrl) {
-      const foundIssue = DUMMY_ISSUES.find((issue) => issue.id === idFromUrl);
-
-      if (foundIssue) {
-        setSelectedIssue(foundIssue);
+      if (urlSpecificIssue) {
+        setSelectedIssue(urlSpecificIssue);
+      } else {
+        const foundIssue = (publicIssues || []).find(
+          (issue) => issue.issueCode === idFromUrl
+        );
+        if (foundIssue) {
+          setSelectedIssue(foundIssue);
+        }
       }
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    const idFromUrl = searchParams.get("id");
-
-    if (!idFromUrl) {
+    } else {
       setSelectedIssue(null);
     }
-  }, [searchParams]);
+  }, [idFromUrl, urlSpecificIssue, publicIssues]);
 
   // Filtered and sorted issues
   const filteredIssues = useMemo(() => {
-    let filtered = DUMMY_ISSUES;
+    let filtered = (publicIssues || []).filter(issue => issue.publishStatus === "published");
 
     // Only show resolved/rejected
     filtered = filtered.filter(
@@ -545,24 +222,22 @@ export function PublicDashboard() {
 
     // Sort
     filtered = [...filtered].sort((a, b) => {
-      if (sortBy === "newest") {
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      } else if (sortBy === "rating") {
+      if (sortBy === "rating") {
         return (b.citizenRating || 0) - (a.citizenRating || 0);
       } else {
-        return b.upvotes - a.upvotes;
+        return (
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
       }
     });
 
     return filtered;
-  }, [searchTerm, statusFilter, categoryFilter, wardFilter, sortBy]);
+  }, [searchTerm, statusFilter, categoryFilter, wardFilter, sortBy, publicIssues]);
 
   // Calculate KPIs
   const kpis = useMemo(() => {
-    const resolved = DUMMY_ISSUES.filter((i) => i.status === "resolved");
-    const rejected = DUMMY_ISSUES.filter((i) => i.status === "rejected");
+    const resolved = (publicIssues || []).filter((i) => i.status === "resolved" && i.publishStatus === "published");
+    const rejected = (publicIssues || []).filter((i) => i.status === "rejected" && i.publishStatus === "published");
 
     const avgResolutionTime =
       resolved.reduce((acc, issue) => {
@@ -582,7 +257,7 @@ export function PublicDashboard() {
       avgResolutionTime: avgResolutionTime.toFixed(1),
       avgRating: avgRating.toFixed(1),
     };
-  }, []);
+  }, [publicIssues]);
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -592,13 +267,10 @@ export function PublicDashboard() {
     setSortBy("newest");
   };
 
-  const handleShare = (issueId) => {
-    const url = `${window.location.origin}/public-dashboard?id=${issueId}`;
+  const handleShare = (issueCode, issueCity) => {
+    const url = `${window.location.origin}/public-dashboard?id=${issueCode}&city=${encodeURIComponent(issueCity)}`;
 
     navigator.clipboard.writeText(url);
-
-    // Update URL without page reload
-    router.push(`/public-dashboard?id=${issueId}`, { scroll: false });
 
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
@@ -630,7 +302,7 @@ export function PublicDashboard() {
               CityCare Public Transparency Dashboard
             </h2>
             <p className="text-gray-600 dark:text-gray-400 text-lg max-w-2xl mx-auto">
-              Track resolved and reviewed civic issues across Varanasi
+              Track resolved and reviewed civic issues across {cityName === "Loading..." ? "your city" : cityName}
             </p>
           </div>
 
@@ -796,7 +468,7 @@ export function PublicDashboard() {
                       }}
                       onClick={() => {
                         setSelectedIssue(issue);
-                        router.push(`/public-dashboard?id=${issue.id}`, {
+                        router.push(`/public-dashboard?id=${issue.issueCode}`, {
                           scroll: false,
                         });
                       }}
@@ -897,7 +569,6 @@ export function PublicDashboard() {
               >
                 <option value="newest">Newest First</option>
                 <option value="rating">Highest Rated</option>
-                <option value="upvotes">Most Upvoted</option>
               </select>
 
               {(searchTerm ||
@@ -955,7 +626,7 @@ export function PublicDashboard() {
                     key={issue.id}
                     onClick={() => {
                       setSelectedIssue(issue);
-                      router.push(`/public-dashboard?id=${issue.id}`, {
+                      router.push(`/public-dashboard?id=${issue.issueCode}`, {
                         scroll: false,
                       });
                     }}
@@ -1026,13 +697,6 @@ export function PublicDashboard() {
                           <span>
                             {format(new Date(issue.createdAt), "PPP")}
                           </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <TrendingUp
-                            size={14}
-                            className="text-teal-600 dark:text-teal-400"
-                          />
-                          <span>{issue.upvotes} upvotes</span>
                         </div>
                       </div>
 
@@ -1262,7 +926,7 @@ export function PublicDashboard() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleShare(selectedIssue.id);
+                            handleShare(selectedIssue.issueCode, selectedIssue.city);
                           }}
                           className="px-4 py-3 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold transition-all"
                         >
