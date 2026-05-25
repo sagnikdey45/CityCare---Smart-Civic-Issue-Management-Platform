@@ -385,4 +385,48 @@ export default defineSchema({
     .index("by_resolved_at", ["resolvedAt"])
     .index("by_rejected_at", ["rejectedAt"])
     .index("by_created_at", ["createdAt"]),
+
+  issueDiscussionForum: defineTable({
+    issueId: v.id("publicIssues"),
+
+    citizenId: v.id("users"),
+
+    comments: v.string(),
+
+    isAnonymous: v.boolean(),
+
+    createdAt: v.number(),
+
+    likeCount: v.number(),
+
+    likedBy: v.optional(v.array(v.id("users"))),
+    isHidden: v.boolean(),
+
+    replyCount: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_citizen", ["citizenId"])
+    .index("by_issue_created", ["issueId", "createdAt"]),
+
+  issueDiscussionReplies: defineTable({
+    issueId: v.id("publicIssues"),
+
+    discussionId: v.id("issueDiscussionForum"),
+
+    userId: v.id("users"),
+
+    reply: v.string(),
+
+    isAnonymous: v.boolean(),
+
+    createdAt: v.number(),
+
+    likeCount: v.number(),
+
+    likedBy: v.optional(v.array(v.id("users"))),
+    isHidden: v.boolean(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_discussion", ["discussionId"])
+    .index("by_user", ["userId"]),
 });

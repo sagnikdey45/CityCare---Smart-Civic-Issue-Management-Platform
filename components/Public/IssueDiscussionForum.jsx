@@ -9,190 +9,103 @@ import {
   Reply,
   Flag,
   MoreVertical,
+  Shield,
+  EyeOff
 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 export default function IssueDiscussionForum({ issueId, issueTitle }) {
-  const [comments, setComments] = useState([]);
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+
+  const comments = useQuery(api.issueDiscussions.getIssueDiscussions, { issueId }) || [];
+  
+  const addComment = useMutation(api.issueDiscussions.addIssueDiscussion);
+  const addReply = useMutation(api.issueDiscussions.addIssueReply);
+  const likeDiscussion = useMutation(api.issueDiscussions.likeDiscussion);
+  const likeReplyObj = useMutation(api.issueDiscussions.likeReply);
+
   const [newComment, setNewComment] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [sortBy, setSortBy] = useState("popular");
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
-  const [upvotedComments, setUpvotedComments] = useState(new Set());
+  const [isReplyAnonymous, setIsReplyAnonymous] = useState(false);
+  
 
-  useEffect(() => {
-    loadComments();
-  }, [issueId]);
 
-  const loadComments = () => {
-    // Dummy data - replace with actual Supabase query
-    const dummyComments = [
-      {
-        id: "1",
-        user_name: "Rajesh Kumar",
-        user_avatar: "RK",
-        comment_text:
-          "This has been a major problem for months! Thank you for finally fixing it. The road is much smoother now.",
-        upvotes: 28,
-        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        is_pinned: true,
-        replies: [
-          {
-            id: "1-1",
-            user_name: "Priya Singh",
-            comment_text: "Agreed! The work quality looks good.",
-            created_at: new Date(Date.now() - 3600000).toISOString(),
-            upvotes: 5,
-          },
-        ],
-      },
-      {
-        id: "2",
-        user_name: "Amit Verma",
-        user_avatar: "AV",
-        comment_text:
-          "Great work by the municipal team. Response time was impressive.",
-        upvotes: 15,
-        created_at: new Date(Date.now() - 7200000).toISOString(),
-        is_pinned: false,
-        replies: [],
-      },
-      {
-        id: "3",
-        user_name: "Sunita Devi",
-        user_avatar: "SD",
-        comment_text:
-          "I live nearby and I can confirm the issue has been completely resolved. No more waterlogging!",
-        upvotes: 12,
-        created_at: new Date(Date.now() - 10800000).toISOString(),
-        is_pinned: false,
-        replies: [],
-      },
-      {
-        id: "4",
-        user_name: "Vikram Yadav",
-        user_avatar: "VY",
-        comment_text:
-          "Hope the quality of repair lasts through the monsoon season.",
-        upvotes: 8,
-        created_at: new Date(Date.now() - 14400000).toISOString(),
-        is_pinned: false,
-        replies: [
-          {
-            id: "4-1",
-            user_name: "Municipal Officer",
-            comment_text:
-              "We used high-quality materials that are monsoon-resistant. Regular inspections will be conducted.",
-            created_at: new Date(Date.now() - 13000000).toISOString(),
-            upvotes: 10,
-          },
-        ],
-      },
-      {
-        id: "5",
-        user_name: "Neha Gupta",
-        user_avatar: "NG",
-        comment_text:
-          "Similar issue near Ravindrapuri. When will that be fixed?",
-        upvotes: 6,
-        created_at: new Date(Date.now() - 18000000).toISOString(),
-        is_pinned: false,
-        replies: [],
-      },
-    ];
-    setComments(dummyComments);
-  };
-
-  const handleAddComment = () => {
-    if (!newComment.trim()) return;
-
-    const newCommentObj = {
-      id: Date.now().toString(),
-      user_name: "Anonymous Citizen",
-      user_avatar: "AC",
-      comment_text: newComment,
-      upvotes: 0,
-      created_at: new Date().toISOString(),
-      is_pinned: false,
-      replies: [],
-    };
-
-    setComments([newCommentObj, ...comments]);
-    setNewComment("");
-  };
-
-  const handleAddReply = (commentId) => {
-    if (!replyText.trim()) return;
-
-    const newReply = {
-      id: `${commentId}-${Date.now()}`,
-      user_name: "Anonymous Citizen",
-      comment_text: replyText,
-      created_at: new Date().toISOString(),
-      upvotes: 0,
-    };
-
-    setComments(
-      comments.map((comment) => {
-        if (comment.id === commentId) {
-          return {
-            ...comment,
-            replies: [...comment.replies, newReply],
-          };
-        }
-        return comment;
-      }),
-    );
-
-    setReplyText("");
-    setReplyingTo(null);
-  };
-
-  const handleUpvote = (commentId) => {
-    if (upvotedComments.has(commentId)) {
-      setUpvotedComments(
-        new Set([...upvotedComments].filter((id) => id !== commentId)),
-      );
-      setComments(
-        comments.map((comment) =>
-          comment.id === commentId
-            ? { ...comment, upvotes: comment.upvotes - 1 }
-            : comment,
-        ),
-      );
-    } else {
-      setUpvotedComments(new Set([...upvotedComments, commentId]));
-      setComments(
-        comments.map((comment) =>
-          comment.id === commentId
-            ? { ...comment, upvotes: comment.upvotes + 1 }
-            : comment,
-        ),
-      );
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !userId) return;
+    try {
+      await addComment({
+        issueId,
+        citizenId: userId,
+        comments: newComment,
+        isAnonymous
+      });
+      setNewComment("");
+      setIsAnonymous(false);
+    } catch (error) {
+      console.error("Failed to add comment", error);
     }
+  };
+
+  const handleAddReply = async (discussionId) => {
+    if (!replyText.trim() || !userId) return;
+    try {
+      await addReply({
+        issueId,
+        discussionId,
+        userId,
+        reply: replyText,
+        isAnonymous: isReplyAnonymous
+      });
+      setReplyText("");
+      setReplyingTo(null);
+      setIsReplyAnonymous(false);
+    } catch (error) {
+      console.error("Failed to add reply", error);
+    }
+  };
+
+  const handleUpvoteDiscussion = async (id) => {
+    if (!userId) return;
+    await likeDiscussion({ discussionId: id, userId });
+  };
+
+  const handleUpvoteReply = async (id) => {
+    if (!userId) return;
+    await likeReplyObj({ replyId: id, userId });
   };
 
   const sortedComments = [...comments].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1;
-    if (!a.is_pinned && b.is_pinned) return 1;
-
     if (sortBy === "popular") {
-      return b.upvotes - a.upvotes;
+      return b.likeCount - a.likeCount;
     } else {
-      return (
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+      return b.createdAt - a.createdAt;
     }
   });
 
-  const getTimeAgo = (dateString) => {
-    const now = new Date();
-    const date = new Date(dateString);
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const getTimeAgo = (timestamp) => {
+    const now = Date.now();
+    const seconds = Math.floor((now - timestamp) / 1000);
 
     if (seconds < 60) return "just now";
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
+  };
+
+  const getInitials = (name) => {
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
   };
 
   return (
@@ -239,33 +152,48 @@ export default function IssueDiscussionForum({ issueId, issueTitle }) {
 
       {/* Add Comment */}
       <div className="mb-8">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
-            <User className="text-white" size={20} />
+        {!userId ? (
+          <div className="bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-6 text-center">
+            <Shield className="mx-auto text-gray-400 mb-3" size={32} />
+            <h4 className="text-gray-900 dark:text-white font-semibold mb-2">Login to Participate</h4>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">You must be logged in to join the discussion.</p>
           </div>
-          <div className="flex-1">
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Share your thoughts or experience with this issue..."
-              rows={3}
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none"
-            />
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Be respectful and constructive
-              </span>
-              <button
-                onClick={handleAddComment}
-                disabled={!newComment.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={16} />
-                Post Comment
-              </button>
+        ) : (
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <User className="text-white" size={20} />
+            </div>
+            <div className="flex-1">
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Share your thoughts or experience with this issue..."
+                rows={3}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 dark:text-gray-400">
+                  <input 
+                    type="checkbox" 
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <EyeOff size={16} />
+                  Post Anonymously
+                </label>
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim()}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={16} />
+                  Post Comment
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Comments List */}
@@ -284,54 +212,47 @@ export default function IssueDiscussionForum({ issueId, issueTitle }) {
           sortedComments.map((comment) => (
             <div
               key={comment.id}
-              className={`${
-                comment.is_pinned
-                  ? "bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/10 dark:to-yellow-900/10 border-2 border-amber-300 dark:border-amber-700"
-                  : "bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700"
-              } rounded-xl p-5`}
+              className="bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-5"
             >
               {/* Comment Header */}
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-sm font-bold">
-                    {comment.user_avatar}
+                    {getInitials(comment.userName)}
                   </span>
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-gray-900 dark:text-white">
-                      {comment.user_name}
+                      {comment.userName}
                     </span>
-                    {comment.is_pinned && (
-                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded">
-                        Pinned
+                    {comment.userRole === "unit_officer" || comment.userRole === "field_officer" ? (
+                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded flex items-center gap-1">
+                        <Shield size={12} /> Officer
                       </span>
-                    )}
+                    ) : null}
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {getTimeAgo(comment.created_at)}
+                      {getTimeAgo(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="text-gray-700 dark:text-gray-300 mt-2 leading-relaxed">
-                    {comment.comment_text}
+                  <p className="text-gray-700 dark:text-gray-300 mt-2 leading-relaxed whitespace-pre-wrap">
+                    {comment.comments}
                   </p>
                 </div>
-                <button className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
-                  <MoreVertical size={18} />
-                </button>
               </div>
 
               {/* Comment Actions */}
               <div className="flex items-center gap-4 ml-13">
                 <button
-                  onClick={() => handleUpvote(comment.id)}
+                  onClick={() => handleUpvoteDiscussion(comment.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    upvotedComments.has(comment.id)
+                    comment.likedBy?.includes(userId)
                       ? "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400"
                       : "bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-300 dark:border-slate-600"
                   }`}
                 >
                   <ThumbsUp size={14} />
-                  <span>{comment.upvotes}</span>
+                  <span>{comment.likeCount}</span>
                 </button>
                 <button
                   onClick={() =>
@@ -342,36 +263,49 @@ export default function IssueDiscussionForum({ issueId, issueTitle }) {
                   <Reply size={14} />
                   Reply
                 </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-all">
-                  <Flag size={14} />
-                  Report
-                </button>
               </div>
 
               {/* Reply Input */}
               {replyingTo === comment.id && (
-                <div className="mt-4 ml-13 flex items-start gap-2">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      placeholder="Write your reply..."
-                      className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
-                    />
+                <div className="mt-4 ml-13 flex flex-col gap-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder={userId ? "Write your reply..." : "Login to reply..."}
+                        disabled={!userId}
+                        className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleAddReply(comment.id)}
+                      disabled={!replyText.trim() || !userId}
+                      className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Reply
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleAddReply(comment.id)}
-                    disabled={!replyText.trim()}
-                    className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Reply
-                  </button>
+                  {userId && (
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 dark:text-gray-400">
+                        <input 
+                          type="checkbox" 
+                          checked={isReplyAnonymous}
+                          onChange={(e) => setIsReplyAnonymous(e.target.checked)}
+                          className="rounded text-teal-600 focus:ring-teal-500"
+                        />
+                        <EyeOff size={14} />
+                        Reply Anonymously
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Replies */}
-              {comment.replies.length > 0 && (
+              {comment.replies && comment.replies.length > 0 && (
                 <div className="mt-4 ml-13 space-y-3">
                   {comment.replies.map((reply) => (
                     <div
@@ -379,23 +313,37 @@ export default function IssueDiscussionForum({ issueId, issueTitle }) {
                       className="flex items-start gap-3 bg-white dark:bg-slate-800 rounded-lg p-3 border border-gray-200 dark:border-slate-700"
                     >
                       <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <User className="text-white" size={14} />
+                        <span className="text-white text-xs font-bold">
+                          {getInitials(reply.userName)}
+                        </span>
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-sm text-gray-900 dark:text-white">
-                            {reply.user_name}
-                          </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {getTimeAgo(reply.created_at)}
-                          </span>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-gray-900 dark:text-white">
+                              {reply.userName}
+                            </span>
+                            {reply.userRole === "unit_officer" || reply.userRole === "field_officer" ? (
+                              <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold rounded flex items-center gap-0.5">
+                                <Shield size={10} /> Officer
+                              </span>
+                            ) : null}
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {getTimeAgo(reply.createdAt)}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          {reply.comment_text}
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                          {reply.reply}
                         </p>
-                        <button className="flex items-center gap-1 mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400">
+                        <button 
+                          onClick={() => handleUpvoteReply(reply.id)}
+                          className={`flex items-center gap-1 mt-2 text-xs transition-colors ${
+                            reply.likedBy?.includes(userId) ? "text-teal-600 dark:text-teal-400" : "text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400"
+                          }`}
+                        >
                           <ThumbsUp size={12} />
-                          <span>{reply.upvotes}</span>
+                          <span>{reply.likeCount}</span>
                         </button>
                       </div>
                     </div>
