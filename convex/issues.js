@@ -1,15 +1,16 @@
-import { internalMutation, mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { awardCitizenPoints, checkAndAwardCitizenBadges } from "@/lib/gamificationAwards";
+import { internalMutation, mutation, query } from './_generated/server';
+import { v } from 'convex/values';
 
 const CATEGORY_PREFIX = {
-  road: "RD",
-  electricity: "EL",
-  water: "WT",
-  sanitation: "SN",
-  drainage: "DR",
-  solid_waste: "SW",
-  public_health: "PH",
-  other: "OT",
+  road: 'RD',
+  electricity: 'EL',
+  water: 'WT',
+  sanitation: 'SN',
+  drainage: 'DR',
+  solid_waste: 'SW',
+  public_health: 'PH',
+  other: 'OT',
 };
 
 function generateRandomCode(length = 6) {
@@ -48,28 +49,29 @@ export const createIssue = mutation({
     googleMapUrl: v.string(),
 
     // --- Reporter ---
-    reportedBy: v.id("users"),
+    reportedBy: v.id('users'),
 
     isAnonymous: v.boolean(),
 
     additionalEmail: v.optional(v.union(v.string(), v.null())),
 
     // --- Media ---
-    photos: v.array(v.id("_storage")),
+    photos: v.array(v.id('_storage')),
 
     // Single videos (optional)
-    videos: v.union(v.id("_storage"), v.null()),
+    videos: v.union(v.id('_storage'), v.null()),
   },
 
   handler: async (ctx, args) => {
     // Generate Issue Code
-    const prefix = CATEGORY_PREFIX[args.category] ?? "OT";
+    // @ts-ignore
+    const prefix = CATEGORY_PREFIX[args.category] ?? 'OT';
 
     const randomPart = generateRandomCode(6);
 
     const issueCode = `${prefix}-${randomPart}`;
 
-    await ctx.db.insert("issues", {
+    const issueId = await ctx.db.insert('issues', {
       // --- Core ---
       issueCode,
 
@@ -110,7 +112,7 @@ export const createIssue = mutation({
       videos: args.videos ?? null,
 
       // --- Workflow ---
-      status: "pending",
+      status: 'pending',
 
       assignedUnitOfficer: null,
       assignedFieldOfficer: null,
@@ -119,7 +121,7 @@ export const createIssue = mutation({
 
       escalatedToAdmin: false,
 
-      slaCategory: "standard",
+      slaCategory: 'standard',
       slaDeadline: null,
       slaBreached: false,
 
@@ -136,6 +138,43 @@ export const createIssue = mutation({
       createdAt: Date.now(),
     });
 
+      const citizen = await ctx.db
+      .query("citizens")
+      .withIndex("by_user", (q) => q.eq("userId", args.reportedBy))
+      .first();
+
+      if (citizen) {
+        await awardCitizenPoints(ctx, {
+          citizenId: citizen._id,
+          userId: citizen.userId,
+          type: "issue_submitted",
+          relatedIssueId: issueId,
+          reason: "Citizen submitted a civic issue",
+          metadata: {
+            source: "issue_creation",
+          },
+        });
+
+        if (args.videos) {
+          await awardCitizenPoints(ctx, {
+            citizenId: citizen._id,
+            userId: citizen.userId,
+            type: "video_evidence_added",
+            relatedIssueId: issueId,
+            reason: "Citizen added video evidence to strengthen the issue report",
+            metadata: {
+              source: "issue_creation",
+            },
+          });
+        }
+
+        await checkAndAwardCitizenBadges(ctx, {
+          citizenId: citizen._id,
+          userId: citizen.userId,
+          relatedIssueId: issueId,
+        });
+      }
+
     return {
       success: true,
       issueCode,
@@ -145,22 +184,22 @@ export const createIssue = mutation({
 
 export const getCitizenDashboardIssues = query({
   args: {
-    userId: v.id("users"),
+    userId: v.id('users'),
   },
 
   handler: async (ctx, args) => {
     // 1. Get citizen profile
     const citizen = await ctx.db
-      .query("citizens")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .query('citizens')
+      .withIndex('by_user', (q) => q.eq('userId', args.userId))
       .unique();
 
     if (!citizen || !citizen.city) return [];
 
     // 2. Fetch ALL issues in same city (includes user's issues automatically)
     const issues = await ctx.db
-      .query("issues")
-      .withIndex("by_city", (q) => q.eq("city", citizen.city))
+      .query('issues')
+      .withIndex('by_city', (q) => q.eq('city', citizen.city))
       .collect();
 
     // 3. Attach photo preview
@@ -177,17 +216,15 @@ export const getCitizenDashboardIssues = query({
 
         if (issue.assignedFieldOfficer) {
           const fo = await ctx.db
-            .query("fieldOfficers")
-            .withIndex("by_user", (q) =>
-              q.eq("userId", issue.assignedFieldOfficer),
-            )
+            .query('fieldOfficers')
+            .withIndex('by_user', (q) => q.eq('userId', issue.assignedFieldOfficer))
             .unique();
 
           if (fo) {
             fieldOfficerDetails = {
               id: fo._id,
-              role: "field_officer",
               userId: fo.userId,
+              role: 'field_officer',
               fullName: fo.fullName,
               email: fo.email,
               phone: fo.phone,
@@ -195,8 +232,7 @@ export const getCitizenDashboardIssues = query({
               efficiencyScore: fo.efficiencyScore,
               currentActiveIssues: fo.currentActiveIssues,
               maxIssueCapacity: fo.maxIssueCapacity,
-              workloadPercentage:
-                (fo.currentActiveIssues / fo.maxIssueCapacity) * 100,
+              workloadPercentage: (fo.currentActiveIssues / fo.maxIssueCapacity) * 100,
               specialisations: fo.specialisations,
             };
           }
@@ -207,17 +243,15 @@ export const getCitizenDashboardIssues = query({
 
         if (issue.assignedUnitOfficer) {
           const uo = await ctx.db
-            .query("unitOfficers")
-            .withIndex("by_user", (q) =>
-              q.eq("userId", issue.assignedUnitOfficer),
-            )
+            .query('unitOfficers')
+            .withIndex('by_user', (q) => q.eq('userId', issue.assignedUnitOfficer))
             .unique();
 
           if (uo) {
             unitOfficerDetails = {
               id: uo._id,
-              role: "unit_officer",
               userId: uo.userId,
+              role: 'unit_officer',
               fullName: uo.fullName,
               email: uo.email,
               phone: uo.phone,
@@ -234,7 +268,7 @@ export const getCitizenDashboardIssues = query({
           assignedFieldOfficer: fieldOfficerDetails,
           assignedUnitOfficer: unitOfficerDetails,
         };
-      }),
+      })
     );
 
     // 4. Sort latest first
@@ -242,16 +276,15 @@ export const getCitizenDashboardIssues = query({
   },
 });
 
-// Fetches the city of the citizen by their user ID
 export const getCitizenCityByUserId = query({
   args: {
-    userId: v.id("users"),
+    userId: v.id('users'),
   },
 
   handler: async (ctx, args) => {
     const citizen = await ctx.db
-      .query("citizens")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .query('citizens')
+      .withIndex('by_user', (q) => q.eq('userId', args.userId))
       .unique();
 
     if (!citizen) return null;
@@ -267,8 +300,8 @@ export const getCitizenCityByUserId = query({
 
 export const withdrawIssue = mutation({
   args: {
-    issueId: v.id("issues"),
-    userId: v.id("users"),
+    issueId: v.id('issues'),
+    userId: v.id('users'),
     withdrawalReason: v.string(),
     withdrawalCategory: v.string(),
   },
@@ -277,26 +310,26 @@ export const withdrawIssue = mutation({
     const issue = await ctx.db.get(args.issueId);
 
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new Error('Issue not found');
     }
 
     // Ensure only reporter can withdraw
     if (issue.reportedBy !== args.userId) {
-      throw new Error("Unauthorized action");
+      throw new Error('Unauthorized action');
     }
 
     // Prevent invalid cases
     if (
-      issue.status === "resolved" ||
-      issue.status === "rejected" ||
-      issue.status === "withdrawn"
+      issue.status === 'resolved' ||
+      issue.status === 'rejected' ||
+      issue.status === 'withdrawn'
     ) {
-      throw new Error("Cannot withdraw this issue");
+      throw new Error('Cannot withdraw this issue');
     }
 
     // Update issue details
     await ctx.db.patch(args.issueId, {
-      status: "withdrawn",
+      status: 'withdrawn',
 
       withdrawnAt: Date.now(),
       withdrawalReason: args.withdrawalReason,
@@ -304,17 +337,17 @@ export const withdrawIssue = mutation({
     });
 
     // Add timeline entry
-    await ctx.db.insert("issueUpdates", {
+    await ctx.db.insert('issueUpdates', {
       issueId: args.issueId,
-      status: "withdrawn",
+      status: 'withdrawn',
 
       comment: `Issue withdrawn.\nCategory: ${args.withdrawalCategory}\nReason: ${args.withdrawalReason}`,
 
       updatedBy: args.userId,
-      role: "citizen",
+      role: 'citizen',
 
       attachments: [],
-      scope: "citizen",
+      scope: 'citizen',
 
       createdAt: Date.now(),
     });
@@ -325,19 +358,19 @@ export const withdrawIssue = mutation({
 
 export const reopenIssue = mutation({
   args: {
-    issueId: v.id("issues"),
-    userId: v.id("users"),
+    issueId: v.id('issues'),
+    userId: v.id('users'),
     reason: v.string(),
     category: v.string(),
   },
 
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
-    if (!issue) throw new Error("Issue not found");
+    if (!issue) throw new Error('Issue not found');
 
     // Changes issue status to "reopened" and logs the reason + category for reopening
     await ctx.db.patch(args.issueId, {
-      status: "reopened",
+      status: 'reopened',
       isReopened: true,
       reopenCount: (issue.reopenCount || 0) + 1,
       reopenReason: args.reason,
@@ -345,34 +378,36 @@ export const reopenIssue = mutation({
     });
 
     // Adds the Issue Update for reopening with reason and category details
-    await ctx.db.insert("issueUpdates", {
+    await ctx.db.insert('issueUpdates', {
       issueId: args.issueId,
-      status: "reopened",
-      comment: `Issue reopened.\nCategory: ${args.category.toUpperCase().replace("_", " ")}\nReason: ${args.reason}`,
+      status: 'reopened',
+      comment: `Issue reopened.\nCategory: ${args.category.toUpperCase().replace('_', ' ')}\nReason: ${args.reason}`,
       updatedBy: args.userId,
-      role: "citizen",
+      role: 'citizen',
       attachments: [],
-      scope: "officer_and_citizen",
+      scope: 'officer_and_citizen',
       createdAt: Date.now(),
     });
 
     // Notification for Citizen
-    await ctx.db.insert("notifications", {
+    await ctx.db.insert('notifications', {
       userId: issue.reportedBy,
       issueId: args.issueId,
+      title: `Reopened Issue - "${issue.title} (${issue.issueCode})"`,
       message: `The Issue "${issue.title}" with Issue Code: ${issue.issueCode} has been reopened by the citizen.`,
-      type: "reopened",
+      type: 'reopened',
       read: false,
       createdAt: Date.now(),
     });
 
     // Notification for Unit Officer
     if (issue.assignedUnitOfficer) {
-      await ctx.db.insert("notifications", {
+      await ctx.db.insert('notifications', {
         userId: issue.assignedUnitOfficer,
         issueId: args.issueId,
+        title: `Reopened Issue - "${issue.title} (${issue.issueCode})"`,
         message: `The Issue "${issue.title}" with Issue Code: ${issue.issueCode} has been reopened by the citizen.`,
-        type: "reopened",
+        type: 'reopened',
         read: false,
         createdAt: Date.now(),
       });
@@ -382,8 +417,8 @@ export const reopenIssue = mutation({
 
 export const submitIssueFeedback = mutation({
   args: {
-    issueId: v.id("issues"),
-    userId: v.id("users"),
+    issueId: v.id('issues'),
+    userId: v.id('users'),
     rating: v.number(),
     feedback: v.string(),
   },
@@ -392,11 +427,11 @@ export const submitIssueFeedback = mutation({
     const { issueId, userId, rating, feedback } = args;
 
     const issue = await ctx.db.get(issueId);
-    if (!issue) throw new Error("Issue not found");
+    if (!issue) throw new Error('Issue not found');
 
     // Fallback to ensures only the reporter can give feedback
     if (issue.reportedBy !== userId) {
-      throw new Error("Unauthorized");
+      throw new Error('Unauthorized');
     }
 
     const now = Date.now();
@@ -406,18 +441,18 @@ export const submitIssueFeedback = mutation({
       citizenRating: rating,
       citizenFeedback: feedback,
       status: issue.status,
-      closedAt: issue.status === "resolved" ? now : issue.closedAt,
+      closedAt: issue.status === 'resolved' ? now : issue.closedAt,
     });
 
     // Adds the Issue Update with feedback and rating details
-    await ctx.db.insert("issueUpdates", {
+    await ctx.db.insert('issueUpdates', {
       issueId,
       status: issue.status,
-      comment: `Citizen submitted a feedback for the issue.\nRating: ${rating}/5 ${feedback ? `\nFeedback: ${feedback}` : ""}`,
+      comment: `Citizen submitted a feedback for the issue.\nRating: ${rating}/5 ${feedback ? `\nFeedback: ${feedback}` : ''}`,
       updatedBy: userId,
-      role: "citizen",
+      role: 'citizen',
       attachments: [],
-      scope: "officer_and_citizen",
+      scope: 'officer_and_citizen',
       createdAt: now,
     });
 
@@ -425,24 +460,24 @@ export const submitIssueFeedback = mutation({
 
     // Notify Unit Officer about the feedback submission
     if (issue.assignedUnitOfficer) {
-      await ctx.db.insert("notifications", {
+      await ctx.db.insert('notifications', {
         userId: issue.assignedUnitOfficer,
         issueId,
-        title: `Feedback received on ${issue.issueCode}`,
-        message: `Feedback received for issue ${issue.issueCode} from the citizen. \nRating: ${rating}/5 ${feedback ? ` \nFeedback: ${feedback}` : ""}`,
-        type: "feedback",
+        title: `Feedback received on "${issue.title} (${issue.issueCode})"`,
+        message: `Feedback received for issue "${issue.title} (${issue.issueCode})" from the citizen. \nRating: ${rating}/5 ${feedback ? ` \nFeedback: ${feedback}` : ''}`,
+        type: 'feedback',
         read: false,
         createdAt: now,
       });
     }
 
     // Notify Citizen about the feedback submission
-    await ctx.db.insert("notifications", {
+    await ctx.db.insert('notifications', {
       userId: userId,
       issueId,
-      title: "Feedback Submitted",
-      message: `Your feedback for issue ${issue.issueCode} has been successfully submitted.`,
-      type: "feedback_confirmation",
+      title: `Feedback submitted for issue "${issue.title} (${issue.issueCode})"`,
+      message: `Your feedback for issue "${issue.title} (${issue.issueCode})" has been successfully submitted.`,
+      type: 'feedback_confirmation',
       read: false,
       createdAt: now,
     });
@@ -453,7 +488,7 @@ export const submitIssueFeedback = mutation({
 
 export const getIssueById = query({
   args: {
-    issueId: v.id("issues"),
+    issueId: v.id('issues'),
   },
 
   handler: async (ctx, args) => {
@@ -466,7 +501,7 @@ export const getIssueById = query({
       (issue.photos || []).map(async (fileId) => {
         const url = await ctx.storage.getUrl(fileId);
         return url;
-      }),
+      })
     );
 
     // Resolve BEFORE photos
@@ -474,7 +509,7 @@ export const getIssueById = query({
       (issue.beforePhotos || []).map(async (fileId) => {
         const url = await ctx.storage.getUrl(fileId);
         return url;
-      }),
+      })
     );
 
     // Resolve AFTER photos
@@ -482,7 +517,7 @@ export const getIssueById = query({
       (issue.afterPhotos || []).map(async (fileId) => {
         const url = await ctx.storage.getUrl(fileId);
         return url;
-      }),
+      })
     );
 
     // Resolve videos (if exists)
@@ -509,33 +544,33 @@ export const autoAssignIssues = internalMutation({
 
     // 1. Get all unassigned issues
     const issues = await ctx.db
-      .query("issues")
+      .query('issues')
       .filter((q) =>
         q.and(
-          q.eq(q.field("assignedUnitOfficer"), null),
-          q.eq(q.field("status"), "pending"),
-          q.eq(q.field("escalatedToAdmin"), false),
-        ),
+          q.eq(q.field('assignedUnitOfficer'), null),
+          q.eq(q.field('status'), 'pending'),
+          q.eq(q.field('escalatedToAdmin'), false)
+        )
       )
       .collect();
 
-    if (issues.length === 0) return "No issues to assign";
+    if (issues.length === 0) return 'No issues to assign';
 
     for (const issue of issues) {
       // 2. Get eligible unit officers
       const officers = await ctx.db
-        .query("unitOfficers")
+        .query('unitOfficers')
         .filter((q) =>
           q.and(
-            q.eq(q.field("city"), issue.city),
-            q.eq(q.field("department"), issue.category),
-            q.eq(q.field("accountApproved"), true),
-          ),
+            q.eq(q.field('city'), issue.city),
+            q.eq(q.field('department'), issue.category),
+            q.eq(q.field('accountApproved'), true)
+          )
         )
         .collect();
 
       if (officers.length === 0) {
-        console.log("No officer found for:", issue._id);
+        console.log('No officer found for:', issue._id);
         continue;
       }
 
@@ -543,10 +578,7 @@ export const autoAssignIssues = internalMutation({
       let selectedOfficer = officers[0];
 
       for (const officer of officers) {
-        if (
-          (officer.activeIssueIds?.length || 0) <
-          (selectedOfficer.activeIssueIds?.length || 0)
-        ) {
+        if ((officer.activeIssueIds?.length || 0) < (selectedOfficer.activeIssueIds?.length || 0)) {
           selectedOfficer = officer;
         }
       }
@@ -554,7 +586,7 @@ export const autoAssignIssues = internalMutation({
       // 4. Get officer user details (for name)
       const officerUser = await ctx.db.get(selectedOfficer.userId);
 
-      const officerName = officerUser?.fullName || "Unit Officer";
+      const officerName = officerUser?.fullName || 'Unit Officer';
 
       // 5. Assign issue
       await ctx.db.patch(issue._id, {
@@ -567,38 +599,64 @@ export const autoAssignIssues = internalMutation({
       });
 
       // 7. ISSUE UPDATE ENTRY
-      await ctx.db.insert("issueUpdates", {
+      await ctx.db.insert('issueUpdates', {
         issueId: issue._id,
-        status: "pending",
+        status: 'pending',
         comment: `Issue has been assigned to ${officerName} for further processing.`,
         updatedBy: selectedOfficer.userId,
-        role: "unit_officer",
+        role: 'unit_officer',
         attachments: [],
-        scope: "citizen",
+        scope: 'citizen',
         createdAt: now,
       });
 
       // 8. NOTIFICATION → Citizen
-      await ctx.db.insert("notifications", {
+      await ctx.db.insert('notifications', {
         userId: issue.reportedBy,
         issueId: issue._id,
-        message: `Your issue "${issue.title}" has been assigned to ${officerName}.`,
-        type: "assigned",
+        title: `Issue Assigned to Unit Officer ${officerName} - "${issue.title} (${issue.issueCode})"`,
+        message: `Your issue "${issue.title}" with Issue Code "${issue.issueCode}" has been assigned to Unit Officer ${officerName}.`,
+        type: 'assigned',
         read: false,
         createdAt: now,
       });
 
       // 9. NOTIFICATION → Unit Officer
-      await ctx.db.insert("notifications", {
+      await ctx.db.insert('notifications', {
         userId: selectedOfficer.userId,
         issueId: issue._id,
-        message: `You have been assigned a new issue: "${issue.title}".`,
-        type: "assigned",
+        title: `New Issue Assigned - "${issue.title} (${issue.issueCode})"`,
+        message: `You have been assigned a new issue: "${issue.title} (${issue.issueCode})".`,
+        type: 'assigned',
         read: false,
         createdAt: now,
       });
     }
 
     return `Assigned ${issues.length} issues successfully`;
+  },
+});
+
+export const getIssuesByOfficial = query({
+  args: {
+    officialId: v.id('users'),
+  },
+
+  handler: async (ctx, args) => {
+    const unitOfficerIssues = await ctx.db
+      .query('issues')
+      .withIndex('by_assigned_unit_officer', (q) => q.eq('assignedUnitOfficer', args.officialId))
+      .collect();
+
+    const fieldOfficerIssues = await ctx.db
+      .query('issues')
+      .withIndex('by_assigned_field_officer', (q) => q.eq('assignedFieldOfficer', args.officialId))
+      .collect();
+
+    const merged = [...unitOfficerIssues, ...fieldOfficerIssues];
+
+    const uniqueIssues = Array.from(new Map(merged.map((issue) => [issue._id, issue])).values());
+
+    return uniqueIssues.sort((a, b) => b.createdAt - a.createdAt);
   },
 });

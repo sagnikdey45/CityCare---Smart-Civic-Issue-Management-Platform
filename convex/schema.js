@@ -37,13 +37,167 @@ export default defineSchema({
     latitude: v.string(),
     longitude: v.string(),
 
+    // Fast summary total
     points: v.number(),
+
+    // Gamification summary
+    level: v.optional(v.number()),
+    levelTitle: v.optional(v.string()),
+    badgeCount: v.optional(v.number()),
+
+    // Activity statistics
+    reportsSubmitted: v.optional(v.number()),
+    reportsVerified: v.optional(v.number()),
+    reportsResolved: v.optional(v.number()),
+    reportsRejected: v.optional(v.number()),
+    duplicateReports: v.optional(v.number()),
+
+    commentsAdded: v.optional(v.number()),
+    upvotesReceived: v.optional(v.number()),
+
+    // Optional evidence statistics
+    videoEvidenceAdded: v.optional(v.number()),
+
+    // Streaks
+    currentStreak: v.optional(v.number()),
+    longestStreak: v.optional(v.number()),
+    lastActivityAt: v.optional(v.number()),
+
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_city", ["city"]),
+    .index("by_city", ["city"])
+    .index("by_points", ["points"])
+    .index("by_city_points", ["city", "points"])
+    .index("by_region_points", ["region", "points"]),
+
+  citizenPointTransactions: defineTable({
+    citizenId: v.id("citizens"),
+    userId: v.id("users"),
+
+    type: v.union(
+      v.literal("issue_submitted"),
+      v.literal("video_evidence_added"),
+      v.literal("issue_verified"),
+      v.literal("issue_assigned"),
+      v.literal("issue_resolved"),
+      v.literal("issue_closed"),
+      v.literal("issue_rejected"),
+      v.literal("duplicate_report"),
+      v.literal("issue_withdrawn"),
+      v.literal("comment_added"),
+      v.literal("comment_liked"),
+      v.literal("report_upvoted"),
+      v.literal("streak_bonus"),
+      v.literal("badge_bonus"),
+      v.literal("manual_adjustment"),
+    ),
+
+    points: v.number(),
+    reason: v.string(),
+
+    relatedIssueId: v.optional(v.id("issues")),
+    relatedCommentId: v.optional(v.id("issueDiscussionForum")),
+    relatedReplyId: v.optional(v.id("issueDiscussionReplies")),
+    relatedBadgeId: v.optional(v.id("badges")),
+
+    metadata: v.optional(
+      v.object({
+        previousPoints: v.optional(v.number()),
+        newPoints: v.optional(v.number()),
+        officerId: v.optional(v.string()),
+        duplicateGroupId: v.optional(v.string()),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    createdAt: v.number(),
+  })
+    .index("by_citizen", ["citizenId"])
+    .index("by_user", ["userId"])
+    .index("by_type", ["type"])
+    .index("by_issue", ["relatedIssueId"])
+    .index("by_citizen_type", ["citizenId", "type"])
+    .index("by_citizen_created", ["citizenId", "createdAt"]),
+
+  badges: defineTable({
+    code: v.string(),
+
+    name: v.string(),
+    description: v.string(),
+
+    icon: v.string(),
+
+    category: v.union(
+      v.literal("reporting"),
+      v.literal("resolution"),
+      v.literal("community"),
+      v.literal("streak"),
+      v.literal("quality"),
+      v.literal("special"),
+    ),
+
+    criteriaType: v.union(
+      v.literal("reports_submitted"),
+      v.literal("video_evidence_added"),
+      v.literal("reports_verified"),
+      v.literal("reports_resolved"),
+      v.literal("comments_added"),
+      v.literal("upvotes_received"),
+      v.literal("current_streak"),
+      v.literal("longest_streak"),
+      v.literal("points_reached"),
+      v.literal("manual"),
+    ),
+
+    requiredCount: v.number(),
+
+    rewardPoints: v.number(),
+
+    isActive: v.boolean(),
+
+    // true = default/system badge, cannot be deactivated
+    // false = custom/admin-created badge, can be deactivated
+    isSystemBadge: v.boolean(),
+
+    createdByAdminId: v.optional(v.id("users")),
+
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_code", ["code"])
+    .index("by_category", ["category"])
+    .index("by_active", ["isActive"])
+    .index("by_system", ["isSystemBadge"])
+    .index("by_criteria", ["criteriaType"]),
+
+  citizenBadges: defineTable({
+    citizenId: v.id("citizens"),
+    userId: v.id("users"),
+
+    badgeId: v.id("badges"),
+    badgeCode: v.string(),
+
+    earnedAt: v.number(),
+
+    relatedIssueId: v.optional(v.id("issues")),
+
+    metadata: v.optional(
+      v.object({
+        reason: v.optional(v.string()),
+        pointsAwarded: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_citizen", ["citizenId"])
+    .index("by_user", ["userId"])
+    .index("by_badge", ["badgeId"])
+    .index("by_citizen_badge_code", ["citizenId", "badgeCode"]),
 
   unitOfficers: defineTable({
     userId: v.id("users"),
+    profilePicture: v.optional(v.id("_storage")),
 
     fullName: v.string(),
     email: v.string(),
@@ -78,6 +232,7 @@ export default defineSchema({
 
   fieldOfficers: defineTable({
     userId: v.id("users"),
+    profilePicture: v.optional(v.id("_storage")),
 
     fullName: v.string(),
     email: v.string(),
@@ -270,7 +425,9 @@ export default defineSchema({
     .index("by_reporter", ["reportedBy"])
     .index("by_status", ["status"])
     .index("by_city", ["city"])
-    .index("by_category", ["category"]),
+    .index("by_category", ["category"])
+    .index("by_assigned_unit_officer", ["assignedUnitOfficer"])
+    .index("by_assigned_field_officer", ["assignedFieldOfficer"]),
 
   issueUpdates: defineTable({
     // Reference
@@ -429,4 +586,35 @@ export default defineSchema({
     .index("by_issue", ["issueId"])
     .index("by_discussion", ["discussionId"])
     .index("by_user", ["userId"]),
+
+  messages: defineTable({
+    conversationId: v.id("conversations"),
+    fromId: v.id("users"),
+    toId: v.id("users"),
+    message: v.string(),
+    createdAt: v.number(),
+    read: v.boolean(),
+    issueIds: v.optional(v.array(v.id("issues"))),
+    fromRole: v.string(),
+    fromName: v.string(),
+    isDeleted: v.optional(v.boolean()),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_receiver", ["toId"])
+    .index("by_sender", ["fromId"]),
+
+  conversations: defineTable({
+    participantIds: v.array(v.id("users")),
+    lastMessage: v.optional(v.string()),
+    lastMessageTime: v.optional(v.number()),
+    lastMessageSenderId: v.optional(v.id("users")),
+    unreadCountMap: v.optional(v.record(v.id("users"), v.number())),
+    issueRef: v.optional(
+      v.object({
+        issueId: v.id("issues"),
+        issueTitle: v.string(),
+        status: v.string(),
+      }),
+    ),
+  }).index("by_participants", ["participantIds"]),
 });
