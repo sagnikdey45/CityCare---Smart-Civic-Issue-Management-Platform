@@ -19,8 +19,6 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
-  Maximize,
-  Minimize,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { getMockUsers } from "@/lib/mockData";
@@ -145,9 +143,8 @@ export function AdminIssueModal({
   const [fieldOfficerExpanded, setFieldOfficerExpanded] = useState(true);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [rejectionDropdownOpen, setRejectionDropdownOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const wardOfficers = getMockUsers().filter((u) => u.role === "ward_officer");
+  const wardOfficers = getMockUsers().filter((u) => u.role === "unit_officer");
   const fieldOfficers = getMockUsers().filter(
     (u) => u.role === "field_officer",
   );
@@ -263,12 +260,12 @@ export function AdminIssueModal({
   const categoryInfo = categoryData[issue.category] || categoryData.other;
 
   return (
-    <div className={`fixed inset-0 bg-slate-900/40 dark:bg-[#030712]/60 backdrop-blur-lg flex items-center justify-center z-50 animate-in fade-in duration-300 ${isFullscreen ? 'p-0' : 'p-4'}`}>
-      <div className={`bg-white/90 dark:bg-[#0f172a]/95 backdrop-blur-2xl shadow-2xl flex flex-col border border-white/50 dark:border-slate-700/30 transition-all duration-300 ease-in-out ${isFullscreen ? 'w-screen h-screen max-w-none rounded-none' : 'max-w-5xl w-full max-h-[92vh] rounded-[2.5rem] overflow-hidden'}`}>
+    <div className="fixed inset-0 bg-gradient-to-br from-slate-900/80 via-slate-900/70 to-slate-800/80 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col">
         <div
-          className={`sticky top-0 ${currentStatusStyle.bg} border-b ${currentStatusStyle.border} backdrop-blur-2xl z-20`}
+          className={`sticky top-0 ${currentStatusStyle.bg} border-b ${currentStatusStyle.border} backdrop-blur-md bg-opacity-90`}
         >
-          <div className="p-8 flex justify-between items-start gap-5">
+          <div className="p-6 flex justify-between items-start gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white dark:bg-slate-800 shadow-sm">
@@ -284,7 +281,7 @@ export function AdminIssueModal({
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                <code className="px-4 py-1.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-xl text-xs font-black tracking-widest text-slate-700 dark:text-slate-300 border border-white/50 dark:border-slate-700/50 shadow-inner">
+                <code className="px-3 py-1.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                   {issue.ticket_id}
                 </code>
                 <div
@@ -301,45 +298,34 @@ export function AdminIssueModal({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-all duration-200 shadow-sm hover:shadow-md border border-slate-200/50 dark:border-slate-700/50"
-                aria-label={isFullscreen ? "Collapse modal" : "Expand modal"}
-              >
-                {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-              </button>
-              <button
-                onClick={onClose}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-all duration-200 shadow-sm hover:shadow-md border border-slate-200/50 dark:border-slate-700/50"
-                aria-label="Close modal"
-              >
-                <X size={20} />
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-all duration-200 shadow-sm hover:shadow-md border border-slate-200/50 dark:border-slate-700/50"
+              aria-label="Close modal"
+            >
+              <X size={20} />
+            </button>
           </div>
         </div>
 
-         <div className="flex-1 overflow-y-auto hide-scrollbar z-10">
-          <div className="p-8 space-y-6">
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-6">
             <div
-              className={`relative rounded-[2rem] border-2 ${
+              className={`relative overflow-hidden rounded-2xl border-2 ${
                 fromAssignmentView
-                  ? "bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-blue-900/10 dark:to-cyan-900/10 border-blue-200/30 dark:border-blue-700/30 shadow-blue-100/50 dark:shadow-[inset_0_2px_20px_rgba(0,0,0,0.2)]"
-                  : "bg-gradient-to-br from-slate-50/50 to-slate-100/50 dark:from-slate-800/20 dark:to-slate-900/10 border-slate-200/30 dark:border-slate-700/30 shadow-slate-100/50 dark:shadow-[inset_0_2px_20px_rgba(0,0,0,0.2)]"
-              } backdrop-blur-xl shadow-md z-20`}
+                  ? "bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 border-blue-200 shadow-blue-100"
+                  : "bg-gradient-to-br from-slate-50 via-gray-50 to-slate-50 border-slate-200 shadow-slate-100"
+              } shadow-lg`}
             >
-              <div className="absolute inset-0 overflow-hidden rounded-[2rem] pointer-events-none">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-white/20 dark:from-white/5 to-transparent rounded-full blur-3xl mix-blend-overlay"></div>
-              </div>
-              <div className="relative p-8">
-                <div className="flex items-center gap-3 mb-6">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-3xl"></div>
+              <div className="relative p-6">
+                <div className="flex items-center gap-2 mb-5">
                   <div
-                    className={`w-10 h-10 rounded-xl ${fromAssignmentView ? "bg-blue-500" : "bg-slate-700 dark:bg-slate-600"} flex items-center justify-center shadow-md`}
+                    className={`w-8 h-8 rounded-lg ${fromAssignmentView ? "bg-blue-500" : "bg-slate-700"} flex items-center justify-center shadow-md`}
                   >
-                    <Sparkles className="text-white" size={20} />
+                    <Sparkles className="text-white" size={18} />
                   </div>
-                  <h3 className="text-xl font-black bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+                  <h3 className="text-xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                     {fromAssignmentView
                       ? "Assignment Management"
                       : "Admin Actions"}
@@ -347,13 +333,13 @@ export function AdminIssueModal({
                 </div>
 
                 {fromAssignmentView ? (
-                  <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="grid grid-cols-2 gap-3 mb-5">
                     <button
                       onClick={() => setAction("reassign")}
-                      className={`group relative overflow-hidden px-5 py-4 rounded-xl font-bold transition-all duration-300 border-2 ${
+                      className={`group relative overflow-hidden px-5 py-3.5 rounded-xl font-semibold transition-all duration-300 ${
                         action === "reassign"
-                          ? "bg-gradient-to-r from-blue-600 to-cyan-600 border-transparent text-white shadow-[0_8px_20px_rgba(59,130,246,0.3)] scale-[1.02]"
-                          : "bg-white/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700/50 hover:border-blue-400 dark:hover:border-cyan-500 hover:shadow-lg hover:bg-white dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/30 scale-[1.02]"
+                          : "bg-white text-slate-700 border-2 border-slate-200 hover:border-blue-300 hover:shadow-md"
                       }`}
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -368,10 +354,10 @@ export function AdminIssueModal({
                     </button>
                     <button
                       onClick={() => setAction("revoke")}
-                      className={`group relative overflow-hidden px-5 py-4 rounded-xl font-bold transition-all duration-300 border-2 ${
+                      className={`group relative overflow-hidden px-5 py-3.5 rounded-xl font-semibold transition-all duration-300 ${
                         action === "revoke"
-                          ? "bg-gradient-to-r from-red-600 to-rose-600 border-transparent text-white shadow-[0_8px_20px_rgba(239,68,68,0.3)] scale-[1.02]"
-                          : "bg-white/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700/50 hover:border-red-400 dark:hover:border-rose-500 hover:shadow-lg hover:bg-white dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/30 scale-[1.02]"
+                          : "bg-white text-slate-700 border-2 border-slate-200 hover:border-red-300 hover:shadow-md"
                       }`}
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -384,13 +370,13 @@ export function AdminIssueModal({
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
                     <button
                       onClick={() => setAction("status")}
-                      className={`group relative overflow-hidden px-4 py-4 rounded-xl font-bold transition-all duration-300 border-2 ${
+                      className={`group relative overflow-hidden px-4 py-3.5 rounded-xl font-semibold transition-all duration-300 ${
                         action === "status"
-                          ? "bg-gradient-to-r from-emerald-600 to-teal-600 border-transparent text-white shadow-[0_8px_20px_rgba(16,185,129,0.3)] scale-[1.02]"
-                          : "bg-white/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700/50 hover:border-emerald-400 dark:hover:border-teal-500 hover:shadow-lg hover:bg-white dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-[1.02]"
+                          : "bg-white text-slate-700 border-2 border-slate-200 hover:border-emerald-300 hover:shadow-md"
                       }`}
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -403,10 +389,10 @@ export function AdminIssueModal({
                     </button>
                     <button
                       onClick={() => setAction("assign")}
-                      className={`group relative overflow-hidden px-4 py-4 rounded-xl font-bold transition-all duration-300 border-2 ${
+                      className={`group relative overflow-hidden px-4 py-3.5 rounded-xl font-semibold transition-all duration-300 ${
                         action === "assign"
-                          ? "bg-gradient-to-r from-blue-600 to-cyan-600 border-transparent text-white shadow-[0_8px_20px_rgba(59,130,246,0.3)] scale-[1.02]"
-                          : "bg-white/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700/50 hover:border-blue-400 dark:hover:border-cyan-500 hover:shadow-lg hover:bg-white dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/30 scale-[1.02]"
+                          : "bg-white text-slate-700 border-2 border-slate-200 hover:border-blue-300 hover:shadow-md"
                       }`}
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -419,10 +405,10 @@ export function AdminIssueModal({
                     </button>
                     <button
                       onClick={() => setAction("reject")}
-                      className={`group relative overflow-hidden px-4 py-4 rounded-xl font-bold transition-all duration-300 border-2 ${
+                      className={`group relative overflow-hidden px-4 py-3.5 rounded-xl font-semibold transition-all duration-300 ${
                         action === "reject"
-                          ? "bg-gradient-to-r from-red-600 to-rose-600 border-transparent text-white shadow-[0_8px_20px_rgba(239,68,68,0.3)] scale-[1.02]"
-                          : "bg-white/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700/50 hover:border-red-400 dark:hover:border-rose-500 hover:shadow-lg hover:bg-white dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/30 scale-[1.02]"
+                          : "bg-white text-slate-700 border-2 border-slate-200 hover:border-red-300 hover:shadow-md"
                       }`}
                     >
                       <div className="flex items-center justify-center gap-2">
@@ -438,24 +424,22 @@ export function AdminIssueModal({
 
                 <div className="space-y-4">
                   {action === "status" && (
-                    <div className="relative z-50 space-y-6 bg-slate-50/90 dark:bg-slate-800/40 backdrop-blur-xl p-6 rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-inner">
+                    <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                          <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
-                            <Zap
-                              size={16}
-                              className="text-emerald-600 dark:text-emerald-400"
-                            />
-                          </div>
+                          <Zap
+                            size={16}
+                            className="text-emerald-600 dark:text-emerald-400"
+                          />
                           New Status
                         </label>
-                        <div className="relative z-[60]">
+                        <div className="relative">
                           <button
                             type="button"
                             onClick={() =>
                               setStatusDropdownOpen(!statusDropdownOpen)
                             }
-                            className="w-full px-5 py-4 bg-white dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 hover:border-emerald-400 dark:hover:border-teal-500 transition-all font-medium text-slate-800 dark:text-slate-200 shadow-sm flex items-center justify-between group"
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-medium text-slate-800 dark:text-slate-200 shadow-sm hover:shadow-md flex items-center justify-between group"
                           >
                             <div className="flex items-center gap-3">
                               {React.createElement(
@@ -465,17 +449,15 @@ export function AdminIssueModal({
                                   className: statusStyles[newStatus]?.text,
                                 },
                               )}
-                              <span className="font-bold">
-                                {statusLabels[newStatus]}
-                              </span>
+                              <span>{statusLabels[newStatus]}</span>
                             </div>
                             <ChevronDown
                               size={20}
-                              className={`text-slate-400 transition-transform duration-300 ${statusDropdownOpen ? "rotate-180" : ""}`}
+                              className={`transition-transform duration-200 ${statusDropdownOpen ? "rotate-180" : ""}`}
                             />
                           </button>
                           {statusDropdownOpen && (
-                            <div className="absolute z-[70] w-full mt-2 bg-white dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700/50 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] max-h-64 overflow-y-auto">
+                            <div className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
                               {Object.entries(statusLabels).map(
                                 ([value, label]) => {
                                   const style = statusStyles[value];
@@ -488,26 +470,26 @@ export function AdminIssueModal({
                                         setNewStatus(value);
                                         setStatusDropdownOpen(false);
                                       }}
-                                      className={`w-full px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-4 ${
+                                      className={`w-full px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${
                                         newStatus === value
-                                          ? "bg-emerald-50/80 dark:bg-emerald-900/30"
+                                          ? "bg-emerald-50 dark:bg-emerald-900/20"
                                           : ""
-                                      } first:rounded-t-2xl last:rounded-b-2xl border-b border-slate-100 dark:border-slate-700/50 last:border-b-0`}
+                                      } first:rounded-t-xl last:rounded-b-xl border-b border-slate-100 dark:border-slate-700 last:border-b-0`}
                                     >
                                       <div
-                                        className={`w-9 h-9 rounded-xl flex items-center justify-center ${style.badge}`}
+                                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${style.badge}`}
                                       >
                                         <IconComponent
-                                          size={18}
+                                          size={16}
                                           className={style.text}
                                         />
                                       </div>
-                                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                                      <span className="font-medium text-slate-800 dark:text-slate-200">
                                         {label}
                                       </span>
                                       {newStatus === value && (
                                         <CheckCircle2
-                                          size={20}
+                                          size={18}
                                           className="ml-auto text-emerald-600 dark:text-emerald-400"
                                         />
                                       )}
@@ -521,18 +503,16 @@ export function AdminIssueModal({
                       </div>
                       <div>
                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                          <div className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                            <MessageSquare
-                              size={16}
-                              className="text-slate-600 dark:text-slate-400"
-                            />
-                          </div>
+                          <MessageSquare
+                            size={16}
+                            className="text-slate-600 dark:text-slate-400"
+                          />
                           Comment (Optional)
                         </label>
                         <textarea
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
-                          className="w-full px-5 py-4 bg-white dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:focus:ring-emerald-400 transition-all duration-300 resize-none shadow-sm hover:shadow-md text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
+                          className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:focus:ring-emerald-400 transition-all resize-none shadow-sm hover:shadow-md text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                           rows={3}
                           placeholder="Add a comment about this update..."
                         />
@@ -541,17 +521,17 @@ export function AdminIssueModal({
                   )}
 
                   {action === "assign" && (
-                    <div className="space-y-5 bg-slate-50/90 dark:bg-slate-800/40 backdrop-blur-xl p-8 rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-inner">
-                      <div className="bg-gradient-to-r from-blue-50/80 to-cyan-50/80 dark:from-slate-800/60 dark:to-slate-900/40 backdrop-blur-md border border-blue-200/50 dark:border-slate-600/50 rounded-2xl p-5 mb-6 shadow-sm">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl flex items-center justify-center shadow-md">
-                            <Sparkles size={20} className="text-white" />
+                    <div className="space-y-5">
+                      <div className="bg-gradient-to-r from-slate-50 to-slate-100 border-2 border-slate-300 rounded-xl p-4 mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-lg flex items-center justify-center shadow-md">
+                            <Sparkles size={18} className="text-white" />
                           </div>
                           <div>
-                            <p className="text-base font-black text-slate-900 dark:text-white mb-1 tracking-tight">
+                            <p className="text-sm font-bold text-slate-800">
                               Dual Assignment System
                             </p>
-                            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                            <p className="text-xs text-slate-600">
                               Assign ward officer, field officer, or both to
                               collaborate on this issue
                             </p>
@@ -559,13 +539,13 @@ export function AdminIssueModal({
                         </div>
                       </div>
 
-                      <div className="bg-gradient-to-br from-cyan-50/80 to-blue-50/80 dark:from-cyan-900/20 dark:to-blue-900/20 backdrop-blur-md rounded-3xl p-6 border border-cyan-200/50 dark:border-cyan-700/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-[0_4px_10px_rgba(6,182,212,0.3)]">
-                              <Shield size={18} className="text-white" />
+                      <div className="bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-xl p-4 border-2 border-cyan-200 dark:border-cyan-700">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
+                              <Shield size={16} className="text-white" />
                             </div>
-                            <h4 className="text-base font-black text-cyan-900 dark:text-cyan-300 uppercase tracking-widest">
+                            <h4 className="text-sm font-bold text-cyan-900 dark:text-cyan-300 uppercase tracking-wide">
                               Ward Officer
                             </h4>
                             <button
@@ -573,23 +553,23 @@ export function AdminIssueModal({
                               onClick={() =>
                                 setWardOfficerExpanded(!wardOfficerExpanded)
                               }
-                              className="ml-4 p-1.5 focus:outline-none hover:bg-cyan-200/50 dark:hover:bg-cyan-800/50 rounded-lg transition-colors"
+                              className="ml-auto p-1 hover:bg-cyan-100 dark:hover:bg-cyan-800/30 rounded-lg transition-colors"
                             >
                               {wardOfficerExpanded ? (
                                 <ChevronUp
-                                  size={20}
+                                  size={18}
                                   className="text-cyan-700 dark:text-cyan-400"
                                 />
                               ) : (
                                 <ChevronDown
-                                  size={20}
+                                  size={18}
                                   className="text-cyan-700 dark:text-cyan-400"
                                 />
                               )}
                             </button>
                           </div>
                         </div>
-                        <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-400 mb-5 leading-relaxed">
+                        <p className="text-xs text-cyan-800 dark:text-cyan-400 mb-3 leading-relaxed">
                           Oversees administrative duties and coordinates field
                           operations within designated ward areas.
                         </p>
@@ -679,13 +659,13 @@ export function AdminIssueModal({
                         )}
                       </div>
 
-                      <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/80 dark:from-emerald-900/20 dark:to-teal-900/20 backdrop-blur-md rounded-3xl p-6 border border-emerald-200/50 dark:border-emerald-700/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-[0_4px_10px_rgba(16,185,129,0.3)]">
-                              <Zap size={18} className="text-white" />
+                      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl p-4 border-2 border-emerald-200 dark:border-emerald-700">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md">
+                              <Zap size={16} className="text-white" />
                             </div>
-                            <h4 className="text-base font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-widest">
+                            <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wide">
                               Field Officer
                             </h4>
                             <button
@@ -693,33 +673,33 @@ export function AdminIssueModal({
                               onClick={() =>
                                 setFieldOfficerExpanded(!fieldOfficerExpanded)
                               }
-                              className="ml-4 p-1.5 focus:outline-none hover:bg-emerald-200/50 dark:hover:bg-emerald-800/50 rounded-lg transition-colors"
+                              className="ml-auto p-1 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 rounded-lg transition-colors"
                             >
                               {fieldOfficerExpanded ? (
                                 <ChevronUp
-                                  size={20}
+                                  size={18}
                                   className="text-emerald-700 dark:text-emerald-400"
                                 />
                               ) : (
                                 <ChevronDown
-                                  size={20}
+                                  size={18}
                                   className="text-emerald-700 dark:text-emerald-400"
                                 />
                               )}
                             </button>
                           </div>
                         </div>
-                        <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 mb-5 leading-relaxed">
+                        <p className="text-xs text-emerald-800 dark:text-emerald-400 mb-3 leading-relaxed">
                           Works on-ground to resolve issues directly, conducting
                           inspections and implementing solutions.
                         </p>
 
                         {fieldOfficerExpanded && (
                           <>
-                            <div className="mb-4 relative z-0">
+                            <div className="mb-3 relative">
                               <Search
                                 size={18}
-                                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
                               />
                               <input
                                 type="text"
@@ -728,19 +708,19 @@ export function AdminIssueModal({
                                   setFieldOfficerSearch(e.target.value)
                                 }
                                 placeholder="Search by name or email..."
-                                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 hover:border-emerald-500 transition-all text-sm font-medium text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
+                                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                               />
                             </div>
                             {fieldOfficerId && (
                               <button
                                 type="button"
                                 onClick={() => setFieldOfficerId("")}
-                                className="text-xs text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-bold tracking-wide uppercase flex ml-auto mb-3"
+                                className="text-xs text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-medium underline mb-2"
                               >
                                 Clear Selection
                               </button>
                             )}
-                            <div className="grid gap-3 max-h-64 overflow-y-auto pr-2 hide-scrollbar">
+                            <div className="grid gap-2 max-h-64 overflow-y-auto">
                               {filteredFieldOfficers.length > 0 ? (
                                 filteredFieldOfficers.map((officer) => (
                                   <button
@@ -749,40 +729,40 @@ export function AdminIssueModal({
                                     onClick={() =>
                                       setFieldOfficerId(officer.id)
                                     }
-                                    className={`group relative overflow-hidden p-5 rounded-2xl transition-all duration-300 text-left border ${
+                                    className={`group relative overflow-hidden p-4 rounded-xl transition-all duration-300 text-left ${
                                       fieldOfficerId === officer.id
-                                        ? "bg-gradient-to-r from-emerald-600 to-teal-600 border-transparent text-white shadow-[0_8px_20px_rgba(16,185,129,0.3)] scale-[1.02]"
-                                        : "bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-white/50 dark:border-slate-700/50 hover:border-emerald-400 dark:hover:border-teal-500 shadow-sm"
+                                        ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-[1.02]"
+                                        : "bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 shadow-sm hover:shadow-md"
                                     }`}
                                   >
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
                                       <div
-                                        className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md ${
+                                        className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-md ${
                                           fieldOfficerId === officer.id
                                             ? "bg-white/20"
                                             : "bg-gradient-to-br from-emerald-500 to-teal-600"
                                         }`}
                                       >
                                         <User
-                                          size={20}
+                                          size={18}
                                           className="text-white"
                                         />
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p
-                                          className={`font-black text-base tracking-tight mb-0.5 ${fieldOfficerId === officer.id ? "text-white" : "text-slate-900 dark:text-slate-100"}`}
+                                          className={`font-bold text-sm ${fieldOfficerId === officer.id ? "text-white" : "text-slate-800 dark:text-slate-200"}`}
                                         >
                                           {officer.full_name}
                                         </p>
                                         <p
-                                          className={`text-xs font-semibold ${fieldOfficerId === officer.id ? "text-emerald-100" : "text-slate-600 dark:text-slate-400"} truncate`}
+                                          className={`text-xs ${fieldOfficerId === officer.id ? "text-emerald-100" : "text-slate-600 dark:text-slate-400"} truncate`}
                                         >
                                           {officer.email}
                                         </p>
                                       </div>
                                       {fieldOfficerId === officer.id && (
                                         <CheckCircle2
-                                          size={24}
+                                          size={20}
                                           className="text-white flex-shrink-0"
                                         />
                                       )}
@@ -790,7 +770,7 @@ export function AdminIssueModal({
                                   </button>
                                 ))
                               ) : (
-                                <div className="text-center py-6 text-emerald-700 dark:text-emerald-400 font-bold text-sm bg-white/50 dark:bg-slate-800/50 rounded-2xl backdrop-blur-sm border border-emerald-100 dark:border-emerald-800/30">
+                                <div className="text-center py-4 text-emerald-700 dark:text-emerald-400 text-sm">
                                   {fieldOfficerSearch
                                     ? "No officers match your search"
                                     : "No field officers available"}
@@ -802,21 +782,19 @@ export function AdminIssueModal({
                       </div>
 
                       {(wardOfficerId || fieldOfficerId) && (
-                        <div className="bg-gradient-to-r from-blue-50/90 to-cyan-50/90 dark:from-blue-900/40 dark:to-cyan-900/30 backdrop-blur-xl border border-blue-200/50 dark:border-blue-700/50 rounded-2xl p-5 shadow-lg animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                              <AlertTriangle size={20} className="text-white" />
+                        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+                              <AlertTriangle size={18} className="text-white" />
                             </div>
                             <div className="flex-1">
-                              <p className="text-base font-black text-blue-900 dark:text-blue-100 mb-2">
+                              <p className="text-sm font-bold text-blue-900 mb-2">
                                 Assignment Confirmation
                               </p>
                               {wardOfficerId && fieldOfficerId ? (
-                                <div className="space-y-3">
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 leading-relaxed">
-                                    <strong className="font-extrabold text-blue-900 dark:text-white block mb-0.5">
-                                      Ward Officer:
-                                    </strong>{" "}
+                                <div className="space-y-2">
+                                  <p className="text-xs text-blue-800 leading-relaxed">
+                                    <strong>Ward Officer:</strong>{" "}
                                     {
                                       wardOfficers.find(
                                         (o) => o.id === wardOfficerId,
@@ -824,10 +802,8 @@ export function AdminIssueModal({
                                     }{" "}
                                     will coordinate administrative tasks.
                                   </p>
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 leading-relaxed">
-                                    <strong className="font-extrabold text-blue-900 dark:text-white block mb-0.5">
-                                      Field Officer:
-                                    </strong>{" "}
+                                  <p className="text-xs text-blue-800 leading-relaxed">
+                                    <strong>Field Officer:</strong>{" "}
                                     {
                                       fieldOfficers.find(
                                         (o) => o.id === fieldOfficerId,
@@ -835,50 +811,37 @@ export function AdminIssueModal({
                                     }{" "}
                                     will handle on-ground resolution.
                                   </p>
-                                  <div className="mt-4 inline-block px-3 py-1 bg-cyan-100 dark:bg-cyan-900/50 rounded-lg">
-                                    <p className="text-xs text-cyan-800 dark:text-cyan-300 font-bold uppercase tracking-wide">
-                                      Status will change to "In Progress"
-                                    </p>
-                                  </div>
+                                  <p className="text-xs text-blue-700 mt-2 font-medium">
+                                    Both officers will collaborate on this
+                                    issue. Status will change to "In Progress".
+                                  </p>
                                 </div>
                               ) : wardOfficerId ? (
-                                <div className="space-y-3">
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 leading-relaxed">
-                                    <strong className="font-extrabold text-blue-900 dark:text-white">
-                                      {
-                                        wardOfficers.find(
-                                          (o) => o.id === wardOfficerId,
-                                        )?.full_name
-                                      }
-                                    </strong>{" "}
-                                    (Ward Officer) will be assigned to
-                                    coordinate this issue.
-                                  </p>
-                                  <div className="mt-4 inline-block px-3 py-1 bg-cyan-100 dark:bg-cyan-900/50 rounded-lg">
-                                    <p className="text-xs text-cyan-800 dark:text-cyan-300 font-bold uppercase tracking-wide">
-                                      Status will change to "In Progress"
-                                    </p>
-                                  </div>
-                                </div>
+                                <p className="text-xs text-blue-800 leading-relaxed">
+                                  <strong>
+                                    {
+                                      wardOfficers.find(
+                                        (o) => o.id === wardOfficerId,
+                                      )?.full_name
+                                    }
+                                  </strong>{" "}
+                                  (Ward Officer) will be assigned to coordinate
+                                  this issue. Status will change to "In
+                                  Progress".
+                                </p>
                               ) : (
-                                <div className="space-y-3">
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 leading-relaxed">
-                                    <strong className="font-extrabold text-blue-900 dark:text-white">
-                                      {
-                                        fieldOfficers.find(
-                                          (o) => o.id === fieldOfficerId,
-                                        )?.full_name
-                                      }
-                                    </strong>{" "}
-                                    (Field Officer) will be assigned to resolve
-                                    this issue on-ground.
-                                  </p>
-                                  <div className="mt-4 inline-block px-3 py-1 bg-cyan-100 dark:bg-cyan-900/50 rounded-lg">
-                                    <p className="text-xs text-cyan-800 dark:text-cyan-300 font-bold uppercase tracking-wide">
-                                      Status will change to "In Progress"
-                                    </p>
-                                  </div>
-                                </div>
+                                <p className="text-xs text-blue-800 leading-relaxed">
+                                  <strong>
+                                    {
+                                      fieldOfficers.find(
+                                        (o) => o.id === fieldOfficerId,
+                                      )?.full_name
+                                    }
+                                  </strong>{" "}
+                                  (Field Officer) will be assigned to resolve
+                                  this issue on-ground. Status will change to
+                                  "In Progress".
+                                </p>
                               )}
                             </div>
                           </div>
@@ -888,15 +851,13 @@ export function AdminIssueModal({
                   )}
 
                   {action === "reject" && (
-                    <div className="space-y-6 bg-red-50/50 dark:bg-red-950/20 backdrop-blur-xl p-6 rounded-3xl border border-red-200/50 dark:border-red-900/30 shadow-[inset_0_2px_20px_rgba(239,68,68,0.05)] text-left">
+                    <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                          <div className="p-1.5 bg-red-100 dark:bg-red-900/50 rounded-lg">
-                            <XCircle
-                              size={16}
-                              className="text-red-600 dark:text-red-400"
-                            />
-                          </div>
+                          <XCircle
+                            size={16}
+                            className="text-red-600 dark:text-red-400"
+                          />
                           Select Rejection Category{" "}
                           <span className="text-red-500 ml-1">*</span>
                         </label>
@@ -1183,20 +1144,15 @@ export function AdminIssueModal({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                          <div className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                            <MessageSquare
-                              size={16}
-                              className="text-slate-600 dark:text-slate-400"
-                            />
-                          </div>
+                        <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                          <MessageSquare size={16} className="text-slate-600" />
                           Reason for Reassignment{" "}
                           <span className="text-red-500 ml-1">*</span>
                         </label>
                         <textarea
                           value={reassignReason}
                           onChange={(e) => setReassignReason(e.target.value)}
-                          className="w-full px-5 py-4 bg-white dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-cyan-500 transition-all resize-none shadow-sm hover:shadow-md text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
+                          className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none shadow-sm hover:shadow-md"
                           rows={4}
                           placeholder="e.g., Workload balancing, Area expertise, Officer availability..."
                           required
@@ -1204,18 +1160,18 @@ export function AdminIssueModal({
                       </div>
 
                       {assignTo && assignTo !== issue.assigned_to && (
-                        <div className="bg-gradient-to-r from-blue-50/90 to-cyan-50/90 dark:from-blue-900/40 dark:to-cyan-900/30 backdrop-blur-xl border border-blue-200/50 dark:border-blue-700/50 rounded-2xl p-5 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                              <AlertTriangle size={20} className="text-white" />
+                        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+                              <AlertTriangle size={18} className="text-white" />
                             </div>
                             <div>
-                              <p className="text-base font-black text-blue-900 dark:text-blue-100 mb-1">
+                              <p className="text-sm font-bold text-blue-900 mb-1">
                                 Reassignment Confirmation
                               </p>
-                              <p className="text-sm font-medium text-blue-800 dark:text-blue-200 leading-relaxed">
+                              <p className="text-xs text-blue-800 leading-relaxed">
                                 Both{" "}
-                                <strong className="font-extrabold text-blue-950 dark:text-white">
+                                <strong>
                                   {
                                     wardOfficers
                                       .concat(fieldOfficers)
@@ -1224,7 +1180,7 @@ export function AdminIssueModal({
                                   }
                                 </strong>{" "}
                                 and{" "}
-                                <strong className="font-extrabold text-blue-950 dark:text-white">
+                                <strong>
                                   {
                                     [...wardOfficers, ...fieldOfficers].find(
                                       (o) => o.id === assignTo,
@@ -1242,51 +1198,42 @@ export function AdminIssueModal({
                   )}
 
                   {action === "revoke" && (
-                    <div className="space-y-6 bg-red-50/50 dark:bg-red-950/20 backdrop-blur-xl p-6 rounded-3xl border border-red-200/50 dark:border-red-900/30 shadow-[inset_0_2px_20px_rgba(239,68,68,0.05)] text-left">
-                      <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/80 dark:from-amber-900/40 dark:to-orange-900/30 border border-amber-200/50 dark:border-amber-700/50 rounded-2xl p-5 shadow-sm backdrop-blur-md">
-                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                    <div className="space-y-4">
+                      <div className="bg-gradient-to-r from-amber-100 to-orange-100 border-2 border-amber-300 rounded-xl p-4 shadow-sm">
+                        <p className="text-sm text-amber-900 flex items-start gap-2">
                           <AlertTriangle
-                            size={20}
-                            className="flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400"
+                            size={18}
+                            className="flex-shrink-0 mt-0.5"
                           />
                           <span>
-                            <strong className="font-black text-amber-950 dark:text-amber-100">
-                              Warning:
-                            </strong>{" "}
-                            This will unassign the issue from{" "}
-                            <strong className="font-bold">
-                              {wardOfficers
-                                .concat(fieldOfficers)
-                                .find((o) => o.id === issue.assigned_to)
-                                ?.full_name || "the current officer"}
-                            </strong>
+                            <strong>Warning:</strong> This will unassign the
+                            issue from{" "}
+                            {wardOfficers
+                              .concat(fieldOfficers)
+                              .find((o) => o.id === issue.assigned_to)
+                              ?.full_name || "the current officer"}
                             . The issue will return to unassigned status.
                           </span>
                         </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                          <div className="p-1.5 bg-red-100 dark:bg-red-900/50 rounded-lg">
-                            <XCircle
-                              size={16}
-                              className="text-red-600 dark:text-red-400"
-                            />
-                          </div>
+                        <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                          <XCircle size={16} className="text-red-600" />
                           Reason for Revoking Assignment{" "}
                           <span className="text-red-500 ml-1">*</span>
                         </label>
                         <textarea
                           value={revokeReason}
                           onChange={(e) => setRevokeReason(e.target.value)}
-                          className="w-full px-5 py-4 bg-white dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none shadow-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
+                          className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all resize-none shadow-sm hover:shadow-md"
                           rows={4}
                           placeholder="Provide a clear reason for revoking this assignment..."
                           required
                         />
-                        <div className="mt-4 p-4 bg-red-50/80 dark:bg-red-900/30 border border-red-100/50 dark:border-red-800/50 rounded-xl backdrop-blur-sm">
-                          <p className="text-sm font-medium text-red-800 dark:text-red-300 flex items-start gap-3">
+                        <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-lg">
+                          <p className="text-xs text-red-800 flex items-start gap-2">
                             <AlertTriangle
-                              size={16}
+                              size={14}
                               className="mt-0.5 flex-shrink-0"
                             />
                             <span>
@@ -1300,19 +1247,14 @@ export function AdminIssueModal({
                   )}
 
                   {success && (
-                    <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-900/40 dark:to-teal-900/30 backdrop-blur-md border border-emerald-200/50 dark:border-emerald-700/50 rounded-2xl p-5 shadow-lg animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                          <CheckCircle2 className="text-white" size={24} />
+                    <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-md">
+                          <CheckCircle2 className="text-white" size={20} />
                         </div>
-                        <div>
-                          <p className="text-base font-black text-emerald-900 dark:text-emerald-100 mb-0.5">
-                            Action Successful
-                          </p>
-                          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-                            {success}
-                          </p>
-                        </div>
+                        <p className="text-emerald-800 font-semibold">
+                          {success}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1320,33 +1262,53 @@ export function AdminIssueModal({
                   <button
                     onClick={handleUpdate}
                     disabled={
-                      (action === 'status' && !comment.trim()) ||
-                      (action === 'reject' && rejectReason.length < 30) ||
-                      (action === 'assign' && !wardOfficerId && !fieldOfficerId) ||
-                      (action === 'reassign' && (!assignTo || assignTo === issue.assigned_to)) ||
-                      (action === 'revoke' && !revokeReason.trim())
+                      (action === "status" && !comment.trim()) ||
+                      (action === "reject" && rejectReason.length < 30) ||
+                      (action === "assign" && !wardOfficerId && !fieldOfficerId)
                     }
-                    className={`w-full group relative overflow-hidden px-8 py-5 rounded-[1.5rem] font-black text-lg transition-all duration-500 shadow-xl transform ${
-                      (action === 'status' && !comment.trim()) ||
-                      (action === 'reject' && rejectReason.length < 30) ||
-                      (action === 'assign' && !wardOfficerId && !fieldOfficerId) ||
-                      (action === 'reassign' && (!assignTo || assignTo === issue.assigned_to)) ||
-                      (action === 'revoke' && !revokeReason.trim())
-                        ? 'bg-slate-100/50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 cursor-not-allowed border-2 border-slate-300/50 dark:border-slate-700/50 backdrop-blur-md'
-                        : action === 'reject' || action === 'revoke'
-                        ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-[0_15px_40px_-5px_rgba(239,68,68,0.4)] text-white hover:scale-[1.02] active:scale-[0.98]'
-                        : action === 'reassign' || action === 'assign'
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_15px_40px_-5px_rgba(59,130,246,0.4)] text-white hover:scale-[1.02] active:scale-[0.98]'
-                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-[0_15px_40px_-5px_rgba(16,185,129,0.4)] text-white hover:scale-[1.02] active:scale-[0.98]'
+                    className={`w-full group relative overflow-hidden px-6 py-4 rounded-xl font-bold transition-all duration-300 shadow-lg transform ${
+                      (action === "status" && !comment.trim()) ||
+                      (action === "reject" && rejectReason.length < 30) ||
+                      (action === "assign" && !wardOfficerId && !fieldOfficerId)
+                        ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                        : action === "reject" || action === "revoke"
+                          ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-red-500/30 text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                          : action === "reassign"
+                            ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-blue-500/30 text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                            : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-500/30 text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
                     }`}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]"></div>
-                    <div className="flex items-center justify-center gap-3 relative z-10">
-                      {action === 'status' && <><Save size={24} className="group-hover:-translate-y-1 transition-transform" /><span className="drop-shadow-sm">Update Status Details</span></>}
-                      {action === 'assign' && <><UserPlus size={24} className="group-hover:scale-110 transition-transform" /><span className="drop-shadow-sm">Assign Officers</span></>}
-                      {action === 'reject' && <><XCircle size={24} className="group-hover:rotate-90 transition-transform duration-500" /><span className="drop-shadow-sm">Confirm Rejection</span></>}
-                      {action === 'reassign' && <><UserPlus size={24} className="group-hover:scale-110 transition-transform" /><span className="drop-shadow-sm">Confirm Reassignment</span></>}
-                      {action === 'revoke' && <><XCircle size={24} className="group-hover:rotate-90 transition-transform duration-500" /><span className="drop-shadow-sm">Revoke Assignment</span></>}
+                    <div className="flex items-center justify-center gap-3">
+                      {action === "status" && (
+                        <>
+                          <Save size={22} />
+                          Update Status
+                        </>
+                      )}
+                      {action === "assign" && (
+                        <>
+                          <UserPlus size={22} />
+                          Assign Officer
+                        </>
+                      )}
+                      {action === "reject" && (
+                        <>
+                          <XCircle size={22} />
+                          Reject Issue
+                        </>
+                      )}
+                      {action === "reassign" && (
+                        <>
+                          <UserPlus size={22} />
+                          Confirm Reassignment
+                        </>
+                      )}
+                      {action === "revoke" && (
+                        <>
+                          <XCircle size={22} />
+                          Revoke Assignment
+                        </>
+                      )}
                     </div>
                   </button>
                 </div>
@@ -1354,8 +1316,7 @@ export function AdminIssueModal({
             </div>
 
             {issue.photo_url && (
-              <div className="rounded-3xl overflow-hidden shadow-lg border border-slate-200/50 dark:border-slate-700/50 relative group/img">
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+              <div className="rounded-2xl overflow-hidden shadow-lg border-2 border-slate-200">
                 <img
                   src={issue.photo_url}
                   alt={issue.title}
@@ -1364,47 +1325,42 @@ export function AdminIssueModal({
               </div>
             )}
 
-            <div className="bg-white dark:bg-slate-800/60 backdrop-blur-md rounded-3xl border border-slate-200 shadow-md dark:border-slate-700/50 p-8 shadow-lg">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-3">
-                <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                  <MessageSquare
-                    size={20}
-                    className="text-slate-700 dark:text-slate-300"
-                  />
-                </div>
+            <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-2xl border-2 border-slate-200 p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <MessageSquare size={20} className="text-slate-600" />
                 Description
               </h3>
-              <p className="text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
+              <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">
                 {issue.description}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-white/50 dark:border-slate-700/50 p-5 shadow-md hover:shadow-lg transition-shadow group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                    <Calendar size={20} className="text-white" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl border-2 border-slate-200 p-4 shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center shadow-md">
+                    <Calendar size={18} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Reported
                     </p>
-                    <p className="text-sm font-black text-slate-900 dark:text-white">
+                    <p className="text-sm font-bold text-slate-800">
                       {new Date(issue.created_at).toLocaleString()}
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-white/50 dark:border-slate-700/50 p-5 shadow-md hover:shadow-lg transition-shadow group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                    <Clock size={20} className="text-white" />
+              <div className="bg-white rounded-xl border-2 border-slate-200 p-4 shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center shadow-md">
+                    <Clock size={18} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Last Updated
                     </p>
-                    <p className="text-sm font-black text-slate-900 dark:text-white">
+                    <p className="text-sm font-bold text-slate-800">
                       {new Date(issue.updated_at).toLocaleString()}
                     </p>
                   </div>
@@ -1413,16 +1369,16 @@ export function AdminIssueModal({
             </div>
 
             {issue.address && (
-              <div className="bg-gradient-to-br from-blue-50/80 to-cyan-50/80 dark:from-blue-900/40 dark:to-cyan-900/20 backdrop-blur-md rounded-3xl border border-blue-200/50 dark:border-blue-700/50 p-6 shadow-lg">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                    <MapPinned size={20} className="text-white" />
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-2 border-blue-200 p-5 shadow-lg">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+                    <MapPinned size={18} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest mb-1.5">
+                    <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">
                       Location
                     </p>
-                    <p className="text-base font-bold text-blue-950 dark:text-blue-100">
+                    <p className="text-sm font-semibold text-blue-900">
                       {issue.address}
                     </p>
                   </div>
@@ -1431,19 +1387,19 @@ export function AdminIssueModal({
             )}
 
             {issue.reporter && (
-              <div className="bg-white dark:bg-slate-800/60 backdrop-blur-md rounded-3xl border border-slate-200 shadow-md dark:border-slate-700/50 p-6 shadow-md">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-slate-600 to-slate-700 dark:from-slate-600 dark:to-slate-700 rounded-2xl flex items-center justify-center shadow-md">
-                    <User size={24} className="text-white" />
+              <div className="bg-white rounded-xl border-2 border-slate-200 p-5 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center shadow-md">
+                    <User size={20} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Reported By
                     </p>
-                    <p className="text-lg font-black text-slate-900 dark:text-white">
+                    <p className="text-sm font-bold text-slate-800">
                       {issue.reporter.full_name}
                     </p>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {issue.reporter.email}
                     </p>
                   </div>
@@ -1452,19 +1408,19 @@ export function AdminIssueModal({
             )}
 
             {issue.assigned_to && issue.assignee && (
-              <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/80 dark:from-emerald-900/40 dark:to-teal-900/20 backdrop-blur-md rounded-3xl border border-emerald-200/50 dark:border-emerald-700/50 p-6 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-2xl flex items-center justify-center shadow-md">
-                    <UserPlus size={24} className="text-white" />
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border-2 border-emerald-200 p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
+                    <UserPlus size={20} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-1.5">
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-1">
                       Assigned Officer
                     </p>
-                    <p className="text-lg font-black text-emerald-950 dark:text-emerald-100">
+                    <p className="text-sm font-bold text-emerald-900">
                       {issue.assignee.full_name}
                     </p>
-                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300 capitalize">
+                    <p className="text-xs text-emerald-700 capitalize">
                       {issue.assignee.role.replace("_", " ")}
                     </p>
                   </div>
@@ -1473,16 +1429,16 @@ export function AdminIssueModal({
             )}
 
             {issue.rejection_reason && (
-              <div className="bg-gradient-to-br from-red-50/80 to-rose-50/80 dark:from-red-900/40 dark:to-rose-900/20 backdrop-blur-md rounded-3xl border border-red-200/50 dark:border-red-700/50 p-6 shadow-lg">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                    <XCircle size={20} className="text-white" />
+              <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-2xl border-2 border-red-200 p-5 shadow-lg">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
+                    <XCircle size={18} className="text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xs font-black text-red-800 dark:text-red-400 mb-2 uppercase tracking-widest">
+                    <h3 className="text-sm font-bold text-red-800 mb-2 uppercase tracking-wide">
                       Rejection Reason
                     </h3>
-                    <p className="text-base text-red-900 dark:text-red-100 font-medium leading-relaxed">
+                    <p className="text-sm text-red-700 leading-relaxed">
                       {issue.rejection_reason}
                     </p>
                   </div>
@@ -1492,15 +1448,13 @@ export function AdminIssueModal({
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white/70 dark:bg-[#0f172a]/70 border-t border-slate-200/50 dark:border-slate-800/50 p-6 backdrop-blur-3xl z-40 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.1)] dark:shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.4)] relative">
-          <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent"></div>
+        <div className="sticky bottom-0 bg-gradient-to-t from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-slate-200 dark:border-slate-700 p-5 backdrop-blur-sm">
           <button
             onClick={onClose}
-            className="w-full px-6 py-5 bg-white dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-black tracking-widest rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-0.5 flex items-center justify-center gap-3 uppercase text-sm border-2 border-slate-200/50 dark:border-slate-700/50 group relative overflow-hidden active:translate-y-0"
+            className="w-full px-6 py-3.5 bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800 text-white font-bold rounded-xl hover:from-slate-700 hover:to-slate-800 dark:hover:from-slate-800 dark:hover:to-slate-900 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
           >
-            <div className="absolute inset-0 bg-slate-100/30 dark:bg-slate-700/30 -translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-in-out z-0"></div>
-            <X size={20} className="group-hover:rotate-90 transition-transform duration-500 text-slate-400 dark:text-slate-500 group-hover:text-red-500 relative z-10" />
-            <span className="relative z-10">Close Action Window</span>
+            <X size={20} />
+            Close
           </button>
         </div>
       </div>

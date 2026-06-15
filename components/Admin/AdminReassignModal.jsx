@@ -22,10 +22,10 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
 
   if (!issue) return null;
 
-  const currentOfficer = officers.find((o) => o.id === issue.assignedTo);
+  const currentOfficer = officers.find((o) => o.id === issue.assigned_to);
 
   const availableOfficers = officers.filter((o) => {
-    if (o.id === issue.assignedTo) return false;
+    if (o.id === issue.assigned_to) return false;
     if (currentOfficer && o.role !== currentOfficer.role) return false;
     if (roleFilter !== "all" && o.role !== roleFilter) return false;
     if (
@@ -50,13 +50,13 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
   const selectedOfficerProfile = officers.find((o) => o.id === selectedOfficer);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-slate-900/90 via-slate-900/80 to-slate-800/90 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-gradient-to-br from-slate-900/90 via-slate-900/80 to-slate-800/90 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600 dark:from-blue-700 dark:via-cyan-700 dark:to-blue-700 text-white p-6 bg-opacity-95 z-10 shadow-xl">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600 dark:from-blue-700 dark:via-cyan-700 dark:to-blue-700 text-white p-6 backdrop-blur-md bg-opacity-95 z-10 shadow-xl">
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-3xl font-black flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-xl">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                   <UserCheck size={32} />
                 </div>
                 Reassign Issue
@@ -67,7 +67,7 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+              className="p-2 hover:bg-white/20 rounded-xl transition-colors backdrop-blur-sm"
               aria-label="Close modal"
             >
               <X size={24} />
@@ -159,7 +159,7 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
                       <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2 mt-1">
                         {currentOfficer.role === "unit_officer" ? (
                           <>
-                            <Shield size={14} /> Unit Officer
+                            <Shield size={14} /> Ward Officer
                           </>
                         ) : (
                           <>
@@ -278,7 +278,7 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
                           >
                             {officer.role === "unit_officer" ? (
                               <>
-                                <Shield size={14} /> Unit Officer
+                                <Shield size={14} /> Ward Officer
                               </>
                             ) : (
                               <>
@@ -418,7 +418,7 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-gradient-to-t from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-slate-200 dark:border-slate-800 p-6 bg-opacity-95">
+        <div className="sticky bottom-0 bg-gradient-to-t from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-t-2 border-slate-200 dark:border-slate-800 p-6 backdrop-blur-md bg-opacity-95">
           <div className="flex gap-4">
             <button
               onClick={handleReassign}

@@ -32,7 +32,7 @@ export function AdminMessageModal({ officer, issues, onClose, onSend }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 flex justify-between items-start rounded-t-xl z-10">
           <div>
@@ -100,9 +100,9 @@ export function AdminMessageModal({ officer, issues, onClose, onSend }) {
                 Reference Specific Issues (Optional)
               </label>
               <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                {issues.map((issue) => (
+                {issues.map((issue, index) => (
                   <label
-                    key={issue.id}
+                    key={index}
                     className="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
                   >
                     <input
@@ -118,14 +118,14 @@ export function AdminMessageModal({ officer, issues, onClose, onSend }) {
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            issue.severity === "high"
+                            issue.priority === "high"
                               ? "bg-red-100 text-red-700"
-                              : issue.severity === "medium"
+                              : issue.priority === "medium"
                                 ? "bg-orange-100 text-orange-700"
                                 : "bg-gray-100 text-gray-700"
                           }`}
                         >
-                          {issue.severity.toUpperCase()}
+                          {issue.priority.toUpperCase()}
                         </span>
                       </div>
                       <p className="font-medium text-gray-800 text-sm">
