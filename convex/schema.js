@@ -370,7 +370,38 @@ export default defineSchema({
 
     possibleDuplicateIds: v.array(v.id("issues")),
 
-    escalatedToAdmin: v.boolean(),
+    escalatedToAdmin: v.optional(v.boolean()),
+
+    escalation: v.optional(
+      v.object({
+        category: v.union(
+          v.literal("sla_breach"),
+          v.literal("resource_shortage"),
+          v.literal("technical_complexity"),
+          v.literal("public_safety_risk"),
+          v.literal("legal_or_regulatory"),
+          v.literal("citizen_escalation"),
+          v.literal("repeat_failure"),
+          v.literal("cross_department_dependency"),
+          v.literal("budget_approval_required"),
+          v.literal("emergency_response"),
+          v.literal("other")
+        ),
+        priority: v.union(
+          v.literal("medium"),
+          v.literal("high"),
+          v.literal("critical")
+        ),
+        reason: v.string(),
+        comments: v.optional(v.string()),
+        escalatedBy: v.id("users"),
+        escalatedAt: v.number(),
+        resolved: v.optional(v.boolean()),
+        resolvedAt: v.optional(v.number()),
+        resolutionNote: v.optional(v.string())
+      })
+    ),
+
 
     slaCategory: v.string(),
     slaDeadline: v.union(v.number(), v.null()),

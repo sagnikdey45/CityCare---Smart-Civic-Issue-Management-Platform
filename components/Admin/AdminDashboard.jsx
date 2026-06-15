@@ -364,6 +364,18 @@ function OfficerIssueCard({ issue, onView, onReassign }) {
           {issue.issueCode || issue.ticket_id}
         </code>
         <StatusBadge status={issue.status} />
+        {issue.status === "escalated" && issue.escalation && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-black text-rose-700 dark:text-rose-300 bg-rose-50/50 dark:bg-rose-950/20 px-2 py-0.5 border border-rose-200 dark:border-rose-900/50 rounded capitalize shadow-sm">
+            <span>🚨 Escalated:</span>
+            <span className="opacity-80">
+              {issue.escalation.category ? issue.escalation.category.replace(/_/g, " ") : ""}
+            </span>
+            <span className={`text-[9px] uppercase px-1.5 py-0.2 bg-rose-500 text-white rounded font-extrabold ${issue.escalation.priority === "critical" ? "animate-pulse" : ""}`}>
+              {issue.escalation.priority}
+            </span>
+          </span>
+        )}
+
         {(issue.priority || issue.severity) && (
           <SeverityBadge severity={issue.priority || issue.severity} />
         )}
