@@ -1095,6 +1095,11 @@ export const adminEscalateIssue = mutation({
       v.literal("cross_department_dependency"),
       v.literal("budget_approval_required"),
       v.literal("emergency_response"),
+      v.literal("officer_non_responsiveness"),
+      v.literal("technical_dependency"),
+      v.literal("third_party_dependency"),
+      v.literal("environmental_risk"),
+      v.literal("administrative_approval_pending"),
       v.literal("other")
     ),
     priority: v.union(
@@ -1126,6 +1131,8 @@ export const adminEscalateIssue = mutation({
         escalatedBy: args.escalatedBy,
         escalatedAt: now,
         resolved: false,
+        adminReviewStatus: "pending",
+        escalationCount: (issue.escalation?.escalationCount || 0) + 1,
       },
     });
 
@@ -1140,6 +1147,11 @@ export const adminEscalateIssue = mutation({
       cross_department_dependency: "Cross Department Dependency",
       budget_approval_required: "Budget Approval Required",
       emergency_response: "Emergency Response",
+      officer_non_responsiveness: "Officer Non-Responsiveness",
+      technical_dependency: "Technical Dependency",
+      third_party_dependency: "Third Party Dependency",
+      environmental_risk: "Environmental Risk",
+      administrative_approval_pending: "Administrative Approval Pending",
       other: "Other",
     };
 

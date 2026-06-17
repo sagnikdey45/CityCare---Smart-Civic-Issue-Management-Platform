@@ -37,6 +37,7 @@ import { AdminMessageModal } from "./AdminMessageModal";
 import { AdminReassignModal } from "./AdminReassignModal";
 import { MessagesCenter } from "../MessageCenter";
 import { ModeToggle } from "../ModeToggle";
+import SLAMonitoringDashboard from "./SLAMonitoringDashboard";
 // import SLAMonitoringDashboard from './SLAMonitoringDashboard';
 // import SLAAnalyticsDashboard from './SLAAnalyticsDashboard';
 // import ComprehensiveAuditLog from './ComprehensiveAuditLog';
@@ -368,9 +369,13 @@ function OfficerIssueCard({ issue, onView, onReassign }) {
           <span className="inline-flex items-center gap-1.5 text-xs font-black text-rose-700 dark:text-rose-300 bg-rose-50/50 dark:bg-rose-950/20 px-2 py-0.5 border border-rose-200 dark:border-rose-900/50 rounded capitalize shadow-sm">
             <span>🚨 Escalated:</span>
             <span className="opacity-80">
-              {issue.escalation.category ? issue.escalation.category.replace(/_/g, " ") : ""}
+              {issue.escalation.category
+                ? issue.escalation.category.replace(/_/g, " ")
+                : ""}
             </span>
-            <span className={`text-[9px] uppercase px-1.5 py-0.2 bg-rose-500 text-white rounded font-extrabold ${issue.escalation.priority === "critical" ? "animate-pulse" : ""}`}>
+            <span
+              className={`text-[9px] uppercase px-1.5 py-0.2 bg-rose-500 text-white rounded font-extrabold ${issue.escalation.priority === "critical" ? "animate-pulse" : ""}`}
+            >
               {issue.escalation.priority}
             </span>
           </span>
@@ -1183,8 +1188,8 @@ export function AdminDashboard() {
       onClick={() => setActiveTab(tab)}
       className={`px-8 py-3.5 font-bold text-sm whitespace-nowrap transition-all duration-500 flex items-center gap-3 rounded-full relative group/btn ${
         activeTab === tab
-          ? "text-white bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_25px_rgba(52,211,153,0.6)] border border-emerald-400/50 scale-105"
-          : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/10 border border-transparent"
+          ? "text-white bg-gradient-to-r from-emerald-500 to-teal-400 border border-emerald-400/50 scale-105"
+          : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 border border-transparent"
       }`}
     >
       {activeTab === tab && (
@@ -1356,9 +1361,9 @@ export function AdminDashboard() {
 
         {/* Tab bar */}
         <div className="relative mb-10 z-40 flex justify-center">
-          <div className="relative bg-white/30 dark:bg-[#0f172a]/50 rounded-[2.5rem] shadow-[0_10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)] border-y border-white/80 dark:border-white/20 p-2 overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
+          <div className="relative bg-white/30 dark:bg-[#0f172a]/50 rounded-[2.5rem] border-y border-white/80 dark:border-white/20 p-2 overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
             <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent dark:from-white/5 pointer-events-none rounded-[2.5rem]"></div>
-            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar relative z-10 px-1">
+            <div className="flex items-center gap-2 hide-scrollbar relative z-10 px-1">
               {tabBtn("officers", <Users size={20} />, "Officers")}
               {tabBtn("messages", <MessageSquare size={20} />, "Messages")}
               {tabBtn("sla", <Clock size={20} />, "SLA")}
@@ -1369,7 +1374,7 @@ export function AdminDashboard() {
         </div>
 
         <div className="space-y-8">
-          {/* ── Officers Command Center tab ───────────────────────────── */}
+          {/* Officers Command Center tab */}
           {activeTab === "officers" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Hero banner */}
@@ -1617,18 +1622,19 @@ export function AdminDashboard() {
           )}
 
           {/* SLA tab */}
-          {/* {activeTab === 'sla' && (
+          {activeTab === "sla" && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
               <div className="bg-gradient-to-r from-red-500 to-rose-600 p-4">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Clock size={24} />SLA Monitoring
+                  <Clock size={24} />
+                  SLA Monitoring
                 </h2>
               </div>
               <div className="p-6">
-                <SLAMonitoringDashboard onViewIssue={issue => setSelectedIssue(issue)} />
+                <SLAMonitoringDashboard issues={issues} onViewIssue={setSelectedIssue} />
               </div>
             </div>
-          )} */}
+          )}
 
           {/* Analytics tab */}
           {/* {activeTab === 'analytics' && (
