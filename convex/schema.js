@@ -390,16 +390,17 @@ export default defineSchema({
           v.literal("third_party_dependency"),
           v.literal("environmental_risk"),
           v.literal("administrative_approval_pending"),
-          v.literal("other")
+          v.literal("other"),
         ),
         priority: v.union(
           v.literal("medium"),
           v.literal("high"),
-          v.literal("critical")
+          v.literal("critical"),
         ),
         reason: v.string(),
         comments: v.optional(v.string()),
         escalatedBy: v.id("users"),
+        prevIssueStatus: v.string(),
         escalatedAt: v.number(),
         resolved: v.optional(v.boolean()),
         resolvedAt: v.optional(v.number()),
@@ -408,17 +409,16 @@ export default defineSchema({
           v.union(
             v.literal("pending"),
             v.literal("reviewed"),
-            v.literal("resolved")
-          )
+            v.literal("resolved"),
+          ),
         ),
-        escalationCount: v.optional(v.number())
-      })
+        escalationCount: v.optional(v.number()),
+      }),
     ),
 
     slaExtendedCount: v.optional(v.number()),
 
     lastSlaExtensionAt: v.optional(v.number()),
-
 
     slaCategory: v.string(),
     slaDeadline: v.union(v.number(), v.null()),

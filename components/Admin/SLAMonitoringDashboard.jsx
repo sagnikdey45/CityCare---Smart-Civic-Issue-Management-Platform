@@ -1109,6 +1109,18 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 </span>
               </div>
             </div>
+            {issue.escalation_reason && (
+              <div className="mt-2.5 pt-2 border-t border-purple-200/50 dark:border-purple-800/40 text-[11px]">
+                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">Reason:</span>
+                <span className="text-slate-800 dark:text-slate-200">{issue.escalation_reason}</span>
+              </div>
+            )}
+            {issue.escalation_comments && (
+              <div className={`mt-2 text-[11px] ${!issue.escalation_reason ? "border-t border-purple-200/50 dark:border-purple-800/40 pt-2" : ""}`}>
+                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">Comments:</span>
+                <span className="text-slate-800 dark:text-slate-200">{issue.escalation_comments}</span>
+              </div>
+            )}
             {issue.escalation_resolved && (
               <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                 <CheckCircle size={10} />
@@ -1165,22 +1177,13 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
         {/* Action buttons */}
         <div className="flex items-center gap-2 flex-wrap mt-3">
           {!hasBeenEscalated && !isBreached && !isAtRisk && (
-            <>
-              <ActionBtn
-                onClick={() => onViewIssue(issue)}
-                variant="default"
-                icon={<Eye size={12} />}
-              >
-                View
-              </ActionBtn>
-              <ActionBtn
-                onClick={() => onAction(issue, "escalate")}
-                variant="purple"
-                icon={<ArrowUpCircle size={12} />}
-              >
-                Escalate
-              </ActionBtn>
-            </>
+            <ActionBtn
+              onClick={() => onViewIssue(issue)}
+              variant="default"
+              icon={<Eye size={12} />}
+            >
+              View
+            </ActionBtn>
           )}
           {!hasBeenEscalated && isAtRisk && (
             <>
@@ -1204,13 +1207,6 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 icon={<Users size={12} />}
               >
                 Reassign
-              </ActionBtn>
-              <ActionBtn
-                onClick={() => onAction(issue, "escalate")}
-                variant="purple"
-                icon={<ArrowUpCircle size={12} />}
-              >
-                Escalate
               </ActionBtn>
             </>
           )}
@@ -1236,13 +1232,6 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 icon={<Users size={12} />}
               >
                 Reassign
-              </ActionBtn>
-              <ActionBtn
-                onClick={() => onAction(issue, "escalate")}
-                variant="red"
-                icon={<ShieldAlert size={12} />}
-              >
-                Escalate to Admin
               </ActionBtn>
             </>
           )}
@@ -1297,13 +1286,6 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 icon={<Flag size={12} />}
               >
                 View Resolution
-              </ActionBtn>
-              <ActionBtn
-                onClick={() => onAction(issue, "escalate")}
-                variant="purple"
-                icon={<ArrowUpCircle size={12} />}
-              >
-                Re-escalate
               </ActionBtn>
               <ActionBtn
                 onClick={() => onViewIssue(issue)}

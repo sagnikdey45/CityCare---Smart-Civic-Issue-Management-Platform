@@ -6,7 +6,12 @@ async function resolveAdminUserId(ctx, adminUserIdStr) {
   if (adminUserIdStr) {
     try {
       const user = await ctx.db.get(adminUserIdStr);
-      if (user && (user.role === "admin" || user.role === "city_admin")) {
+      if (
+        user &&
+        (user.role === "admin" ||
+          user.role === "city_admin" ||
+          user.role === "unit_officer")
+      ) {
         return user._id;
       }
     } catch (e) {
@@ -38,7 +43,7 @@ async function resolveAdminUserId(ctx, adminUserIdStr) {
     email: "admin@citycare.gov",
     password: "hashedpassword",
     role: "admin",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   });
   return newAdminId;
 }
@@ -51,7 +56,9 @@ export const getSlaMonitoringIssues = query({
       .filter((q) => q.neq(q.field("status"), "resolved"))
       .collect();
 
-    const allActions = await ctx.db.query("escalationResolutionActions").collect();
+    const allActions = await ctx.db
+      .query("escalationResolutionActions")
+      .collect();
     const actionsByIssue = new Map();
     allActions.forEach((action) => {
       const list = actionsByIssue.get(action.issueId) || [];
@@ -112,7 +119,7 @@ export const getSlaMonitoringIssues = query({
               new_value: a.newValue,
               notes: a.notes,
             };
-          })
+          }),
         );
         enrichedActions.sort((x, y) => x.performed_at - y.performed_at);
 
@@ -131,10 +138,12 @@ export const getSlaMonitoringIssues = query({
           escalation_category: issue.escalation?.category,
           escalation_priority: issue.escalation?.priority,
           escalation_reason: issue.escalation?.reason,
+          escalation_comments: issue.escalation?.comments,
           escalated_by: escalatedByName,
           escalated_at: issue.escalation?.escalatedAt,
           escalation_count: issue.escalation?.escalationCount || 0,
-          escalation_admin_review_status: issue.escalation?.adminReviewStatus || "pending",
+          escalation_admin_review_status:
+            issue.escalation?.adminReviewStatus || "pending",
           escalation_resolved: issue.escalation?.resolved || false,
           escalation_resolved_at: issue.escalation?.resolvedAt,
           escalation_resolution_notes: issue.escalation?.resolutionNote,
@@ -144,7 +153,7 @@ export const getSlaMonitoringIssues = query({
           field_officer: fieldOfficer,
           escalation_resolution_actions: enrichedActions,
         };
-      })
+      }),
     );
 
     return enrichedIssues;
@@ -154,6 +163,7 @@ export const getSlaMonitoringIssues = query({
 export const escalateIssue = mutation({
   args: {
     issueId: v.id("issues"),
+    prevIssueStatus: v.string(),
     escalationCategory: v.union(
       v.literal("sla_breach"),
       v.literal("resource_shortage"),
@@ -170,12 +180,12 @@ export const escalateIssue = mutation({
       v.literal("third_party_dependency"),
       v.literal("environmental_risk"),
       v.literal("administrative_approval_pending"),
-      v.literal("other")
+      v.literal("other"),
     ),
     escalationPriority: v.union(
       v.literal("medium"),
       v.literal("high"),
-      v.literal("critical")
+      v.literal("critical"),
     ),
     escalationReason: v.string(),
     adminUserId: v.string(),
@@ -197,6 +207,7 @@ export const escalateIssue = mutation({
         comments: "",
         escalatedBy: adminDbId,
         escalatedAt: now,
+        prevIssueStatus: args.prevIssueStatus,
         resolved: false,
         adminReviewStatus: "pending",
         escalationCount: (issue.escalation?.escalationCount || 0) + 1,
@@ -311,10 +322,12 @@ export const reviewEscalation = mutation({
     const adminDbId = await resolveAdminUserId(ctx, args.reviewedBy);
 
     await ctx.db.patch(args.issueId, {
-      escalation: issue.escalation ? {
-        ...issue.escalation,
-        adminReviewStatus: "reviewed",
-      } : undefined,
+      escalation: issue.escalation
+        ? {
+            ...issue.escalation,
+            adminReviewStatus: "reviewed",
+          }
+        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -328,7 +341,8 @@ export const reviewEscalation = mutation({
     await ctx.db.insert("issueUpdates", {
       issueId: args.issueId,
       status: issue.status,
-      comment: "Escalation reviewed by Administrator. Resolution pending action.",
+      comment:
+        "Escalation reviewed by Administrator. Resolution pending action.",
       updatedBy: adminDbId,
       role: "admin",
       attachments: [],
@@ -383,7 +397,9 @@ export const extendIssueSla = mutation({
       });
     }
 
-    const oldDeadlineStr = issue.slaDeadline ? new Date(issue.slaDeadline).toISOString() : "None";
+    const oldDeadlineStr = issue.slaDeadline
+      ? new Date(issue.slaDeadline).toISOString()
+      : "None";
     const newDeadlineStr = new Date(args.newDeadline).toISOString();
 
     await ctx.db.patch(args.issueId, {
@@ -391,12 +407,16 @@ export const extendIssueSla = mutation({
       slaExtendedCount: (issue.slaExtendedCount || 0) + 1,
       lastSlaExtensionAt: now,
       slaBreached: false,
-      escalation: issue.escalation ? {
-        ...issue.escalation,
-        adminReviewStatus: !issue.escalation.adminReviewStatus || issue.escalation.adminReviewStatus === "pending"
-          ? "reviewed"
-          : issue.escalation.adminReviewStatus,
-      } : undefined,
+      escalation: issue.escalation
+        ? {
+            ...issue.escalation,
+            adminReviewStatus:
+              !issue.escalation.adminReviewStatus ||
+              issue.escalation.adminReviewStatus === "pending"
+                ? "reviewed"
+                : issue.escalation.adminReviewStatus,
+          }
+        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -488,7 +508,9 @@ export const reassignIssueOfficer = mutation({
           .unique();
         if (oldUoProfile) {
           await ctx.db.patch(oldUoProfile._id, {
-            activeIssueIds: (oldUoProfile.activeIssueIds || []).filter((id) => id !== args.issueId),
+            activeIssueIds: (oldUoProfile.activeIssueIds || []).filter(
+              (id) => id !== args.issueId,
+            ),
           });
         }
       }
@@ -500,7 +522,10 @@ export const reassignIssueOfficer = mutation({
         .unique();
       if (newUoProfile) {
         await ctx.db.patch(newUoProfile._id, {
-          activeIssueIds: [...(newUoProfile.activeIssueIds || []), args.issueId],
+          activeIssueIds: [
+            ...(newUoProfile.activeIssueIds || []),
+            args.issueId,
+          ],
         });
       }
     }
@@ -517,7 +542,9 @@ export const reassignIssueOfficer = mutation({
           .withIndex("by_user", (q) => q.eq("userId", oldFo))
           .unique();
         if (oldFoProfile) {
-          const assigned = (oldFoProfile.assignedIssueIds || []).filter((id) => id !== args.issueId);
+          const assigned = (oldFoProfile.assignedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          );
           await ctx.db.patch(oldFoProfile._id, {
             assignedIssueIds: assigned,
             currentActiveIssues: assigned.length,
@@ -531,7 +558,10 @@ export const reassignIssueOfficer = mutation({
         .withIndex("by_user", (q) => q.eq("userId", args.newFieldOfficerId))
         .unique();
       if (newFoProfile) {
-        const assigned = [...(newFoProfile.assignedIssueIds || []), args.issueId];
+        const assigned = [
+          ...(newFoProfile.assignedIssueIds || []),
+          args.issueId,
+        ];
         await ctx.db.patch(newFoProfile._id, {
           assignedIssueIds: assigned,
           currentActiveIssues: assigned.length,
@@ -540,12 +570,16 @@ export const reassignIssueOfficer = mutation({
     }
 
     if (Object.keys(patches).length > 0) {
-      patches.escalation = issue.escalation ? {
-        ...issue.escalation,
-        adminReviewStatus: !issue.escalation.adminReviewStatus || issue.escalation.adminReviewStatus === "pending"
-          ? "reviewed"
-          : issue.escalation.adminReviewStatus,
-      } : undefined;
+      patches.escalation = issue.escalation
+        ? {
+            ...issue.escalation,
+            adminReviewStatus:
+              !issue.escalation.adminReviewStatus ||
+              issue.escalation.adminReviewStatus === "pending"
+                ? "reviewed"
+                : issue.escalation.adminReviewStatus,
+          }
+        : undefined;
 
       await ctx.db.patch(args.issueId, patches);
 
@@ -555,7 +589,10 @@ export const reassignIssueOfficer = mutation({
         performedBy: adminDbId,
         performedAt: now,
         oldValue: JSON.stringify({ uo: oldUo, fo: oldFo }),
-        newValue: JSON.stringify({ uo: args.newUnitOfficerId || oldUo, fo: args.newFieldOfficerId || oldFo }),
+        newValue: JSON.stringify({
+          uo: args.newUnitOfficerId || oldUo,
+          fo: args.newFieldOfficerId || oldFo,
+        }),
         notes: args.notes,
       });
 
@@ -638,12 +675,16 @@ export const changeIssueCategory = mutation({
 
     await ctx.db.patch(args.issueId, {
       category: args.newCategory,
-      escalation: issue.escalation ? {
-        ...issue.escalation,
-        adminReviewStatus: !issue.escalation.adminReviewStatus || issue.escalation.adminReviewStatus === "pending"
-          ? "reviewed"
-          : issue.escalation.adminReviewStatus,
-      } : undefined,
+      escalation: issue.escalation
+        ? {
+            ...issue.escalation,
+            adminReviewStatus:
+              !issue.escalation.adminReviewStatus ||
+              issue.escalation.adminReviewStatus === "pending"
+                ? "reviewed"
+                : issue.escalation.adminReviewStatus,
+          }
+        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -698,14 +739,16 @@ export const approveEscalation = mutation({
 
     await ctx.db.patch(args.issueId, {
       escalatedToAdmin: false,
-      status: "verified", // Return back to verified state or active resolution state
-      escalation: issue.escalation ? {
-        ...issue.escalation,
-        resolved: true,
-        resolvedAt: now,
-        resolutionNote: args.notes,
-        adminReviewStatus: "resolved",
-      } : undefined,
+      status: issue.escalation ? issue.escalation.prevIssueStatus : "verified", // Return back to verified state or active resolution state
+      escalation: issue.escalation
+        ? {
+            ...issue.escalation,
+            resolved: true,
+            resolvedAt: now,
+            resolutionNote: args.notes,
+            adminReviewStatus: "resolved",
+          }
+        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -783,13 +826,15 @@ export const rejectEscalation = mutation({
         rejectedAt: now,
       },
       escalatedToAdmin: false,
-      escalation: issue.escalation ? {
-        ...issue.escalation,
-        resolved: true,
-        resolvedAt: now,
-        resolutionNote: args.reason,
-        adminReviewStatus: "resolved",
-      } : undefined,
+      escalation: issue.escalation
+        ? {
+            ...issue.escalation,
+            resolved: true,
+            resolvedAt: now,
+            resolutionNote: args.reason,
+            adminReviewStatus: "resolved",
+          }
+        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -841,19 +886,38 @@ export const getEscalationAnalytics = query({
     const escalatedIssues = issues.filter((i) => i.escalatedToAdmin);
 
     const totalEscalations = escalatedIssues.length;
-    const criticalEscalations = escalatedIssues.filter((i) => i.escalation?.priority === "critical").length;
-    const pendingReviews = escalatedIssues.filter((i) => i.escalation?.adminReviewStatus === "pending" || !i.escalation?.adminReviewStatus).length;
-    const resolvedEscalations = escalatedIssues.filter((i) => i.escalation?.resolved).length;
-    const repeatedEscalations = escalatedIssues.filter((i) => (i.escalation?.escalationCount || 0) > 1).length;
+    const criticalEscalations = escalatedIssues.filter(
+      (i) => i.escalation?.priority === "critical",
+    ).length;
+    const pendingReviews = escalatedIssues.filter(
+      (i) =>
+        i.escalation?.adminReviewStatus === "pending" ||
+        !i.escalation?.adminReviewStatus,
+    ).length;
+    const resolvedEscalations = escalatedIssues.filter(
+      (i) => i.escalation?.resolved,
+    ).length;
+    const repeatedEscalations = escalatedIssues.filter(
+      (i) => (i.escalation?.escalationCount || 0) > 1,
+    ).length;
 
     // Calculate Average Delay Hours for breached issues
-    const breachedIssues = issues.filter((i) => 
-      i.slaDeadline && 
-      i.slaDeadline < now && 
-      !["resolved", "closed", "rejected", "withdrawn"].includes((i.status || "").toLowerCase())
+    const breachedIssues = issues.filter(
+      (i) =>
+        i.slaDeadline &&
+        i.slaDeadline < now &&
+        !["resolved", "closed", "rejected", "withdrawn"].includes(
+          (i.status || "").toLowerCase(),
+        ),
     );
-    const totalDelayMs = breachedIssues.reduce((sum, i) => sum + (now - i.slaDeadline), 0);
-    const averageDelayHours = breachedIssues.length > 0 ? Math.round(totalDelayMs / (1000 * 60 * 60) / breachedIssues.length) : 0;
+    const totalDelayMs = breachedIssues.reduce(
+      (sum, i) => sum + (now - i.slaDeadline),
+      0,
+    );
+    const averageDelayHours =
+      breachedIssues.length > 0
+        ? Math.round(totalDelayMs / (1000 * 60 * 60) / breachedIssues.length)
+        : 0;
 
     // Escalations by category
     const categoryCounts = {};
@@ -861,10 +925,12 @@ export const getEscalationAnalytics = query({
       const cat = i.escalation?.category || "other";
       categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
     });
-    const escalationsByCategory = Object.entries(categoryCounts).map(([category, count]) => ({
-      category,
-      count,
-    }));
+    const escalationsByCategory = Object.entries(categoryCounts).map(
+      ([category, count]) => ({
+        category,
+        count,
+      }),
+    );
 
     // Escalations by department (issue category)
     const deptCounts = {};
@@ -872,10 +938,12 @@ export const getEscalationAnalytics = query({
       const dept = i.category || "Other";
       deptCounts[dept] = (deptCounts[dept] || 0) + 1;
     });
-    const escalationsByDepartment = Object.entries(deptCounts).map(([department, count]) => ({
-      department,
-      count,
-    }));
+    const escalationsByDepartment = Object.entries(deptCounts).map(
+      ([department, count]) => ({
+        department,
+        count,
+      }),
+    );
 
     // Most delayed officers
     const officerDelayMap = new Map();

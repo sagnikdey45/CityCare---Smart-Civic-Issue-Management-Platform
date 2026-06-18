@@ -381,6 +381,26 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
                     {issue.description}
                   </p>
                 </div>
+                {(issue.escalation_reason || issue.escalation_comments) && (
+                  <div className="bg-purple-50/50 border border-purple-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-purple-700 font-extrabold text-xs uppercase tracking-wider">
+                      <AlertTriangle size={14} />
+                      Escalation Details
+                    </div>
+                    {issue.escalation_reason && (
+                      <div>
+                        <p className="text-slate-500 text-xs font-semibold mb-0.5">Reason for Escalation</p>
+                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">"{issue.escalation_reason}"</p>
+                      </div>
+                    )}
+                    {issue.escalation_comments && (
+                      <div>
+                        <p className="text-slate-500 text-xs font-semibold mb-0.5">Additional Comments</p>
+                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">"{issue.escalation_comments}"</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
