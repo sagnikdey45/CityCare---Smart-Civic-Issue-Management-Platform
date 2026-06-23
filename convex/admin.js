@@ -39,7 +39,7 @@ async function resolveAdminUserId(ctx, adminUserIdStr) {
     email: "admin@citycare.gov",
     password: "hashedpassword",
     role: "admin",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   });
   return newAdminId;
 }
@@ -61,7 +61,7 @@ export const getOfficerCommandCenterData = query({
           ...officer,
           profilePictureUrl,
         };
-      })
+      }),
     );
 
     const fieldOfficers = await Promise.all(
@@ -73,7 +73,7 @@ export const getOfficerCommandCenterData = query({
           ...officer,
           profilePictureUrl,
         };
-      })
+      }),
     );
 
     // Combine into officers list
@@ -146,7 +146,7 @@ export const getOfficerCommandCenterData = query({
 
       assignedIssues.forEach((issue) => {
         const status = (issue.status || "").toLowerCase().trim();
-        
+
         // Overdue rule: slaDeadline exists, is in the past, and issue is not resolved, closed, rejected, withdrawn
         const isOverdue =
           issue.slaDeadline &&
@@ -160,7 +160,14 @@ export const getOfficerCommandCenterData = query({
         if (officer.role === "field_officer") {
           if (status === "pending") {
             pending++;
-          } else if (["assigned", "in_progress", "rework_required", "pending_uo_verification"].includes(status)) {
+          } else if (
+            [
+              "assigned",
+              "in_progress",
+              "rework_required",
+              "pending_uo_verification",
+            ].includes(status)
+          ) {
             inProgress++;
           } else if (["resolved", "closed"].includes(status)) {
             resolved++;
@@ -171,7 +178,14 @@ export const getOfficerCommandCenterData = query({
           // Unit officer
           if (["pending", "verified"].includes(status)) {
             pending++;
-          } else if (["assigned", "in_progress", "pending_uo_verification", "rework_required"].includes(status)) {
+          } else if (
+            [
+              "assigned",
+              "in_progress",
+              "pending_uo_verification",
+              "rework_required",
+            ].includes(status)
+          ) {
             inProgress++;
           } else if (["resolved", "closed"].includes(status)) {
             resolved++;
@@ -181,7 +195,8 @@ export const getOfficerCommandCenterData = query({
         }
       });
 
-      const completionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+      const completionRate =
+        total > 0 ? Math.round((resolved / total) * 100) : 0;
 
       // Workload Status
       let workloadStatus = "balanced";
@@ -197,7 +212,10 @@ export const getOfficerCommandCenterData = query({
       } else {
         // Unit Officer workload rules
         const activeCount = assignedIssues.filter(
-          (i) => !["resolved", "closed", "rejected", "withdrawn"].includes((i.status || "").toLowerCase().trim())
+          (i) =>
+            !["resolved", "closed", "rejected", "withdrawn"].includes(
+              (i.status || "").toLowerCase().trim(),
+            ),
         ).length;
         if (activeCount >= 15) {
           workloadStatus = "overloaded";
@@ -227,7 +245,9 @@ export const getOfficerCommandCenterData = query({
     const totalUnitOfficers = unitOfficers.length;
     const totalFieldOfficers = fieldOfficers.length;
 
-    const assignedIssues = rawIssues.filter((i) => i.assignedUnitOfficer || i.assignedFieldOfficer).length;
+    const assignedIssues = rawIssues.filter(
+      (i) => i.assignedUnitOfficer || i.assignedFieldOfficer,
+    ).length;
 
     const overdueIssues = rawIssues.filter((issue) => {
       const status = (issue.status || "").toLowerCase().trim();
@@ -238,14 +258,21 @@ export const getOfficerCommandCenterData = query({
       );
     }).length;
 
-    const balancedCount = officerWorkload.filter((ow) => ow.workloadStatus === "balanced").length;
-    const overloadedCount = officerWorkload.filter((ow) => ow.workloadStatus === "overloaded").length;
-    const underutilizedCount = officerWorkload.filter((ow) => ow.workloadStatus === "underutilized").length;
+    const balancedCount = officerWorkload.filter(
+      (ow) => ow.workloadStatus === "balanced",
+    ).length;
+    const overloadedCount = officerWorkload.filter(
+      (ow) => ow.workloadStatus === "overloaded",
+    ).length;
+    const underutilizedCount = officerWorkload.filter(
+      (ow) => ow.workloadStatus === "underutilized",
+    ).length;
 
     const avgCompletion =
       totalOfficers > 0
         ? Math.round(
-            officerWorkload.reduce((sum, ow) => sum + ow.completionRate, 0) / totalOfficers
+            officerWorkload.reduce((sum, ow) => sum + ow.completionRate, 0) /
+              totalOfficers,
           )
         : 0;
 
@@ -296,7 +323,7 @@ export const getAssignableOfficers = query({
           activeIssueCount: officer.activeIssueIds?.length ?? 0,
           profilePictureUrl,
         };
-      })
+      }),
     );
 
     const fieldOfficers = await Promise.all(
@@ -321,7 +348,7 @@ export const getAssignableOfficers = query({
           efficiencyScore: officer.efficiencyScore ?? 0,
           profilePictureUrl,
         };
-      })
+      }),
     );
 
     return {
@@ -374,7 +401,9 @@ export const adminAssignIssue = mutation({
       await ctx.db.insert("issueUpdates", {
         issueId: args.issueId,
         status: issue.status,
-        comment: args.comment || `Issue has been assigned to Ward Officer ${uo.fullName} for verification.`,
+        comment:
+          args.comment ||
+          `Issue has been assigned to Ward Officer ${uo.fullName} for verification.`,
         updatedBy: adminDbId,
         role: "admin",
         attachments: [],
@@ -427,7 +456,9 @@ export const adminAssignIssue = mutation({
       await ctx.db.insert("issueUpdates", {
         issueId: args.issueId,
         status: "assigned",
-        comment: args.comment || `Issue has been assigned to Field Officer ${fo.fullName} for resolution.`,
+        comment:
+          args.comment ||
+          `Issue has been assigned to Field Officer ${fo.fullName} for resolution.`,
         updatedBy: adminDbId,
         role: "admin",
         attachments: [],
@@ -494,8 +525,12 @@ export const adminReassignIssue = mutation({
           .unique();
         if (oldUO) {
           await ctx.db.patch(oldUO._id, {
-            activeIssueIds: (oldUO.activeIssueIds || []).filter((id) => id !== args.issueId),
-            resolvedIssueIds: (oldUO.resolvedIssueIds || []).filter((id) => id !== args.issueId),
+            activeIssueIds: (oldUO.activeIssueIds || []).filter(
+              (id) => id !== args.issueId,
+            ),
+            resolvedIssueIds: (oldUO.resolvedIssueIds || []).filter(
+              (id) => id !== args.issueId,
+            ),
           });
           await ctx.db.insert("notifications", {
             userId: oldOfficerUserId,
@@ -567,11 +602,15 @@ export const adminReassignIssue = mutation({
           .withIndex("by_user", (q) => q.eq("userId", oldOfficerUserId))
           .unique();
         if (oldFO) {
-          const assigned = (oldFO.assignedIssueIds || []).filter((id) => id !== args.issueId);
+          const assigned = (oldFO.assignedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          );
           await ctx.db.patch(oldFO._id, {
             assignedIssueIds: assigned,
             currentActiveIssues: assigned.length,
-            completedIssueIds: (oldFO.completedIssueIds || []).filter((id) => id !== args.issueId),
+            completedIssueIds: (oldFO.completedIssueIds || []).filter(
+              (id) => id !== args.issueId,
+            ),
           });
           await ctx.db.insert("notifications", {
             userId: oldOfficerUserId,
@@ -668,8 +707,12 @@ export const adminRejectIssue = mutation({
         .unique();
       if (uo) {
         await ctx.db.patch(uo._id, {
-          activeIssueIds: (uo.activeIssueIds || []).filter((id) => id !== args.issueId),
-          resolvedIssueIds: (uo.resolvedIssueIds || []).filter((id) => id !== args.issueId),
+          activeIssueIds: (uo.activeIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
+          resolvedIssueIds: (uo.resolvedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
         });
       }
       await ctx.db.insert("notifications", {
@@ -690,11 +733,15 @@ export const adminRejectIssue = mutation({
         .withIndex("by_user", (q) => q.eq("userId", issue.assignedFieldOfficer))
         .unique();
       if (fo) {
-        const assigned = (fo.assignedIssueIds || []).filter((id) => id !== args.issueId);
+        const assigned = (fo.assignedIssueIds || []).filter(
+          (id) => id !== args.issueId,
+        );
         await ctx.db.patch(fo._id, {
           assignedIssueIds: assigned,
           currentActiveIssues: assigned.length,
-          completedIssueIds: (fo.completedIssueIds || []).filter((id) => id !== args.issueId),
+          completedIssueIds: (fo.completedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
         });
       }
       await ctx.db.insert("notifications", {
@@ -757,11 +804,15 @@ export const adminRevokeAssignment = mutation({
         .withIndex("by_user", (q) => q.eq("userId", oldOfficerUserId))
         .unique();
       if (fo) {
-        const assigned = (fo.assignedIssueIds || []).filter((id) => id !== args.issueId);
+        const assigned = (fo.assignedIssueIds || []).filter(
+          (id) => id !== args.issueId,
+        );
         await ctx.db.patch(fo._id, {
           assignedIssueIds: assigned,
           currentActiveIssues: assigned.length,
-          completedIssueIds: (fo.completedIssueIds || []).filter((id) => id !== args.issueId),
+          completedIssueIds: (fo.completedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
         });
       }
       await ctx.db.patch(args.issueId, {
@@ -777,8 +828,12 @@ export const adminRevokeAssignment = mutation({
         .unique();
       if (uo) {
         await ctx.db.patch(uo._id, {
-          activeIssueIds: (uo.activeIssueIds || []).filter((id) => id !== args.issueId),
-          resolvedIssueIds: (uo.resolvedIssueIds || []).filter((id) => id !== args.issueId),
+          activeIssueIds: (uo.activeIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
+          resolvedIssueIds: (uo.resolvedIssueIds || []).filter(
+            (id) => id !== args.issueId,
+          ),
         });
       }
       await ctx.db.patch(args.issueId, {
@@ -1008,12 +1063,16 @@ export const adminCloseIssue = mutation({
         .withIndex("by_user", (q) => q.eq("userId", issue.assignedFieldOfficer))
         .unique();
       if (fo) {
-        const assigned = (fo.assignedIssueIds || []).filter((id) => id !== args.issueId);
+        const assigned = (fo.assignedIssueIds || []).filter(
+          (id) => id !== args.issueId,
+        );
         const completed = fo.completedIssueIds || [];
         await ctx.db.patch(fo._id, {
           assignedIssueIds: assigned,
           currentActiveIssues: assigned.length,
-          completedIssueIds: completed.includes(args.issueId) ? completed : [...completed, args.issueId],
+          completedIssueIds: completed.includes(args.issueId)
+            ? completed
+            : [...completed, args.issueId],
           totalResolvedIssues: (fo.totalResolvedIssues || 0) + 1,
         });
       }
@@ -1035,11 +1094,15 @@ export const adminCloseIssue = mutation({
         .withIndex("by_user", (q) => q.eq("userId", issue.assignedUnitOfficer))
         .unique();
       if (uo) {
-        const active = (uo.activeIssueIds || []).filter((id) => id !== args.issueId);
+        const active = (uo.activeIssueIds || []).filter(
+          (id) => id !== args.issueId,
+        );
         const resolved = uo.resolvedIssueIds || [];
         await ctx.db.patch(uo._id, {
           activeIssueIds: active,
-          resolvedIssueIds: resolved.includes(args.issueId) ? resolved : [...resolved, args.issueId],
+          resolvedIssueIds: resolved.includes(args.issueId)
+            ? resolved
+            : [...resolved, args.issueId],
         });
       }
       await ctx.db.insert("notifications", {
@@ -1100,12 +1163,12 @@ export const adminEscalateIssue = mutation({
       v.literal("third_party_dependency"),
       v.literal("environmental_risk"),
       v.literal("administrative_approval_pending"),
-      v.literal("other")
+      v.literal("other"),
     ),
     priority: v.union(
       v.literal("medium"),
       v.literal("high"),
-      v.literal("critical")
+      v.literal("critical"),
     ),
     reason: v.string(),
     comments: v.optional(v.string()),

@@ -8,19 +8,22 @@ export function AdminMessageModal({ officer, issues, onClose, onSend }) {
 
   if (!officer) return null;
 
-  function handleSend() {
+  async function handleSend() {
     if (!message.trim()) return;
 
     setSending(true);
-    setTimeout(() => {
-      onSend(
+    try {
+      await onSend(
         officer.id,
         message,
         selectedIssues.length > 0 ? selectedIssues : undefined,
       );
-      setSending(false);
       onClose();
-    }, 500);
+    } catch (err) {
+      console.error("Error in modal handleSend:", err);
+    } finally {
+      setSending(false);
+    }
   }
 
   function toggleIssue(issueId) {

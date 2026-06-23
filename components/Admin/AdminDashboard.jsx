@@ -30,7 +30,8 @@ import {
   Star,
   Layers,
 } from "lucide-react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
+import { useSession } from "next-auth/react";
 import { api } from "@/convex/_generated/api";
 import { AdminIssueModal } from "./AdminIssueModal";
 import { AdminMessageModal } from "./AdminMessageModal";
@@ -819,6 +820,12 @@ export function AdminDashboard() {
   const [selectedOfficerWorkload, setSelectedOfficerWorkload] = useState(null);
   const [isOfficerDialogOpen, setIsOfficerDialogOpen] = useState(false);
 
+  const { data: session } = useSession();
+  const dbUser = useQuery(api.users.getUserByEmail, {
+    email: session?.user?.email || "ankit@example.com",
+  });
+  const sendMessageToUserMutation = useMutation(api.directMessages.sendMessageToUser);
+
   const commandCenterData = useQuery(api.admin.getOfficerCommandCenterData);
 
   const [issues, setIssues] = useState([]);
@@ -844,25 +851,29 @@ export function AdminDashboard() {
     setSelectedIssue(null);
   }
 
-  function handleSendMessage(officerId, message, issueIds) {
-    if (!user) return;
-    const stored = localStorage.getItem("messages");
-    const messages = stored ? JSON.parse(stored) : [];
-    messages.push({
-      id: `msg-${Date.now()}`,
-      from_user_id: user.id,
-      to_user_id: officerId,
-      message,
-      created_at: new Date().toISOString(),
-      read: false,
-      issue_ids: issueIds,
-    });
-    localStorage.setItem("messages", JSON.stringify(messages));
-    alert(
-      `Message sent successfully!\n\nThe officer will be notified and can reply from their Messages Center.`,
-    );
-    setMessageOfficer(null);
-    setMessageIssues([]);
+  async function handleSendMessage(officerId, message, issueIds) {
+    if (!dbUser) {
+      alert("Error: Admin profile not loaded. Please try again in a moment.");
+      return;
+    }
+    try {
+      await sendMessageToUserMutation({
+        fromId: dbUser._id,
+        fromName: dbUser.fullName,
+        fromRole: dbUser.role,
+        toId: officerId,
+        message,
+        issueIds: issueIds,
+      });
+      alert(
+        `Message sent successfully!\n\nThe officer will be notified and can reply from their Messages Center.`,
+      );
+      setMessageOfficer(null);
+      setMessageIssues([]);
+    } catch (err) {
+      console.error("Error sending message:", err);
+      alert("Failed to send message: " + err.message);
+    }
   }
 
   function handleReassign(issueId, newOfficerId, reason) {
