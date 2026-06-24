@@ -19,6 +19,63 @@ const CATEGORY_PREFIX = {
   other: "OT",
 };
 
+const ISSUE_REPORT_WINDOW_LIMIT = Number(
+  process.env.ISSUE_REPORT_WINDOW_LIMIT ?? 3
+);
+
+const ISSUE_REPORT_WINDOW = process.env.ISSUE_REPORT_WINDOW ?? "8 h";
+
+const ISSUE_REPORT_COOLDOWN_LIMIT = Number(
+  process.env.ISSUE_REPORT_COOLDOWN_LIMIT ?? 1
+);
+
+const ISSUE_REPORT_COOLDOWN_WINDOW =
+  process.env.ISSUE_REPORT_COOLDOWN_WINDOW ?? "30 m";
+
+function validateIssueRateLimitConfig() {
+  if (
+    !Number.isFinite(ISSUE_REPORT_WINDOW_LIMIT) ||
+    ISSUE_REPORT_WINDOW_LIMIT <= 0
+  ) {
+    throw new Error("Invalid ISSUE_REPORT_WINDOW_LIMIT configuration.");
+  }
+
+  if (
+    !Number.isFinite(ISSUE_REPORT_COOLDOWN_LIMIT) ||
+    ISSUE_REPORT_COOLDOWN_LIMIT <= 0
+  ) {
+    throw new Error("Invalid ISSUE_REPORT_COOLDOWN_LIMIT configuration.");
+  }
+}
+
+function getIssueReportWindowLimiter() {
+  validateIssueRateLimitConfig();
+
+  return new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(
+      ISSUE_REPORT_WINDOW_LIMIT,
+      ISSUE_REPORT_WINDOW
+    ),
+    analytics: false,
+    prefix: "citycare:issue_reports:window",
+  });
+}
+
+function getIssueReportCooldownLimiter() {
+  validateIssueRateLimitConfig();
+
+  return new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(
+      ISSUE_REPORT_COOLDOWN_LIMIT,
+      ISSUE_REPORT_COOLDOWN_WINDOW
+    ),
+    analytics: false,
+    prefix: "citycare:issue_reports:cooldown",
+  });
+}
+
 function generateRandomCode(length = 6) {
   return Math.random()
     .toString(36)
@@ -703,45 +760,67 @@ export const createIssue = action({
     photos: v.array(v.id("_storage")),
     videos: v.union(v.id("_storage"), v.null()),
   },
+
   handler: async (ctx, args) => {
-    const limitVal = parseInt(
-      process.env.NEXT_PUBLIC_ISSUE_DAILY_LIMIT || "5",
-      10,
-    );
-    const ratelimit = new Ratelimit({
-      redis: Redis.fromEnv(),
-      limiter: Ratelimit.slidingWindow(limitVal, "1 d"),
-      prefix: "citycare:issue_reports",
-    });
-
     const identifier = String(args.reportedBy);
-    const { success, limit, remaining, reset } =
-      await ratelimit.limit(identifier);
 
-    if (!success) {
-      const resetTime = new Date(reset).toLocaleString("en-IN", {
+    const windowLimiter = getIssueReportWindowLimiter();
+    const cooldownLimiter = getIssueReportCooldownLimiter();
+
+    const windowResult = await windowLimiter.limit(identifier);
+
+    if (!windowResult.success) {
+      const resetTime = new Date(windowResult.reset).toLocaleString("en-IN", {
         timeZone: "Asia/Kolkata",
         dateStyle: "medium",
         timeStyle: "short",
       });
+
       throw new Error(
-        `Daily issue report limit reached. You can only report ${limit} issues per day. Please try again after ${resetTime}.`,
+        `Issue report limit reached. You can submit only ${windowResult.limit} reports every 8 hours. Please try again after ${resetTime}.`
       );
     }
 
-    const result = await ctx.runMutation(
-      internal.issues.internalCreateIssue,
-      args,
-    );
+    const cooldownResult = await cooldownLimiter.limit(identifier);
 
-    return {
-      ...result,
-      rateLimit: {
-        limit,
-        remaining,
-        reset,
-      },
-    };
+    if (!cooldownResult.success) {
+      const resetTime = new Date(cooldownResult.reset).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+      throw new Error(
+        `Please wait before submitting another issue report. You can report again after ${resetTime}.`
+      );
+    }
+
+    try {
+      const result = await ctx.runMutation(
+        internal.issues.internalCreateIssue,
+        args
+      );
+
+      return {
+        ...result,
+        rateLimit: {
+          limit: windowResult.limit,
+          remaining: windowResult.remaining,
+          used: windowResult.limit - windowResult.remaining,
+          reset: windowResult.reset,
+          window: "8 hours",
+          cooldown: {
+            limit: cooldownResult.limit,
+            remaining: cooldownResult.remaining,
+            used: cooldownResult.limit - cooldownResult.remaining,
+            reset: cooldownResult.reset,
+            window: "30 minutes",
+          },
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
   },
 });
 
@@ -749,26 +828,31 @@ export const getIssueReportLimitStatus = action({
   args: {
     userId: v.id("users"),
   },
-  handler: async (ctx, args) => {
-    const limitVal = parseInt(
-      process.env.NEXT_PUBLIC_ISSUE_DAILY_LIMIT || "5",
-      10,
-    );
-    const ratelimit = new Ratelimit({
-      redis: Redis.fromEnv(),
-      limiter: Ratelimit.slidingWindow(limitVal, "1 d"),
-      prefix: "citycare:issue_reports",
-    });
 
+  handler: async (ctx, args) => {
     const identifier = String(args.userId);
-    const res = await ratelimit.getRemaining(identifier);
+
+    const windowLimiter = getIssueReportWindowLimiter();
+    const cooldownLimiter = getIssueReportCooldownLimiter();
+
+    const windowStatus = await windowLimiter.getRemaining(identifier);
+    const cooldownStatus = await cooldownLimiter.getRemaining(identifier);
 
     return {
-      limit: res.limit,
-      remaining: res.remaining,
-      used: res.limit - res.remaining,
-      reset: res.reset,
-      allowed: res.success,
+      limit: windowStatus.limit,
+      remaining: windowStatus.remaining,
+      used: windowStatus.limit - windowStatus.remaining,
+      reset: windowStatus.reset,
+      allowed: windowStatus.remaining > 0 && cooldownStatus.remaining > 0,
+      window: "8 hours",
+      cooldown: {
+        limit: cooldownStatus.limit,
+        remaining: cooldownStatus.remaining,
+        used: cooldownStatus.limit - cooldownStatus.remaining,
+        reset: cooldownStatus.reset,
+        allowed: cooldownStatus.remaining > 0,
+        window: "30 minutes",
+      },
     };
   },
 });

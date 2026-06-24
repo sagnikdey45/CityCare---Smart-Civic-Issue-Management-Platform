@@ -127,21 +127,67 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
   const [rateLimitState, setRateLimitState] = useState(null);
   const [loadingLimit, setLoadingLimit] = useState(false);
 
+  const handleRefresh = async () => {
+    if (!session?.user?.id) return;
+    try {
+      setLoadingLimit(true);
+      const res = await getLimitStatus({ userId: session.user.id });
+      setRateLimitState(res);
+    } catch (err) {
+      console.error("Error refreshing rate limit status:", err);
+    } finally {
+      setLoadingLimit(false);
+    }
+  };
+
   useEffect(() => {
     if (session?.user?.id) {
-      setLoadingLimit(true);
+      handleRefresh();
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const autoFetch = () => {
       getLimitStatus({ userId: session.user.id })
         .then((res) => {
           setRateLimitState(res);
         })
         .catch((err) => {
-          console.error("Error fetching rate limit status:", err);
-        })
-        .finally(() => {
-          setLoadingLimit(false);
+          console.error("Error auto-refreshing rate limit status:", err);
         });
+    };
+
+    // Polling every 30 seconds
+    const intervalId = setInterval(autoFetch, 30000);
+
+    // Timeout targeting precise reset points (plus 1s buffer)
+    let timeoutId;
+    const now = Date.now();
+    const resets = [
+      rateLimitState?.reset,
+      rateLimitState?.cooldown?.reset
+    ].filter((t) => t && t > now);
+
+    if (resets.length > 0) {
+      const nextReset = Math.min(...resets);
+      const delay = nextReset - now + 1000;
+      if (delay > 0 && delay < 24 * 60 * 60 * 1000) {
+        timeoutId = setTimeout(autoFetch, delay);
+      }
     }
-  }, [session?.user?.id, getLimitStatus]);
+
+    return () => {
+      clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [
+    session?.user?.id,
+    getLimitStatus,
+    rateLimitState?.reset,
+    rateLimitState?.cooldown?.reset,
+  ]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -403,12 +449,14 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
         {session?.user?.id && (
           <div className="mb-12 relative z-10">
             <IssueReportLimitCard
-              limit={rateLimitState?.limit || 5}
-              remaining={rateLimitState?.remaining ?? 5}
+              limit={rateLimitState?.limit ?? 3}
+              remaining={rateLimitState?.remaining ?? 3}
               used={rateLimitState?.used ?? 0}
               reset={rateLimitState?.reset || null}
+              cooldown={rateLimitState?.cooldown || null}
               variant="compact"
               onReportClick={() => router.push("/citizen/report")}
+              onRefresh={handleRefresh}
               isLoading={loadingLimit || !rateLimitState}
             />
           </div>

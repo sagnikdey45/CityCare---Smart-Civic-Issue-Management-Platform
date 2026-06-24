@@ -45,21 +45,67 @@ const IssueForm = () => {
   const [rateLimitState, setRateLimitState] = useState(null);
   const [loadingLimit, setLoadingLimit] = useState(false);
 
+  const handleRefresh = async () => {
+    if (!session?.user?.id) return;
+    try {
+      setLoadingLimit(true);
+      const res = await getLimitStatus({ userId: session.user.id });
+      setRateLimitState(res);
+    } catch (err) {
+      console.error("Error refreshing rate limit status:", err);
+    } finally {
+      setLoadingLimit(false);
+    }
+  };
+
   useEffect(() => {
     if (session?.user?.id) {
-      setLoadingLimit(true);
+      handleRefresh();
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const autoFetch = () => {
       getLimitStatus({ userId: session.user.id })
         .then((res) => {
           setRateLimitState(res);
         })
         .catch((err) => {
-          console.error("Error fetching rate limit status:", err);
-        })
-        .finally(() => {
-          setLoadingLimit(false);
+          console.error("Error auto-refreshing rate limit status:", err);
         });
+    };
+
+    // Polling every 30 seconds
+    const intervalId = setInterval(autoFetch, 30000);
+
+    // Timeout targeting precise reset points (plus 1s buffer)
+    let timeoutId;
+    const now = Date.now();
+    const resets = [
+      rateLimitState?.reset,
+      rateLimitState?.cooldown?.reset
+    ].filter((t) => t && t > now);
+
+    if (resets.length > 0) {
+      const nextReset = Math.min(...resets);
+      const delay = nextReset - now + 1000;
+      if (delay > 0 && delay < 24 * 60 * 60 * 1000) {
+        timeoutId = setTimeout(autoFetch, delay);
+      }
     }
-  }, [session?.user?.id, getLimitStatus]);
+
+    return () => {
+      clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [
+    session?.user?.id,
+    getLimitStatus,
+    rateLimitState?.reset,
+    rateLimitState?.cooldown?.reset,
+  ]);
 
   const [formData, setFormData] = useState({
     // --- Issue details ---
@@ -178,11 +224,15 @@ const IssueForm = () => {
   };
 
   const handleSubmit = async () => {
-    if (rateLimitState && rateLimitState.remaining === 0) {
-      toast.error(
-        "Daily report limit reached. You cannot submit more reports today.",
-      );
-      return;
+    if (rateLimitState) {
+      if (rateLimitState.remaining === 0) {
+        toast.error("You have reached the 8-hour reporting limit. Please try again later.");
+        return;
+      }
+      if (rateLimitState.cooldown && rateLimitState.cooldown.remaining === 0) {
+        toast.error("Please wait a few minutes before submitting another report.");
+        return;
+      }
     }
 
     try {
@@ -250,9 +300,18 @@ const IssueForm = () => {
         setRateLimitState({
           limit: res.rateLimit.limit,
           remaining: res.rateLimit.remaining,
-          used: res.rateLimit.limit - res.rateLimit.remaining,
+          used: res.rateLimit.used,
           reset: res.rateLimit.reset,
-          allowed: res.rateLimit.remaining > 0,
+          allowed: res.rateLimit.remaining > 0 && res.rateLimit.cooldown.remaining > 0,
+          window: res.rateLimit.window,
+          cooldown: {
+            limit: res.rateLimit.cooldown.limit,
+            remaining: res.rateLimit.cooldown.remaining,
+            used: res.rateLimit.cooldown.used,
+            reset: res.rateLimit.cooldown.reset,
+            allowed: res.rateLimit.cooldown.remaining > 0,
+            window: res.rateLimit.cooldown.window,
+          },
         });
       }
 
@@ -338,11 +397,13 @@ const IssueForm = () => {
           {session?.user?.id && (
             <div className="max-w-2xl mx-auto mb-8">
               <IssueReportLimitCard
-                limit={rateLimitState?.limit || 5}
-                remaining={rateLimitState?.remaining ?? 5}
+                limit={rateLimitState?.limit ?? 3}
+                remaining={rateLimitState?.remaining ?? 3}
                 used={rateLimitState?.used ?? 0}
                 reset={rateLimitState?.reset || null}
+                cooldown={rateLimitState?.cooldown || null}
                 variant="full"
+                onRefresh={handleRefresh}
                 isLoading={loadingLimit || !rateLimitState}
               />
             </div>
@@ -415,23 +476,27 @@ const IssueForm = () => {
             <button
               onClick={(e) => {
                 e.preventDefault();
-                if (rateLimitState?.remaining === 0) {
-                  toast.error(
-                    "Daily report limit reached. You cannot submit more reports today.",
-                  );
-                  return;
+                if (rateLimitState) {
+                  if (rateLimitState.remaining === 0) {
+                    toast.error("You have reached the 8-hour reporting limit. Please try again later.");
+                    return;
+                  }
+                  if (rateLimitState.cooldown && rateLimitState.cooldown.remaining === 0) {
+                    toast.error("Please wait a few minutes before submitting another report.");
+                    return;
+                  }
                 }
                 handleNext();
               }}
-              disabled={rateLimitState?.remaining === 0}
+              disabled={rateLimitState?.remaining === 0 || rateLimitState?.cooldown?.remaining === 0}
               className={`group relative flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-white text-sm overflow-hidden transition-all duration-200 ${
-                rateLimitState?.remaining === 0
+                (rateLimitState?.remaining === 0 || rateLimitState?.cooldown?.remaining === 0)
                   ? "bg-slate-300 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-50 shadow-none hover:scale-100 hover:translate-y-0"
                   : "shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.04] hover:-translate-y-0.5 active:scale-[0.97]"
               }`}
             >
               {/* Base gradient */}
-              {rateLimitState?.remaining !== 0 && (
+              {(rateLimitState?.remaining !== 0 && rateLimitState?.cooldown?.remaining !== 0) && (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600" />
                   <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

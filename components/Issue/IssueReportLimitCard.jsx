@@ -1,27 +1,35 @@
 import React from "react";
-import { ShieldCheck, Gauge, Clock, AlertTriangle, FilePlus2, AlertCircle } from "lucide-react";
+import { ShieldCheck, Gauge, Clock, AlertTriangle, FilePlus2, AlertCircle, RefreshCw } from "lucide-react";
 
 export default function IssueReportLimitCard({
-  limit = 5,
-  remaining = 5,
+  limit = 3,
+  remaining = 3,
   used = 0,
   reset = null,
+  cooldown = null,
   variant = "full",
   onReportClick = null,
+  onRefresh = null,
   isLoading = false,
 }) {
-  if (isLoading) {
+  const isInitialLoading = isLoading && !reset;
+  if (isInitialLoading) {
     return (
-      <div className="animate-pulse w-full rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md p-5 flex flex-col gap-3">
-        <div className="h-5 bg-slate-350 dark:bg-slate-700 w-1/4 rounded"></div>
-        <div className="h-4 bg-slate-350 dark:bg-slate-700 w-3/4 rounded"></div>
-        <div className="h-2 bg-slate-350 dark:bg-slate-700 w-full rounded-full mt-2"></div>
+      <div className="animate-pulse w-full rounded-3xl border border-slate-200/50 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md p-6 flex flex-col gap-4">
+        <div className="flex justify-between items-center">
+          <div className="h-6 bg-slate-300 dark:bg-slate-700 w-1/3 rounded-lg"></div>
+          <div className="h-5 bg-slate-300 dark:bg-slate-700 w-12 rounded-full"></div>
+        </div>
+        <div className="h-4 bg-slate-350 dark:bg-slate-700 w-3/4 rounded-md"></div>
+        <div className="h-3 bg-slate-350 dark:bg-slate-700 w-full rounded-full mt-2"></div>
       </div>
     );
   }
 
   const usedPercentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
-  const isLimitReached = remaining === 0;
+  const isWindowLimitReached = remaining === 0;
+  const isCooldownActive = cooldown && cooldown.remaining === 0;
+  const isLimitReached = isWindowLimitReached || isCooldownActive;
 
   const formattedResetTime = reset
     ? new Date(reset).toLocaleString("en-IN", {
@@ -31,75 +39,145 @@ export default function IssueReportLimitCard({
       })
     : "tomorrow";
 
+  const cooldownResetTime = cooldown?.reset
+    ? new Date(cooldown.reset).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "soon";
+
   if (variant === "compact") {
     return (
       <div
-        className={`w-full rounded-[2rem] border backdrop-blur-md p-6 transition-all duration-300 ${
+        className={`w-full rounded-[2.5rem] border backdrop-blur-lg p-7 transition-all duration-500 relative overflow-hidden group ${
           isLimitReached
-            ? "border-rose-500/30 bg-rose-50/10 dark:bg-rose-950/10 shadow-[0_8px_32px_rgba(239,68,68,0.05)]"
-            : "border-teal-500/20 bg-gradient-to-r from-emerald-500/5 to-teal-500/5 dark:from-emerald-500/10 dark:to-teal-500/10 shadow-[0_8px_32px_rgba(20,184,166,0.05)]"
+            ? "border-rose-500/20 bg-gradient-to-br from-rose-500/[0.04] to-red-500/[0.01] dark:from-rose-500/[0.08] dark:to-red-500/[0.02] shadow-[0_12px_40px_rgba(239,68,68,0.06)]"
+            : "border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] to-teal-500/[0.01] dark:from-emerald-500/[0.08] dark:to-teal-500/[0.02] shadow-[0_12px_40px_rgba(16,185,129,0.06)]"
         }`}
       >
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-2">
-              <div
-                className={`p-2 rounded-xl ${
-                  isLimitReached
-                    ? "bg-rose-500/10 text-rose-500"
-                    : "bg-teal-500/10 text-teal-600 dark:text-teal-400"
-                }`}
-              >
-                {isLimitReached ? <AlertTriangle size={18} /> : <Gauge size={18} />}
+        {/* Ambient glow backgrounds */}
+        <div className={`absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[60px] pointer-events-none transition-opacity duration-500 ${
+          isLimitReached ? "bg-rose-500/10" : "bg-emerald-500/10"
+        }`} />
+
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 relative z-10">
+          <div className="flex-1 w-full space-y-4">
+            <div className="flex items-start justify-between sm:items-center gap-3">
+              <div className="flex items-center gap-3.5">
+                <div
+                  className={`p-3 rounded-2xl shadow-inner border transition-colors duration-300 ${
+                    isLimitReached
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-500"
+                      : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-450"
+                  }`}
+                >
+                  {isLimitReached ? <AlertTriangle size={20} /> : <Gauge size={20} />}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-black tracking-tight text-slate-800 dark:text-slate-100">
+                      Reporting Window Quota
+                    </h3>
+                    <span className={`px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full border ${
+                      isLimitReached
+                        ? "bg-rose-500/10 text-rose-600 dark:text-rose-450 border-rose-500/20"
+                        : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                    }`}>
+                      {isLimitReached ? "Restricted" : "Active Quota"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                    You can submit up to 3 reports every 8 hours.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Daily Reporting Limit
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Track how many civic issues you can still report today.
-                </p>
-              </div>
+
+              {onRefresh && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onRefresh();
+                  }}
+                  className="p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-850/80 bg-white/70 dark:bg-slate-900/70 text-slate-400 dark:text-slate-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:border-emerald-500/35 hover:scale-[1.05] active:scale-[0.95] hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-all duration-300 flex-shrink-0"
+                  title="Refresh limits"
+                >
+                  <RefreshCw size={14} className={isLoading ? "animate-spin" : "hover:rotate-45 transition-transform duration-350"} />
+                </button>
+              )}
             </div>
 
             {/* Progress bar */}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex justify-between text-xs font-bold text-slate-600 dark:text-slate-350">
-                <span>
-                  {remaining} / {limit} reports left
+                <span className="tracking-tight">
+                  {remaining} / {limit} reports left in current window
                 </span>
-                <span>Used: {used}</span>
+                <span className="text-slate-500">Used: {used}</span>
               </div>
-              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-slate-100 dark:bg-slate-900/60 rounded-full overflow-hidden p-[1px] border border-slate-200/20 dark:border-slate-800/40">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    isLimitReached
+                  className={`h-full rounded-full transition-all duration-500 relative ${
+                    isWindowLimitReached
                       ? "bg-gradient-to-r from-rose-500 to-red-600"
-                      : "bg-gradient-to-r from-emerald-400 to-teal-500"
+                      : isCooldownActive
+                        ? "bg-gradient-to-r from-amber-400 to-orange-500"
+                        : "bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-600"
                   }`}
                   style={{ width: `${usedPercentage}%` }}
-                />
+                >
+                  {usedPercentage > 0 && usedPercentage < 100 && (
+                    <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-white/30 blur-[1px] animate-pulse rounded-full" />
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-450">
-              <Clock size={11} />
-              <span>Resets: {formattedResetTime}</span>
+            {/* Quota Reset / Cooldown Detail Footer */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 border-t border-slate-200/40 dark:border-slate-850/40">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-450">
+                <Clock size={12} />
+                <span>Window refresh: {formattedResetTime}</span>
+              </div>
+              
+              {cooldown && (
+                <div className={`flex items-center gap-2 text-[11px] font-bold ${
+                  isCooldownActive ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-450"
+                }`}>
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isCooldownActive ? "bg-amber-400" : "bg-emerald-400"
+                    }`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                      isCooldownActive ? "bg-amber-500" : "bg-emerald-500"
+                    }`}></span>
+                  </span>
+                  <span>
+                    {isCooldownActive
+                      ? `Cooldown Active (next report available in 30 minutes)`
+                      : "Cooldown Clear"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="w-full md:w-auto self-stretch md:self-auto flex items-center justify-center">
+          <div className="w-full xl:w-auto self-stretch xl:self-auto flex items-center justify-center pl-0 xl:pl-4">
             {onReportClick && (
               <button
                 disabled={isLimitReached}
                 onClick={onReportClick}
-                className={`w-full md:w-auto px-6 py-3 rounded-2xl text-xs font-black tracking-wider uppercase transition-all duration-300 ${
+                className={`w-full xl:w-auto px-7 py-3.5 rounded-2xl text-xs font-black tracking-wider uppercase transition-all duration-300 ${
                   isLimitReached
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed border border-slate-200 dark:border-slate-800"
-                    : "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-[0_4px_14px_rgba(20,184,166,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+                    ? "bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600 cursor-not-allowed border border-slate-200/80 dark:border-slate-800"
+                    : "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-[0_6px_20px_rgba(20,184,166,0.35)] hover:scale-[1.03] active:scale-[0.97]"
                 }`}
               >
-                {isLimitReached ? "Limit Reached" : "Report an Issue"}
+                {isWindowLimitReached
+                  ? "Limit Reached"
+                  : isCooldownActive
+                    ? "Cooldown Active"
+                    : "Report an Issue"}
               </button>
             )}
           </div>
@@ -111,44 +189,58 @@ export default function IssueReportLimitCard({
   // Default "full" variant for report issue form page
   return (
     <div
-      className={`w-full rounded-2xl border backdrop-blur-md p-5 transition-all duration-300 ${
+      className={`w-full rounded-3xl border backdrop-blur-lg p-6 transition-all duration-500 relative overflow-hidden group ${
         isLimitReached
-          ? "border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/10 shadow-[0_8px_20px_rgba(239,68,68,0.03)]"
-          : "border-teal-500/15 bg-white/40 dark:bg-slate-900/40 shadow-[0_8px_30px_rgb(0,0,0,0.02)]"
+          ? "border-rose-500/20 bg-gradient-to-br from-rose-500/[0.04] to-red-500/[0.01] dark:from-rose-500/[0.08] dark:to-red-500/[0.02] shadow-[0_12px_40px_rgba(239,68,68,0.04)]"
+          : "border-teal-500/15 bg-white/50 dark:bg-slate-950/40 shadow-[0_12px_40px_rgba(0,0,0,0.01)]"
       }`}
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
+        <div className="flex items-center gap-3.5">
           <div
-            className={`p-2.5 rounded-xl ${
+            className={`p-3 rounded-2xl shadow-inner border transition-colors duration-300 ${
               isLimitReached
-                ? "bg-rose-500/10 text-rose-500"
-                : "bg-teal-500/10 text-teal-600 dark:text-teal-400"
+                ? "bg-rose-500/10 border-rose-500/20 text-rose-500"
+                : "bg-teal-500/10 border-teal-500/20 text-teal-600 dark:text-teal-450"
             }`}
           >
-            {isLimitReached ? <AlertCircle size={20} /> : <ShieldCheck size={20} />}
+            {isLimitReached ? <AlertCircle size={22} /> : <ShieldCheck size={22} />}
           </div>
           <div>
-            <h4 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              Reporting Limit Quota
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {isLimitReached
-                ? `Daily report limit reached. You can report again after ${formattedResetTime}.`
-                : `You can submit ${remaining} more issue reports today.`}
+            <div className="flex items-center gap-2.5">
+              <h4 className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                Reporting Window Quota
+              </h4>
+              {onRefresh && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onRefresh();
+                  }}
+                  className="p-1.5 rounded-xl border border-slate-200/50 dark:border-slate-850/80 bg-white/60 dark:bg-slate-900/60 text-slate-400 dark:text-slate-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:border-emerald-500/35 hover:scale-[1.05] active:scale-[0.95] hover:shadow-sm transition-all duration-300"
+                  title="Refresh limits"
+                >
+                  <RefreshCw size={12} className={isLoading ? "animate-spin" : "hover:rotate-45 transition-transform duration-350"} />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5 leading-relaxed">
+              {isWindowLimitReached
+                ? `Reporting window limit reached. You can report again after ${formattedResetTime}.`
+                : `You can submit ${remaining} more issue reports in this 8-hour window.`}
             </p>
           </div>
         </div>
 
-        <div className="text-right sm:text-right">
+        <div className="text-right flex items-baseline gap-1 sm:block">
           <span
-            className={`text-lg font-black tracking-tight ${
-              isLimitReached ? "text-rose-500" : "text-teal-600 dark:text-teal-400"
+            className={`text-2xl font-black tracking-tight ${
+              isWindowLimitReached ? "text-rose-500" : "text-teal-600 dark:text-teal-400"
             }`}
           >
             {remaining}
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+          <span className="text-xs text-slate-550 dark:text-slate-400 font-bold">
             {" "}
             / {limit} left
           </span>
@@ -157,23 +249,63 @@ export default function IssueReportLimitCard({
 
       {/* Progress Bar */}
       <div className="space-y-2">
-        <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden">
+        <div className="w-full h-3 bg-slate-100 dark:bg-slate-900/60 rounded-full overflow-hidden p-[1px] border border-slate-200/10 dark:border-slate-800/40">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              isLimitReached
-                ? "bg-gradient-to-r from-rose-500 to-red-600"
-                : "bg-gradient-to-r from-emerald-400 to-teal-500"
+            className={`h-full rounded-full transition-all duration-500 relative ${
+              isWindowLimitReached
+                ? "bg-gradient-to-r from-rose-500 to-red-650"
+                : isCooldownActive
+                  ? "bg-gradient-to-r from-amber-400 to-orange-500"
+                  : "bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-600"
             }`}
             style={{ width: `${usedPercentage}%` }}
-          />
+          >
+            {usedPercentage > 0 && usedPercentage < 100 && (
+              <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-white/30 blur-[1px] animate-pulse rounded-full" />
+            )}
+          </div>
         </div>
-        <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-450 font-semibold uppercase tracking-wider">
-          <span>Used: {used}</span>
-          <span className="flex items-center gap-1">
-            <Clock size={10} /> Reset: {formattedResetTime}
+        <div className="flex justify-between items-center text-[10px] text-slate-550 dark:text-slate-400 font-black uppercase tracking-wider">
+          <span>Used in window: {used}</span>
+          <span className="flex items-center gap-1.5">
+            <Clock size={11} /> Refresh: {formattedResetTime}
           </span>
         </div>
       </div>
+
+      {/* Cooldown Status Alert Box */}
+      {cooldown && (
+        <div
+          className={`mt-5 p-3.5 rounded-2xl border backdrop-blur-sm flex items-center justify-between text-xs font-bold transition-all duration-300 ${
+            isCooldownActive
+              ? "bg-amber-500/[0.04] border-amber-500/20 text-amber-700 dark:text-amber-400"
+              : "bg-emerald-500/[0.04] border-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isCooldownActive ? "bg-amber-400" : "bg-emerald-400"
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                isCooldownActive ? "bg-amber-500" : "bg-emerald-500"
+              }`}></span>
+            </span>
+            <span>
+              {isCooldownActive
+                ? `Cooldown active. Next report available after ${cooldownResetTime}.`
+                : "Cooldown clear. You can submit if your window quota is available."}
+            </span>
+          </div>
+          <span className={`px-2.5 py-0.5 text-[9px] uppercase tracking-wider font-extrabold rounded-md ${
+            isCooldownActive
+              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+          }`}>
+            {isCooldownActive ? "Restricted" : "Ready"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
