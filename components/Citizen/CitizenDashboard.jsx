@@ -29,8 +29,9 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ModeToggle } from "../ModeToggle";
 import { signOut, useSession } from "next-auth/react";
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import IssueReportLimitCard from "../Issue/IssueReportLimitCard";
 import { TutorialOverlay } from "./TutorialOverlay";
 import { TUTORIAL_STEPS } from "./TutorialSteps";
 import IssueDetailModal from "../IssueDetailModal";
@@ -122,6 +123,25 @@ export const statusOptions = [
 export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const getLimitStatus = useAction(api.issues.getIssueReportLimitStatus);
+  const [rateLimitState, setRateLimitState] = useState(null);
+  const [loadingLimit, setLoadingLimit] = useState(false);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      setLoadingLimit(true);
+      getLimitStatus({ userId: session.user.id })
+        .then((res) => {
+          setRateLimitState(res);
+        })
+        .catch((err) => {
+          console.error("Error fetching rate limit status:", err);
+        })
+        .finally(() => {
+          setLoadingLimit(false);
+        });
+    }
+  }, [session?.user?.id, getLimitStatus]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -378,6 +398,21 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
             </div>
           </div>
         </div>
+
+        {/* Daily Reporting Limit Card */}
+        {session?.user?.id && (
+          <div className="mb-12 relative z-10">
+            <IssueReportLimitCard
+              limit={rateLimitState?.limit || 5}
+              remaining={rateLimitState?.remaining ?? 5}
+              used={rateLimitState?.used ?? 0}
+              reset={rateLimitState?.reset || null}
+              variant="compact"
+              onReportClick={() => router.push("/citizen/report")}
+              isLoading={loadingLimit || !rateLimitState}
+            />
+          </div>
+        )}
 
         {/* Stronger Grounded Stats Cards */}
         <div

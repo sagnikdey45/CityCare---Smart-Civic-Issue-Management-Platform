@@ -10,10 +10,12 @@ import Navbar from "./Navbar";
 import SuccessModal from "./Success";
 import PreviewModal from "./Preview";
 import SpotlightTutorial from "./SpotlightTutorial";
-import { useMutation } from "convex/react";
+import { useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useSession } from "next-auth/react";
 import { useEffect } from "react";
+import { toast } from "sonner";
+import IssueReportLimitCard from "./IssueReportLimitCard";
 
 const IssueForm = () => {
   const { data: session } = useSession();
@@ -30,7 +32,7 @@ const IssueForm = () => {
   //     // Reset states for a fresh start
   //     setCurrentStep(1);
   //     setShowPreview(false);
-      
+
   //     const timer = setTimeout(() => {
   //       setShowTutorial(true);
   //     }, 500);
@@ -38,7 +40,26 @@ const IssueForm = () => {
   //   }
   // }, []);
 
-  const createIssue = useMutation(api.issues.createIssue);
+  const createIssue = useAction(api.issues.createIssue);
+  const getLimitStatus = useAction(api.issues.getIssueReportLimitStatus);
+  const [rateLimitState, setRateLimitState] = useState(null);
+  const [loadingLimit, setLoadingLimit] = useState(false);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      setLoadingLimit(true);
+      getLimitStatus({ userId: session.user.id })
+        .then((res) => {
+          setRateLimitState(res);
+        })
+        .catch((err) => {
+          console.error("Error fetching rate limit status:", err);
+        })
+        .finally(() => {
+          setLoadingLimit(false);
+        });
+    }
+  }, [session?.user?.id, getLimitStatus]);
 
   const [formData, setFormData] = useState({
     // --- Issue details ---
@@ -157,11 +178,18 @@ const IssueForm = () => {
   };
 
   const handleSubmit = async () => {
+    if (rateLimitState && rateLimitState.remaining === 0) {
+      toast.error(
+        "Daily report limit reached. You cannot submit more reports today.",
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
       console.log("Submitting issue with data:", formData);
-      await createIssue({
+      const res = await createIssue({
         title: formData.title,
         description: formData.description,
 
@@ -218,12 +246,22 @@ const IssueForm = () => {
         createdAt: Date.now(),
       });
 
+      if (res && res.rateLimit) {
+        setRateLimitState({
+          limit: res.rateLimit.limit,
+          remaining: res.rateLimit.remaining,
+          used: res.rateLimit.limit - res.rateLimit.remaining,
+          reset: res.rateLimit.reset,
+          allowed: res.rateLimit.remaining > 0,
+        });
+      }
+
       setShowPreview(false);
       setShowSuccess(true);
       setCurrentStep(1);
     } catch (err) {
       console.error("Submit failed:", err);
-      alert("Failed to submit issue. Please try again.");
+      toast.error(err.message || "Failed to submit issue. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -296,6 +334,20 @@ const IssueForm = () => {
             </div>
           </div>
 
+          {/* Rate Limit Info Card */}
+          {session?.user?.id && (
+            <div className="max-w-2xl mx-auto mb-8">
+              <IssueReportLimitCard
+                limit={rateLimitState?.limit || 5}
+                remaining={rateLimitState?.remaining ?? 5}
+                used={rateLimitState?.used ?? 0}
+                reset={rateLimitState?.reset || null}
+                variant="full"
+                isLoading={loadingLimit || !rateLimitState}
+              />
+            </div>
+          )}
+
           {/* Progress bar */}
           <ProgressBar currentStep={currentStep} />
 
@@ -363,20 +415,33 @@ const IssueForm = () => {
             <button
               onClick={(e) => {
                 e.preventDefault();
+                if (rateLimitState?.remaining === 0) {
+                  toast.error(
+                    "Daily report limit reached. You cannot submit more reports today.",
+                  );
+                  return;
+                }
                 handleNext();
               }}
-              className="group relative flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-white text-sm overflow-hidden
-                shadow-xl shadow-emerald-500/30
-                hover:shadow-emerald-500/50 hover:scale-[1.04] hover:-translate-y-0.5
-                active:scale-[0.97] transition-all duration-200"
+              disabled={rateLimitState?.remaining === 0}
+              className={`group relative flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-white text-sm overflow-hidden transition-all duration-200 ${
+                rateLimitState?.remaining === 0
+                  ? "bg-slate-300 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-50 shadow-none hover:scale-100 hover:translate-y-0"
+                  : "shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.04] hover:-translate-y-0.5 active:scale-[0.97]"
+              }`}
             >
               {/* Base gradient */}
-              <div className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600" />
-              {/* Hover shimmer */}
-              <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              {/* Shine swipe */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
-              <span className="relative flex items-center gap-2" data-tutorial="preview-btn">
+              {rateLimitState?.remaining !== 0 && (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+                </>
+              )}
+              <span
+                className="relative flex items-center gap-2"
+                data-tutorial="preview-btn"
+              >
                 {currentStep === 3 ? (
                   <>
                     <CheckCircle2 className="w-5 h-5" />
