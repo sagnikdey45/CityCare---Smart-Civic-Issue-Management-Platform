@@ -1,6 +1,6 @@
-import { calculateCitizenLevel, POINT_RULES } from "lib/gamificationConstants";
+import { calculateCitizenLevel, POINT_RULES } from "../lib/gamificationConstants";
 import { internalMutation } from "./_generated/server";
-import { awardCitizenPoints } from "lib/gamificationAwards";
+import { awardCitizenPoints } from "../lib/gamificationAwards";
 
 function normalizeStatus(status = "") {
   return status.toString().toLowerCase().trim();

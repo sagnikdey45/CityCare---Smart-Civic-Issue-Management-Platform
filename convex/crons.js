@@ -17,11 +17,11 @@ const crons = cronJobs();
 //   internal.publicIssues.syncPublicIssues,
 // );
 
-crons.interval(
-  "ensure default system badges",
-  { hours: 24 },
-  internal.badges.ensureDefaultBadges,
-  {},
-);
+// crons.interval(
+//   "ensure default system badges",
+//   { hours: 24 },
+//   internal.badges.ensureDefaultBadges,
+//   {},
+// );
 
 export default crons;

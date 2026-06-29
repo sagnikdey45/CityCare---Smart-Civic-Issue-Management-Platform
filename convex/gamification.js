@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import {
   awardCitizenPoints,
   checkAndAwardCitizenBadges,
-} from "@/lib/gamificationAwards";
+} from "../lib/gamificationAwards";
 
 export const awardPointsManual = mutation({
   args: {

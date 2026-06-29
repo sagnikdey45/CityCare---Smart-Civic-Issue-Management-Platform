@@ -1,7 +1,7 @@
 import {
   awardCitizenPoints,
   checkAndAwardCitizenBadges,
-} from "@/lib/gamificationAwards";
+} from "../lib/gamificationAwards";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
