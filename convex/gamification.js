@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import {
   awardCitizenPoints,
   checkAndAwardCitizenBadges,
-} from "../lib/gamificationAwards";
+} from "@/lib/gamificationAwards";
 
 export const awardPointsManual = mutation({
   args: {
@@ -144,5 +144,110 @@ export const getCityLeaderboard = query({
         reportsVerified: citizen.reportsVerified ?? 0,
         reportsResolved: citizen.reportsResolved ?? 0,
       }));
+  },
+});
+
+export const getCitizenGamificationProfileByUserId = query({
+  args: {
+    userId: v.id("users"),
+    leaderboardLimit: v.optional(v.number()),
+  },
+
+  handler: async (ctx, args) => {
+    const citizen = await ctx.db
+      .query("citizens")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!citizen) {
+      return null;
+    }
+
+    const earnedBadges = await ctx.db
+      .query("citizenBadges")
+      .withIndex("by_citizen", (q) => q.eq("citizenId", citizen._id))
+      .collect();
+
+    const badges = await Promise.all(
+      earnedBadges.map(async (citizenBadge) => {
+        const badge = await ctx.db.get(citizenBadge.badgeId);
+
+        return {
+          ...citizenBadge,
+          badge,
+        };
+      }),
+    );
+
+    const recentTransactions = await ctx.db
+      .query("citizenPointTransactions")
+      .withIndex("by_citizen_created", (q) => q.eq("citizenId", citizen._id))
+      .order("desc")
+      .take(20);
+
+    const cityCitizens = await ctx.db
+      .query("citizens")
+      .withIndex("by_city", (q) => q.eq("city", citizen.city))
+      .collect();
+
+    const sortedCitizens = cityCitizens.sort(
+      (a, b) => (b.points ?? 0) - (a.points ?? 0),
+    );
+
+    const currentCitizenIndex = sortedCitizens.findIndex(
+      (item) => item._id === citizen._id,
+    );
+
+    const cityRank = currentCitizenIndex >= 0 ? currentCitizenIndex + 1 : null;
+    const totalCitizens = sortedCitizens.length;
+
+    const limit = args.leaderboardLimit ?? 20;
+
+    const leaderboard = sortedCitizens.slice(0, limit).map((item, index) => ({
+      rank: index + 1,
+      citizenId: item._id,
+      fullName: item._id === citizen._id ? "You" : item.fullName,
+      city: item.city,
+      region: item.region,
+      points: item.points ?? 0,
+      level: item.level ?? 1,
+      levelTitle: item.levelTitle ?? "New Citizen",
+      badgeCount: item.badgeCount ?? 0,
+      reportsSubmitted: item.reportsSubmitted ?? 0,
+      reportsVerified: item.reportsVerified ?? 0,
+      reportsResolved: item.reportsResolved ?? 0,
+      isCurrentUser: item._id === citizen._id,
+    }));
+
+    const currentUserAlreadyInLeaderboard = leaderboard.some(
+      (item) => item.citizenId === citizen._id,
+    );
+
+    if (!currentUserAlreadyInLeaderboard && cityRank !== null) {
+      leaderboard.push({
+        rank: cityRank,
+        citizenId: citizen._id,
+        fullName: "You",
+        city: citizen.city,
+        region: citizen.region,
+        points: citizen.points ?? 0,
+        level: citizen.level ?? 1,
+        levelTitle: citizen.levelTitle ?? "New Citizen",
+        badgeCount: citizen.badgeCount ?? 0,
+        reportsSubmitted: citizen.reportsSubmitted ?? 0,
+        reportsVerified: citizen.reportsVerified ?? 0,
+        reportsResolved: citizen.reportsResolved ?? 0,
+        isCurrentUser: true,
+      });
+    }
+
+    return {
+      citizen,
+      badges,
+      recentTransactions,
+      leaderboard,
+      cityRank,
+      totalCitizens,
+    };
   },
 });
