@@ -1697,7 +1697,11 @@ export function AdminDashboard() {
               {tabBtn("messages", <MessageSquare size={20} />, "Messages")}
               {tabBtn("sla", <Clock size={20} />, "SLA")}
               {tabBtn("badges", <Trophy size={20} />, "Badges")}
-              {tabBtn("analytics", <BarChart3 size={20} />, "Analytics")}
+              {tabBtn(
+                "analytics",
+                <BarChart3 size={20} />,
+                "Trend Intelligence",
+              )}
               {tabBtn("audit", <Shield size={20} />, "Audit")}
             </div>
           </div>
@@ -2333,92 +2337,11 @@ export function AdminDashboard() {
 
           {/* Analytics tab */}
           {activeTab === "analytics" && (
-            <>
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-                <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-4">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <BarChart3 size={24} />
-                    SLA Analytics
-                  </h2>
-                </div>
-                <div className="p-6">
-                  <SLAAnalyticsDashboard />
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden mt-8">
-                <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-4">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <TrendingUp size={24} />
-                    Performance Analytics
-                  </h2>
-                </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    {[
-                      {
-                        label: "Avg Resolution Time",
-                        value: "36h",
-                        icon: <BarChart3 size={22} />,
-                        bg: "bg-blue-100 dark:bg-blue-900/30",
-                        color: "text-blue-600 dark:text-blue-400",
-                      },
-                      {
-                        label: "Success Rate",
-                        value: "94%",
-                        icon: <TrendingUp size={22} />,
-                        bg: "bg-emerald-100 dark:bg-emerald-900/30",
-                        color: "text-emerald-600 dark:text-emerald-400",
-                      },
-                      {
-                        label: "Active Officers",
-                        value: officers.length,
-                        icon: <Users size={22} />,
-                        bg: "bg-cyan-100 dark:bg-cyan-900/30",
-                        color: "text-cyan-600 dark:text-cyan-400",
-                      },
-                      {
-                        label: "Avg Workload",
-                        value: Math.round(issues.length / officers.length),
-                        icon: <Activity size={22} />,
-                        bg: "bg-amber-100 dark:bg-amber-900/30",
-                        color: "text-amber-600 dark:text-amber-400",
-                      },
-                    ].map((m) => (
-                      <div
-                        key={m.label}
-                        className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-lg"
-                      >
-                        <div
-                          className={`inline-flex p-3 ${m.bg} rounded-xl mb-3`}
-                        >
-                          <span className={m.color}>{m.icon}</span>
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-                          {m.label}
-                        </p>
-                        <p className="text-3xl font-black text-slate-900 dark:text-white">
-                          {m.value}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl text-center">
-                    <TrendingUp
-                      size={64}
-                      className="mx-auto text-slate-300 dark:text-slate-700 mb-4"
-                    />
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                      Advanced Analytics Coming Soon
-                    </h3>
-                    <p className="text-slate-600 dark:text-slate-400">
-                      Detailed charts, trends, and insights will be available
-                      here
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </>
+            <SLAAnalyticsDashboard
+              userId={dbUser?._id}
+              issues={issues}
+              onViewIssue={setSelectedIssue}
+            />
           )}
 
           {/* Audit tab */}
