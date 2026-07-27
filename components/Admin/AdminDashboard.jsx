@@ -39,6 +39,7 @@ import { AdminReassignModal } from "./AdminReassignModal";
 import { MessagesCenter } from "../MessageCenter";
 import { ModeToggle } from "../ModeToggle";
 import SLAMonitoringDashboard from "./SLAMonitoringDashboard";
+import { BadgeManagementSection } from "./BadgeManagementSystem";
 // import SLAMonitoringDashboard from './SLAMonitoringDashboard';
 // import SLAAnalyticsDashboard from './SLAAnalyticsDashboard';
 // import ComprehensiveAuditLog from './ComprehensiveAuditLog';
@@ -1378,6 +1379,7 @@ export function AdminDashboard() {
               {tabBtn("officers", <Users size={20} />, "Officers")}
               {tabBtn("messages", <MessageSquare size={20} />, "Messages")}
               {tabBtn("sla", <Clock size={20} />, "SLA")}
+              {tabBtn("badges", <Trophy size={20} />, "Badges")}
               {tabBtn("analytics", <BarChart3 size={20} />, "Analytics")}
               {tabBtn("audit", <Shield size={20} />, "Audit")}
             </div>
@@ -1642,8 +1644,18 @@ export function AdminDashboard() {
                 </h2>
               </div>
               <div className="p-6">
-                <SLAMonitoringDashboard issues={issues} onViewIssue={setSelectedIssue} />
+                <SLAMonitoringDashboard
+                  issues={issues}
+                  onViewIssue={setSelectedIssue}
+                />
               </div>
+            </div>
+          )}
+
+          {/* Badge Management */}
+          {activeTab === "badges" && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <BadgeManagementSection />
             </div>
           )}
 
