@@ -29,6 +29,7 @@ import {
   Filter,
   Star,
   Layers,
+  Trophy,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { useSession } from "next-auth/react";
@@ -825,7 +826,9 @@ export function AdminDashboard() {
   const dbUser = useQuery(api.users.getUserByEmail, {
     email: session?.user?.email || "ankit@example.com",
   });
-  const sendMessageToUserMutation = useMutation(api.directMessages.sendMessageToUser);
+  const sendMessageToUserMutation = useMutation(
+    api.directMessages.sendMessageToUser,
+  );
 
   const commandCenterData = useQuery(api.admin.getOfficerCommandCenterData);
 

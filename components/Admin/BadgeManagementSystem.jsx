@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import {
   Trophy,
@@ -30,106 +32,64 @@ import {
   Tag,
   Clock,
   Hash,
+  Lock,
 } from "lucide-react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useSession } from "next-auth/react";
 
-// Dummy data
+// ── Criteria Types Constant ──────────────────────────────────────────────────
 
-const INITIAL_BADGES = [
+const CRITERIA_TYPES = [
   {
-    _id: "badge_001",
-    code: "first_reporter",
-    name: "First Reporter",
-    description: "Submitted the first civic issue report",
-    icon: "flag",
-    category: "reporting",
-    requiredCount: 1,
-    isActive: true,
-    createdAt: Date.now() - 20 * 86400000,
-    updatedAt: Date.now() - 5 * 86400000,
+    value: "reports_submitted",
+    label: "Reports Submitted",
+    helper: "Citizen submitted this many issues",
   },
   {
-    _id: "badge_002",
-    code: "evidence_builder",
-    name: "Evidence Builder",
-    description: "Added video evidence to strengthen a civic report",
-    icon: "video",
-    category: "quality",
-    requiredCount: 1,
-    isActive: true,
-    createdAt: Date.now() - 18 * 86400000,
-    updatedAt: Date.now() - 4 * 86400000,
+    value: "video_evidence_added",
+    label: "Video Evidence Added",
+    helper: "Citizen added this many videos as evidence",
   },
   {
-    _id: "badge_003",
-    code: "verified_voice",
-    name: "Verified Voice",
-    description: "Had 5 reports verified by officers",
-    icon: "check-circle",
-    category: "quality",
-    requiredCount: 5,
-    isActive: true,
-    createdAt: Date.now() - 15 * 86400000,
-    updatedAt: Date.now() - 3 * 86400000,
+    value: "reports_verified",
+    label: "Reports Verified",
+    helper: "Citizen had this many reports verified",
   },
   {
-    _id: "badge_004",
-    code: "problem_solver",
-    name: "Problem Solver",
-    description: "Contributed to 5 resolved civic issues",
-    icon: "wrench",
-    category: "resolution",
-    requiredCount: 5,
-    isActive: true,
-    createdAt: Date.now() - 12 * 86400000,
-    updatedAt: Date.now() - 2 * 86400000,
+    value: "reports_resolved",
+    label: "Reports Resolved",
+    helper: "Citizen contributed to this many resolved issues",
   },
   {
-    _id: "badge_005",
-    code: "seven_day_streak",
-    name: "7-Day Civic Streak",
-    description: "Stayed active for 7 civic participation events",
-    icon: "flame",
-    category: "streak",
-    requiredCount: 7,
-    isActive: true,
-    createdAt: Date.now() - 10 * 86400000,
-    updatedAt: Date.now() - 86400000,
+    value: "comments_added",
+    label: "Comments Added",
+    helper: "Citizen added this many public discussion comments",
   },
   {
-    _id: "badge_006",
-    code: "city_hero",
-    name: "City Hero",
-    description: "Reached 1000 citizen points",
-    icon: "award",
-    category: "special",
-    requiredPoints: 1000,
-    isActive: true,
-    createdAt: Date.now() - 8 * 86400000,
-    updatedAt: Date.now() - 86400000,
+    value: "upvotes_received",
+    label: "Upvotes Received",
+    helper: "Citizen received this many upvotes",
   },
   {
-    _id: "badge_007",
-    code: "community_voice",
-    name: "Community Voice",
-    description: "Added 10 discussion comments to civic issues",
-    icon: "message-circle",
-    category: "community",
-    requiredCount: 10,
-    isActive: true,
-    createdAt: Date.now() - 6 * 86400000,
-    updatedAt: Date.now() - 86400000,
+    value: "current_streak",
+    label: "Current Streak",
+    helper: "Citizen maintained this many active days currently",
   },
   {
-    _id: "badge_008",
-    code: "top_resolver",
-    name: "Top Resolver",
-    description: "Had 20 reported issues resolved by the city",
-    icon: "star",
-    category: "resolution",
-    requiredCount: 20,
-    isActive: false,
-    createdAt: Date.now() - 4 * 86400000,
-    updatedAt: Date.now() - 86400000,
+    value: "longest_streak",
+    label: "Longest Streak",
+    helper: "Citizen achieved this many days as best streak",
+  },
+  {
+    value: "points_reached",
+    label: "Points Reached",
+    helper: "Citizen reached this many total points",
+  },
+  {
+    value: "manual",
+    label: "Manual Award",
+    helper: "Only admins can manually award this badge",
   },
 ];
 
@@ -149,6 +109,62 @@ function generateBadgeCode(name) {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, "_");
+}
+
+function formatCriteriaType(type) {
+  return (type || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getCriteriaHelper(type) {
+  return CRITERIA_TYPES.find((item) => item.value === type)?.helper || "";
+}
+
+function getRequiredCountLabel(criteriaType) {
+  switch (criteriaType) {
+    case "reports_submitted":
+      return "Reports Required";
+    case "video_evidence_added":
+      return "Videos Required";
+    case "reports_verified":
+      return "Verified Reports Required";
+    case "reports_resolved":
+      return "Resolved Reports Required";
+    case "comments_added":
+      return "Comments Required";
+    case "upvotes_received":
+      return "Upvotes Required";
+    case "current_streak":
+      return "Current Streak Days Required";
+    case "longest_streak":
+      return "Longest Streak Days Required";
+    case "points_reached":
+      return "Points Required";
+    case "manual":
+      return "Manual Award Requirement";
+    default:
+      return "Required Count";
+  }
+}
+
+function formatRequiredValue(badge) {
+  if (badge.criteriaType === "points_reached") {
+    return `${badge.requiredCount.toLocaleString()} points`;
+  }
+
+  if (
+    badge.criteriaType === "current_streak" ||
+    badge.criteriaType === "longest_streak"
+  ) {
+    return `${badge.requiredCount} days`;
+  }
+
+  if (badge.criteriaType === "manual") {
+    return "Manual award only";
+  }
+
+  return badge.requiredCount.toLocaleString();
 }
 
 function getBadgeIcon(icon, size = 20) {
@@ -264,6 +280,12 @@ function BadgePreview({ badge }) {
         <div className={`text-xs font-bold opacity-60 ${style.text}`}>
           {badge.category || "category"}
         </div>
+        <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+          {formatCriteriaType(badge.criteriaType || "reports_submitted")}
+        </div>
+        <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+          +{badge.rewardPoints || 0} pts
+        </div>
       </div>
     </div>
   );
@@ -271,7 +293,7 @@ function BadgePreview({ badge }) {
 
 // ── Add/Edit Form ─────────────────────────────────────────────────────────────
 
-function BadgeFormDialog({ badge, onSave, onClose }) {
+function BadgeFormDialog({ badge, onSave, onClose, isSaving }) {
   const isEdit = !!badge;
   const [form, setForm] = useState({
     name: badge?.name || "",
@@ -279,8 +301,9 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
     description: badge?.description || "",
     icon: badge?.icon || "award",
     category: badge?.category || "special",
-    requiredPoints: badge?.requiredPoints?.toString() || "",
-    requiredCount: badge?.requiredCount?.toString() || "",
+    criteriaType: badge?.criteriaType || "reports_submitted",
+    requiredCount: badge?.requiredCount?.toString() || "1",
+    rewardPoints: badge?.rewardPoints?.toString() || "10",
     isActive: badge?.isActive ?? true,
   });
 
@@ -294,23 +317,57 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSave({
-      name: form.name,
-      code: form.code,
-      description: form.description,
+
+    if (!form.name.trim()) {
+      alert("Badge name is required.");
+      return;
+    }
+    if (!isEdit && !form.code.trim()) {
+      alert("Badge code is required.");
+      return;
+    }
+    if (!form.description.trim()) {
+      alert("Description is required.");
+      return;
+    }
+    if (!form.category) {
+      alert("Category is required.");
+      return;
+    }
+    if (!form.criteriaType) {
+      alert("Criteria type is required.");
+      return;
+    }
+
+    const count = Number(form.requiredCount);
+    if (isNaN(count) || count < 0) {
+      alert("Required count must be a non-negative number.");
+      return;
+    }
+
+    const points = Number(form.rewardPoints);
+    if (isNaN(points) || points < 0) {
+      alert("Reward points must be a non-negative number.");
+      return;
+    }
+
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
       icon: form.icon,
       category: form.category,
-      requiredPoints: form.requiredPoints
-        ? Number(form.requiredPoints)
-        : undefined,
-      requiredCount: form.requiredCount
-        ? Number(form.requiredCount)
-        : undefined,
+      criteriaType: form.criteriaType,
+      requiredCount: form.criteriaType === "manual" ? 1 : count,
+      rewardPoints: points,
       isActive: form.isActive,
-    });
-  }
+    };
 
-  const style = getCategoryStyle(form.category);
+    if (!isEdit) {
+      payload.code = form.code.trim();
+    }
+
+    onSave(payload);
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
@@ -323,12 +380,12 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
         <div className="bg-gradient-to-r from-slate-700 to-slate-900 p-6 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-black text-white">
-              {isEdit ? "Edit Badge" : "Add New Badge"}
+              {isEdit ? "Edit Custom Badge" : "Add Custom Badge"}
             </h3>
             <p className="text-slate-300 text-sm mt-0.5">
               {isEdit
-                ? "Update badge details"
-                : "Create a new achievement badge"}
+                ? "Update custom badge details"
+                : "Create a new custom achievement badge"}
             </p>
           </div>
           <button
@@ -354,6 +411,8 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
                   name: form.name,
                   icon: form.icon,
                   category: form.category,
+                  criteriaType: form.criteriaType,
+                  rewardPoints: Number(form.rewardPoints) || 0,
                 }}
               />
             </div>
@@ -379,14 +438,17 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
                 <input
                   required
                   value={form.code}
+                  disabled={isEdit}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, code: e.target.value }))
                   }
                   placeholder="auto-generated from name"
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  Used as a unique identifier. Use underscores, no spaces.
+                  {isEdit
+                    ? "Badge code cannot be changed after creation."
+                    : "Used as a unique identifier. Use underscores, no spaces."}
                 </p>
               </div>
             </div>
@@ -439,7 +501,7 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
             {/* Icon */}
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1.5">
-                Icon
+                Icon *
               </label>
               <div className="relative">
                 <select
@@ -461,81 +523,145 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
                 />
               </div>
             </div>
+          </div>
 
+          {/* Criteria Type */}
+          <div>
+            <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1.5">
+              Criteria Type *
+            </label>
+            <div className="relative">
+              <select
+                value={form.criteriaType}
+                onChange={(e) =>
+                  setForm((f) => {
+                    const nextType = e.target.value;
+                    return {
+                      ...f,
+                      criteriaType: nextType,
+                      requiredCount:
+                        nextType === "manual" ? "1" : f.requiredCount,
+                    };
+                  })
+                }
+                className="w-full appearance-none px-4 pr-9 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+              >
+                {CRITERIA_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              {getCriteriaHelper(form.criteriaType)}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             {/* Required Count */}
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1.5">
-                Required Count
+                {getRequiredCountLabel(form.criteriaType)} *
               </label>
               <input
                 type="number"
                 min="0"
                 value={form.requiredCount}
+                disabled={form.criteriaType === "manual"}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, requiredCount: e.target.value }))
                 }
                 placeholder="e.g. 5"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
               />
+              {form.criteriaType === "manual" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-semibold">
+                  Manual badges are awarded by admins only.
+                </p>
+              )}
             </div>
 
-            {/* Required Points */}
+            {/* Reward Points */}
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1.5">
-                Required Points
+                Reward Points *
               </label>
               <input
                 type="number"
                 min="0"
-                value={form.requiredPoints}
+                value={form.rewardPoints}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, requiredPoints: e.target.value }))
+                  setForm((f) => ({ ...f, rewardPoints: e.target.value }))
                 }
-                placeholder="e.g. 1000"
+                placeholder="e.g. 25"
                 className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
               />
             </div>
           </div>
 
-          {/* Active toggle */}
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-            <div>
-              <div className="font-bold text-slate-900 dark:text-white text-sm">
-                Badge Active
+          {/* Active toggle / Edit Note */}
+          {!isEdit ? (
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div>
+                <div className="font-bold text-slate-900 dark:text-white text-sm">
+                  Badge Active
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Inactive badges won't be awarded to citizens
+                </div>
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Inactive badges won't be awarded to citizens
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({ ...f, isActive: !f.isActive }))
+                }
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${form.isActive ? "bg-emerald-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}
+              >
+                {form.isActive ? (
+                  <ToggleRight size={18} />
+                ) : (
+                  <ToggleLeft size={18} />
+                )}
+                {form.isActive ? "Active" : "Inactive"}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setForm((f) => ({ ...f, isActive: !f.isActive }))}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${form.isActive ? "bg-emerald-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}
-            >
-              {form.isActive ? (
-                <ToggleRight size={18} />
-              ) : (
-                <ToggleLeft size={18} />
-              )}
-              {form.isActive ? "Active" : "Inactive"}
-            </button>
-          </div>
+          ) : (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                Badge active status is managed from the badge card using the
+                Activate / Deactivate button.
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-2xl font-bold text-sm transition-all"
+              disabled={isSaving}
+              className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition-all"
+              disabled={isSaving}
+              className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save size={16} />
-              {isEdit ? "Save Changes" : "Create Badge"}
+              {isSaving ? (
+                <span>Saving...</span>
+              ) : (
+                <>
+                  <Save size={16} />
+                  {isEdit ? "Save Changes" : "Create Badge"}
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -546,97 +672,153 @@ function BadgeFormDialog({ badge, onSave, onClose }) {
 
 // ── Badge Card ────────────────────────────────────────────────────────────────
 
-function BadgeCard({ badge, onEdit, onToggle }) {
+function BadgeCard({ badge, onEdit, onToggle, isToggling, isBusy }) {
   const style = getCategoryStyle(badge.category);
 
   return (
     <div
-      className={`group relative overflow-hidden bg-white dark:bg-slate-800/80 rounded-3xl border-2 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${badge.isActive ? "border-slate-100 dark:border-slate-700" : "border-dashed border-slate-300 dark:border-slate-600 opacity-75"}`}
+      className={`group relative overflow-hidden bg-white dark:bg-slate-800/80 rounded-3xl border-2 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between ${
+        badge.isActive
+          ? "border-slate-100 dark:border-slate-700"
+          : "border-dashed border-slate-300 dark:border-slate-600 opacity-75"
+      }`}
     >
-      {!badge.isActive && (
-        <div className="absolute top-3 right-3 z-10">
-          <span className="text-xs font-black text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2.5 py-1">
+      {/* Status & Type Badges/Pills in top corner */}
+      <div className="absolute top-3 right-3 z-10 flex gap-1.5 flex-wrap justify-end">
+        {badge.isSystemBadge && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-full px-2 py-0.5 border border-blue-100 dark:border-blue-800">
+            <Lock size={10} />
+            Protected
+          </span>
+        )}
+        {!badge.isActive && (
+          <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">
             Inactive
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
       <div
         className={`absolute top-0 right-0 w-28 h-28 rounded-full -mr-12 -mt-12 bg-gradient-to-br ${style.gradient} opacity-[0.07] group-hover:opacity-[0.12] transition-opacity`}
       ></div>
 
-      <div className="p-5">
-        {/* Icon + name */}
-        <div className="flex items-start gap-4 mb-4">
-          <div
-            className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${style.gradient} flex items-center justify-center text-white shadow-lg flex-shrink-0`}
-          >
-            {getBadgeIcon(badge.icon, 22)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-black text-slate-900 dark:text-white text-sm leading-tight mb-1">
-              {badge.name}
-            </h3>
-            <span
-              className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-full border ${style.pill}`}
+      <div className="p-5 flex flex-col h-full justify-between">
+        <div>
+          {/* Icon + name */}
+          <div className="flex items-start gap-4 mb-4">
+            <div
+              className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${style.gradient} flex items-center justify-center text-white shadow-lg flex-shrink-0`}
             >
-              {badge.category}
-            </span>
+              {getBadgeIcon(badge.icon, 22)}
+            </div>
+            <div className="flex-1 min-w-0 pr-16">
+              <h3 className="font-black text-slate-900 dark:text-white text-sm leading-tight mb-1 truncate">
+                {badge.name}
+              </h3>
+              <div className="flex flex-wrap gap-1">
+                <span
+                  className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.pill}`}
+                >
+                  {badge.category}
+                </span>
+                <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  {badge.isSystemBadge ? "System" : "Custom"}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 line-clamp-2 leading-relaxed">
-          {badge.description}
-        </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 line-clamp-2 leading-relaxed h-8">
+            {badge.description}
+          </p>
 
-        {/* Meta */}
-        <div className="space-y-1.5 mb-4">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <Hash size={11} />
-            <span className="font-mono">{badge.code}</span>
-          </div>
-          {badge.requiredCount !== undefined && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <CheckCircle size={11} />
-              <span>
-                Required count: <strong>{badge.requiredCount}</strong>
+          {/* Meta / Details */}
+          <div className="space-y-1.5 mb-5 border-t border-slate-150 dark:border-slate-700/60 pt-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 dark:text-slate-500">
+                Badge Code
+              </span>
+              <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                {badge.code}
               </span>
             </div>
-          )}
-          {badge.requiredPoints !== undefined && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <Zap size={11} />
-              <span>
-                Required points: <strong>{badge.requiredPoints}</strong>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 dark:text-slate-500">
+                Criteria
+              </span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">
+                {formatCriteriaType(badge.criteriaType)}
               </span>
             </div>
-          )}
-          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-            <Clock size={11} />
-            <span>
-              Updated {formatDate(badge.updatedAt || badge.createdAt)}
-            </span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 dark:text-slate-500">
+                Required
+              </span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">
+                {formatRequiredValue(badge)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 dark:text-slate-500">Reward</span>
+              <span className="font-black text-emerald-600 dark:text-emerald-400">
+                +{badge.rewardPoints} pts
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+              <span>Updated</span>
+              <span>{formatDate(badge.updatedAt || badge.createdAt)}</span>
+            </div>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
-          >
-            <Edit3 size={13} />
-            Edit
-          </button>
-          <button
-            onClick={onToggle}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              badge.isActive
-                ? "bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300"
-                : "bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+            onClick={() => {
+              if (badge.isSystemBadge) {
+                alert("System badges are protected and cannot be edited.");
+              } else {
+                onEdit();
+              }
+            }}
+            disabled={badge.isSystemBadge || isBusy}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              badge.isSystemBadge
+                ? "bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-100 dark:border-slate-700/50"
+                : "bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300"
             }`}
           >
-            {badge.isActive ? (
+            {badge.isSystemBadge ? <Lock size={13} /> : <Edit3 size={13} />}
+            {badge.isSystemBadge ? "Protected" : "Edit"}
+          </button>
+          <button
+            onClick={() => {
+              if (badge.isSystemBadge) {
+                alert("System/default badges cannot be deactivated.");
+              } else {
+                onToggle();
+              }
+            }}
+            disabled={isToggling || badge.isSystemBadge || isBusy}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              badge.isSystemBadge
+                ? "bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-100 dark:border-slate-700/50"
+                : badge.isActive
+                  ? "bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300"
+                  : "bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+            }`}
+          >
+            {badge.isSystemBadge ? (
+              <>
+                <Lock size={13} />
+                Protected
+              </>
+            ) : isToggling ? (
+              <>
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                Updating...
+              </>
+            ) : badge.isActive ? (
               <>
                 <ToggleLeft size={13} />
                 Deactivate
@@ -654,72 +836,296 @@ function BadgeCard({ badge, onEdit, onToggle }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Skeleton Loader ─────────────────────────────────────────────────────────
+
+function BadgeSkeletonLoader() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      {/* Hero Banner Skeleton */}
+      <div className="h-64 bg-slate-100 dark:bg-slate-800/80 rounded-3xl p-8 flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+          <div className="space-y-3">
+            <div className="h-8 bg-slate-200 dark:bg-slate-700 w-48 rounded-xl"></div>
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 w-80 rounded-lg"></div>
+          </div>
+          <div className="h-12 bg-slate-200 dark:bg-slate-700 w-36 rounded-2xl"></div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-6">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <div
+              key={i}
+              className="h-20 bg-slate-200 dark:bg-slate-700 rounded-2xl"
+            ></div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter Bar Skeleton */}
+      <div className="h-16 bg-slate-100 dark:bg-slate-800/80 rounded-2xl p-4 flex gap-3 items-center">
+        <div className="h-10 bg-slate-200 dark:bg-slate-700 flex-1 rounded-xl"></div>
+        <div className="h-10 bg-slate-200 dark:bg-slate-700 w-32 rounded-xl"></div>
+        <div className="h-10 bg-slate-200 dark:bg-slate-700 w-32 rounded-xl"></div>
+        <div className="h-10 bg-slate-200 dark:bg-slate-700 w-32 rounded-xl"></div>
+        <div className="h-10 bg-slate-200 dark:bg-slate-700 w-32 rounded-xl"></div>
+      </div>
+
+      {/* Badge Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+          <div
+            key={i}
+            className="h-72 bg-slate-100 dark:bg-slate-800/80 rounded-3xl p-5 space-y-4"
+          >
+            <div className="flex gap-4">
+              <div className="w-14 h-14 bg-slate-200 dark:bg-slate-700 rounded-2xl"></div>
+              <div className="flex-1 space-y-2 mt-2">
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-md w-3/4"></div>
+                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-md w-1/2"></div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-md w-full"></div>
+              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-md w-5/6"></div>
+            </div>
+            <div className="space-y-1">
+              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-md w-2/3"></div>
+              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-md w-1/2"></div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-xl flex-1"></div>
+              <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-xl flex-1"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
 
 export function BadgeManagementSection() {
-  const [badges, setBadges] = useState(INITIAL_BADGES);
+  const { data: session } = useSession();
+
+  // Convex Queries and Mutations
+  const badges = useQuery(api.badges.getAllBadges);
+  const createCustomBadge = useMutation(api.badges.createCustomBadge);
+  const updateCustomBadge = useMutation(api.badges.updateCustomBadge);
+  const setCustomBadgeActiveStatus = useMutation(
+    api.badges.setCustomBadgeActiveStatus,
+  );
+  const seedDefaultBadges = useMutation(api.badges.seedDefaultBadges);
+
+  // Local Component State
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [badgeTypeFilter, setBadgeTypeFilter] = useState("all");
+  const [criteriaFilter, setCriteriaFilter] = useState("all");
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBadge, setEditingBadge] = useState(null);
 
-  const filtered = badges.filter((b) => {
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingBadgeId, setTogglingBadgeId] = useState(null);
+
+  // Return skeleton if querying database
+  if (badges === undefined) {
+    return <BadgeSkeletonLoader />;
+  }
+
+  const badgeList = badges ?? [];
+
+  // Filter computation
+  const filtered = badgeList.filter((b) => {
+    const q = search.toLowerCase().trim();
+
     if (
-      search &&
-      !b.name.toLowerCase().includes(search.toLowerCase()) &&
-      !b.code.toLowerCase().includes(search.toLowerCase())
-    )
+      q &&
+      !b.name.toLowerCase().includes(q) &&
+      !b.code.toLowerCase().includes(q) &&
+      !b.description.toLowerCase().includes(q) &&
+      !b.criteriaType.toLowerCase().includes(q)
+    ) {
       return false;
+    }
+
     if (categoryFilter !== "all" && b.category !== categoryFilter) return false;
+
     if (statusFilter === "active" && !b.isActive) return false;
     if (statusFilter === "inactive" && b.isActive) return false;
+
+    if (badgeTypeFilter === "system" && !b.isSystemBadge) return false;
+    if (badgeTypeFilter === "custom" && b.isSystemBadge) return false;
+
+    if (criteriaFilter !== "all" && b.criteriaType !== criteriaFilter) {
+      return false;
+    }
+
     return true;
   });
 
-  const totalActive = badges.filter((b) => b.isActive).length;
-  const totalInactive = badges.filter((b) => !b.isActive).length;
-  const categoriesUsed = [...new Set(badges.map((b) => b.category))].length;
+  // Summary statistics metrics
+  const totalBadges = badgeList.length;
+  const systemBadges = badgeList.filter((b) => b.isSystemBadge).length;
+  const customBadges = badgeList.filter((b) => !b.isSystemBadge).length;
+  const totalActive = badgeList.filter((b) => b.isActive).length;
+  const totalInactive = badgeList.filter((b) => !b.isActive).length;
+  const criteriaTypesUsed = [...new Set(badgeList.map((b) => b.criteriaType))]
+    .length;
+  const totalRewardPoints = badgeList.reduce(
+    (sum, b) => sum + (b.rewardPoints ?? 0),
+    0,
+  );
 
-  function handleAdd(data) {
-    // TODO: Replace local badge creation with api.badges.createBadge
-    const newBadge = {
-      ...data,
-      _id: `badge_${Date.now()}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setBadges((prev) => [newBadge, ...prev]);
-    setShowAddForm(false);
+  // Mutation Handlers
+  async function handleAdd(data) {
+    if (!data.name?.trim()) {
+      alert("Badge name is required.");
+      return;
+    }
+
+    if (!data.code?.trim()) {
+      alert("Badge code is required.");
+      return;
+    }
+
+    if (!data.description?.trim()) {
+      alert("Badge description is required.");
+      return;
+    }
+
+    if (Number(data.requiredCount) < 0) {
+      alert("Required count cannot be negative.");
+      return;
+    }
+
+    if (Number(data.rewardPoints) < 0) {
+      alert("Reward points cannot be negative.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const payload = {
+        name: data.name.trim(),
+        code: data.code.trim(),
+        description: data.description.trim(),
+        icon: data.icon,
+        category: data.category,
+        criteriaType: data.criteriaType,
+        requiredCount: Number(data.requiredCount),
+        rewardPoints: Number(data.rewardPoints),
+        isActive: data.isActive,
+      };
+
+      if (session?.user?.id) {
+        payload.createdByAdminId = session.user.id;
+      }
+
+      const result = await createCustomBadge(payload);
+      setShowAddForm(false);
+      alert(result?.message || "Custom badge created successfully.");
+    } catch (error) {
+      console.error("Create badge failed:", error);
+      alert(error?.message || "Failed to create custom badge.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleEdit(data) {
+  async function handleEdit(data) {
     if (!editingBadge) return;
-    // TODO: Replace with api.badges.updateBadge
-    setBadges((prev) =>
-      prev.map((b) =>
-        b._id === editingBadge._id
-          ? { ...b, ...data, updatedAt: Date.now() }
-          : b,
-      ),
-    );
-    setEditingBadge(null);
+
+    if (editingBadge.isSystemBadge) {
+      alert("System badges are protected and cannot be edited.");
+      return;
+    }
+
+    if (!data.name?.trim()) {
+      alert("Badge name is required.");
+      return;
+    }
+
+    if (!data.description?.trim()) {
+      alert("Badge description is required.");
+      return;
+    }
+
+    if (Number(data.requiredCount) < 0) {
+      alert("Required count cannot be negative.");
+      return;
+    }
+
+    if (Number(data.rewardPoints) < 0) {
+      alert("Reward points cannot be negative.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const result = await updateCustomBadge({
+        badgeId: editingBadge._id,
+        name: data.name.trim(),
+        description: data.description.trim(),
+        icon: data.icon,
+        category: data.category,
+        criteriaType: data.criteriaType,
+        requiredCount: Number(data.requiredCount),
+        rewardPoints: Number(data.rewardPoints),
+      });
+
+      setEditingBadge(null);
+      alert(result?.message || "Custom badge updated successfully.");
+    } catch (error) {
+      console.error("Update badge failed:", error);
+      alert(error?.message || "Failed to update custom badge.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleToggle(badge) {
-    // TODO: Replace with api.badges.toggleBadgeActive
-    setBadges((prev) =>
-      prev.map((b) =>
-        b._id === badge._id
-          ? { ...b, isActive: !b.isActive, updatedAt: Date.now() }
-          : b,
-      ),
-    );
+  async function handleToggle(badge) {
+    if (badge.isSystemBadge) {
+      alert("System/default badges cannot be deactivated.");
+      return;
+    }
+
+    try {
+      setTogglingBadgeId(badge._id);
+      const result = await setCustomBadgeActiveStatus({
+        badgeId: badge._id,
+        isActive: !badge.isActive,
+      });
+
+      alert(result?.message || "Badge status updated successfully.");
+    } catch (error) {
+      console.error("Toggle badge failed:", error);
+      alert(error?.message || "Failed to update badge status.");
+    } finally {
+      setTogglingBadgeId(null);
+    }
+  }
+
+  async function handleSeedDefaultBadges() {
+    try {
+      setIsSeeding(true);
+      const result = await seedDefaultBadges({});
+      alert(
+        result?.message || "Default badges seeded or repaired successfully.",
+      );
+    } catch (error) {
+      console.error("Seed default badges failed:", error);
+      alert(error?.message || "Failed to seed default badges.");
+    } finally {
+      setIsSeeding(false);
+    }
   }
 
   return (
     <div className="space-y-8">
-      {/* ── Hero banner ─────────────────────────────────────────────────── */}
+      {/* Hero banner */}
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 rounded-3xl shadow-2xl">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,rgba(255,255,255,0.08),transparent_60%)]"></div>
         <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -mr-36 -mt-36"></div>
@@ -741,23 +1147,46 @@ export function BadgeManagementSection() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 flex-shrink-0"
-            >
-              <Plus size={18} />
-              Add New Badge
-            </button>
+            <div className="flex flex-wrap gap-3 flex-shrink-0">
+              <button
+                onClick={handleSeedDefaultBadges}
+                disabled={isSeeding || isSaving || togglingBadgeId !== null}
+                className="flex items-center gap-2 px-5 py-3.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-sm border border-white/10 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              >
+                <Sparkles size={18} />
+                {isSeeding ? "Seeding..." : "Seed / Repair Defaults"}
+              </button>
+              <button
+                onClick={() => setShowAddForm(true)}
+                disabled={isSeeding || isSaving || togglingBadgeId !== null}
+                className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              >
+                <Plus size={18} />
+                Add Custom Badge
+              </button>
+            </div>
           </div>
 
           {/* Summary tiles */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-6">
             {[
               {
                 label: "Total Badges",
-                value: badges.length,
+                value: totalBadges,
                 icon: <Award size={16} />,
                 color: "bg-white/10",
+              },
+              {
+                label: "System Badges",
+                value: systemBadges,
+                icon: <Lock size={16} />,
+                color: "bg-blue-500/20",
+              },
+              {
+                label: "Custom Badges",
+                value: customBadges,
+                icon: <Sparkles size={16} />,
+                color: "bg-purple-500/20",
               },
               {
                 label: "Active",
@@ -772,21 +1201,27 @@ export function BadgeManagementSection() {
                 color: "bg-slate-500/30",
               },
               {
-                label: "Categories Used",
-                value: categoriesUsed,
+                label: "Criteria Types",
+                value: criteriaTypesUsed,
                 icon: <Tag size={16} />,
-                color: "bg-blue-500/20",
+                color: "bg-orange-500/20",
+              },
+              {
+                label: "Total Rewards",
+                value: `${totalRewardPoints.toLocaleString()} pts`,
+                icon: <Zap size={16} />,
+                color: "bg-amber-500/20",
               },
             ].map((s) => (
               <div
                 key={s.label}
-                className={`${s.color} backdrop-blur-sm border border-white/10 rounded-2xl p-4 text-center`}
+                className={`${s.color} backdrop-blur-sm border border-white/10 rounded-2xl p-3 text-center flex flex-col justify-center items-center`}
               >
                 <div className="flex justify-center mb-1 text-white/70">
                   {s.icon}
                 </div>
-                <div className="text-2xl font-black text-white">{s.value}</div>
-                <div className="text-white/65 text-xs font-semibold">
+                <div className="text-lg font-black text-white">{s.value}</div>
+                <div className="text-white/65 text-[10px] font-semibold">
                   {s.label}
                 </div>
               </div>
@@ -795,7 +1230,7 @@ export function BadgeManagementSection() {
         </div>
       </div>
 
-      {/* ── Controls ─────────────────────────────────────────────────────── */}
+      {/* Controls */}
       <div className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[220px]">
@@ -806,7 +1241,7 @@ export function BadgeManagementSection() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or code..."
+              placeholder="Search by name, code, description, criteria..."
               className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -829,6 +1264,23 @@ export function BadgeManagementSection() {
                 ["all", "All Status"],
                 ["active", "Active"],
                 ["inactive", "Inactive"],
+              ],
+            },
+            {
+              value: badgeTypeFilter,
+              onChange: setBadgeTypeFilter,
+              options: [
+                ["all", "All Types"],
+                ["system", "System Badges"],
+                ["custom", "Custom Badges"],
+              ],
+            },
+            {
+              value: criteriaFilter,
+              onChange: setCriteriaFilter,
+              options: [
+                ["all", "All Criteria"],
+                ...CRITERIA_TYPES.map((type) => [type.value, type.label]),
               ],
             },
           ].map((sel, i) => (
@@ -856,29 +1308,70 @@ export function BadgeManagementSection() {
         </div>
       </div>
 
-      {/* ── Badge grid ───────────────────────────────────────────────────── */}
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800/80 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm p-16 text-center">
+      {/* Info Note for Inactive Custom Badges */}
+      <div className="flex items-center gap-2.5 px-5 py-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-150 dark:border-slate-700/60 rounded-2xl">
+        <Sparkles size={16} className="text-amber-500 flex-shrink-0" />
+        <p className="text-xs text-slate-600 dark:text-slate-300">
+          <strong>Note:</strong> Inactive custom badges are not awardable, but
+          citizens who already earned them keep them. System badges are
+          protected and cannot be edited or deactivated.
+        </p>
+      </div>
+
+      {/* Badge Grid / Empty State */}
+      {badgeList.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800/80 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm p-16 text-center max-w-2xl mx-auto">
           <div className="w-20 h-20 bg-slate-100 dark:bg-slate-700 rounded-3xl flex items-center justify-center mx-auto mb-5">
             <Award size={40} className="text-slate-400 dark:text-slate-500" />
           </div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">
-            No Badges Found
+            No badges found
           </h3>
-          <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm mx-auto text-sm">
-            {badges.length === 0
-              ? "Create your first badge to get started with the rewards system."
-              : "Try adjusting your search or filters."}
+          <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
+            Seed default badges to create the protected system badges.
           </p>
-          {badges.length === 0 && (
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={handleSeedDefaultBadges}
+              disabled={isSeeding || isSaving}
+              className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-2xl font-bold text-sm shadow transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Sparkles size={16} />
+              {isSeeding ? "Seeding..." : "Seed / Repair Default Badges"}
+            </button>
             <button
               onClick={() => setShowAddForm(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl font-bold text-sm shadow-lg transition-all hover:scale-105"
+              disabled={isSeeding || isSaving}
+              className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl font-bold text-sm shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={16} />
-              Create First Badge
+              Create Custom Badge
             </button>
-          )}
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800/80 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm p-16 text-center max-w-2xl mx-auto">
+          <div className="w-20 h-20 bg-slate-100 dark:bg-slate-700 rounded-3xl flex items-center justify-center mx-auto mb-5">
+            <Filter size={40} className="text-slate-400 dark:text-slate-500" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">
+            No badges match your filters
+          </h3>
+          <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
+            Try changing search, category, status, badge type, or criteria.
+          </p>
+          <button
+            onClick={() => {
+              setSearch("");
+              setCategoryFilter("all");
+              setStatusFilter("all");
+              setBadgeTypeFilter("all");
+              setCriteriaFilter("all");
+            }}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-150 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-2xl font-bold text-sm shadow transition-all hover:scale-105"
+          >
+            Reset Filters
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -886,18 +1379,27 @@ export function BadgeManagementSection() {
             <BadgeCard
               key={badge._id}
               badge={badge}
-              onEdit={() => setEditingBadge(badge)}
+              onEdit={() => {
+                if (badge.isSystemBadge) {
+                  alert("System badges are protected and cannot be edited.");
+                  return;
+                }
+                setEditingBadge(badge);
+              }}
               onToggle={() => handleToggle(badge)}
+              isToggling={togglingBadgeId === badge._id}
+              isBusy={isSaving || isSeeding || togglingBadgeId !== null}
             />
           ))}
         </div>
       )}
 
-      {/* ── Dialogs ──────────────────────────────────────────────────────── */}
+      {/* Dialogs */}
       {showAddForm && (
         <BadgeFormDialog
           onSave={handleAdd}
           onClose={() => setShowAddForm(false)}
+          isSaving={isSaving}
         />
       )}
       {editingBadge && (
@@ -905,6 +1407,7 @@ export function BadgeManagementSection() {
           badge={editingBadge}
           onSave={handleEdit}
           onClose={() => setEditingBadge(null)}
+          isSaving={isSaving}
         />
       )}
     </div>
