@@ -121,17 +121,19 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
   const adminUserId = "2"; // fallback local admin userId matching AdminDashboard context
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState("");
-  const [escalationCategory, setEscalationCategory] = useState("resource_shortage");
+  const [escalationCategory, setEscalationCategory] =
+    useState("resource_shortage");
   const [escalationPriority, setEscalationPriority] = useState("medium");
   const [newSlaDeadline, setNewSlaDeadline] = useState("");
   const [selectedWardOfficer, setSelectedWardOfficer] = useState("");
   const [selectedFieldOfficer, setSelectedFieldOfficer] = useState("");
 
-  const currentActions = issue.escalation_resolution_actions?.filter(
-    (a) => a.performed_at >= (issue.escalated_at || 0)
-  ) || [];
+  const currentActions =
+    issue.escalation_resolution_actions?.filter(
+      (a) => a.performed_at >= (issue.escalated_at || 0),
+    ) || [];
   const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation"
+    (a) => a.type !== "escalate" && a.type !== "review_escalation",
   );
   const hasResolutionAction = resolutionActions.length > 0;
 
@@ -154,8 +156,14 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
       const formatted = deadline.toISOString().slice(0, 16);
       setNewSlaDeadline(formatted);
     }
-    const currentUoId = issue.assigned_officer?.id || issue.assignedUnitOfficer || issue.ward_officer_id;
-    const currentFoId = issue.field_officer?.id || issue.assignedFieldOfficer || issue.field_officer_id;
+    const currentUoId =
+      issue.assigned_officer?.id ||
+      issue.assignedUnitOfficer ||
+      issue.ward_officer_id;
+    const currentFoId =
+      issue.field_officer?.id ||
+      issue.assignedFieldOfficer ||
+      issue.field_officer_id;
     if (currentUoId) setSelectedWardOfficer(currentUoId);
     if (currentFoId) setSelectedFieldOfficer(currentFoId);
   }, [issue]);
@@ -364,27 +372,39 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "escalate" && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Escalation Category</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Escalation Category
+                </label>
                 <select
                   value={escalationCategory}
                   onChange={(e) => setEscalationCategory(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="resource_shortage">Resource Shortage</option>
-                  <option value="officer_non_responsiveness">Officer Non-Responsiveness</option>
-                  <option value="technical_dependency">Technical Dependency</option>
-                  <option value="third_party_dependency">Third Party Dependency</option>
+                  <option value="officer_non_responsiveness">
+                    Officer Non-Responsiveness
+                  </option>
+                  <option value="technical_dependency">
+                    Technical Dependency
+                  </option>
+                  <option value="third_party_dependency">
+                    Third Party Dependency
+                  </option>
                   <option value="public_safety_risk">Public Safety Risk</option>
                   <option value="environmental_risk">Environmental Risk</option>
                   <option value="citizen_escalation">Citizen Escalation</option>
                   <option value="sla_breach">SLA Breach</option>
-                  <option value="administrative_approval_pending">Administrative Approval Pending</option>
+                  <option value="administrative_approval_pending">
+                    Administrative Approval Pending
+                  </option>
                   <option value="other">Other</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Escalation Priority</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Escalation Priority
+                </label>
                 <select
                   value={escalationPriority}
                   onChange={(e) => setEscalationPriority(e.target.value)}
@@ -397,7 +417,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Reason for Escalation *</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Reason for Escalation *
+                </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -412,7 +434,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "review_escalation" && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 rounded-xl p-4">
               <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-                You are marking this escalation as reviewed. This will update the admin review status and notify the assigned officers that the escalation is under active consideration.
+                You are marking this escalation as reviewed. This will update
+                the admin review status and notify the assigned officers that
+                the escalation is under active consideration.
               </p>
             </div>
           )}
@@ -420,7 +444,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "resolve_escalation" && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Resolution Action</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Resolution Action
+                </label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                     <input
@@ -447,12 +473,18 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {resolutionType === "approve" ? "Resolution Notes *" : "Rejection Reason *"}
+                  {resolutionType === "approve"
+                    ? "Resolution Notes *"
+                    : "Rejection Reason *"}
                 </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder={resolutionType === "approve" ? "Provide details on how the escalation was resolved..." : "Provide the reason why this issue/escalation is being rejected..."}
+                  placeholder={
+                    resolutionType === "approve"
+                      ? "Provide details on how the escalation was resolved..."
+                      : "Provide the reason why this issue/escalation is being rejected..."
+                  }
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   rows={3}
                 />
@@ -463,7 +495,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "extend_sla" && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">New SLA Deadline *</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  New SLA Deadline *
+                </label>
                 <input
                   type="datetime-local"
                   value={newSlaDeadline}
@@ -474,7 +508,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Reason for Extension *</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Reason for Extension *
+                </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -489,13 +525,17 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "reassign" && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Ward Officer (Unit Verification)</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Ward Officer (Unit Verification)
+                </label>
                 <select
                   value={selectedWardOfficer}
                   onChange={(e) => setSelectedWardOfficer(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 >
-                  <option value="">-- No Change / Select Ward Officer --</option>
+                  <option value="">
+                    -- No Change / Select Ward Officer --
+                  </option>
                   {wardOfficers.map((o) => (
                     <option key={o.userId} value={o.userId}>
                       {o.fullName} {o.department ? `(${o.department})` : ""}
@@ -505,13 +545,17 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Field Officer (Issue Resolution)</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Field Officer (Issue Resolution)
+                </label>
                 <select
                   value={selectedFieldOfficer}
                   onChange={(e) => setSelectedFieldOfficer(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 >
-                  <option value="">-- No Change / Select Field Officer --</option>
+                  <option value="">
+                    -- No Change / Select Field Officer --
+                  </option>
                   {fieldOfficers.map((o) => (
                     <option key={o.userId} value={o.userId}>
                       {o.fullName} {o.department ? `(${o.department})` : ""}
@@ -521,7 +565,9 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Reassignment Notes *</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  Reassignment Notes *
+                </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -536,15 +582,20 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
           {action === "view_resolution" && (
             <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/40 rounded-xl p-4 space-y-2">
               <div>
-                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">Resolution Date:</span>
+                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">
+                  Resolution Date:
+                </span>
                 <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">
                   {formatDateTime(issue.escalation_resolved_at)}
                 </p>
               </div>
               <div>
-                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">Resolution Notes:</span>
+                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">
+                  Resolution Notes:
+                </span>
                 <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">
-                  {issue.escalation_resolution_notes || "No resolution notes provided."}
+                  {issue.escalation_resolution_notes ||
+                    "No resolution notes provided."}
                 </p>
               </div>
             </div>
@@ -560,7 +611,7 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
             </button>
             <button
               onClick={handleConfirm}
-              disabled={loading || (action === "view_resolution")}
+              disabled={loading || action === "view_resolution"}
               className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-slate-700 to-slate-900 text-white font-bold hover:from-slate-600 hover:to-slate-800 transition-all shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -568,8 +619,10 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Processing...
                 </>
+              ) : action === "view_resolution" ? (
+                "View Only"
               ) : (
-                action === "view_resolution" ? "View Only" : "Confirm Action"
+                "Confirm Action"
               )}
             </button>
           </div>
@@ -780,16 +833,17 @@ function EscalationAnalyticsSection({ issues }) {
 // Escalation timeline preview
 
 function EscalationTimeline({ issue }) {
-  const currentActions = issue.escalation_resolution_actions?.filter(
-    (a) => a.performed_at >= (issue.escalated_at || 0)
-  ) || [];
+  const currentActions =
+    issue.escalation_resolution_actions?.filter(
+      (a) => a.performed_at >= (issue.escalated_at || 0),
+    ) || [];
 
   const reviewAction = currentActions.find(
-    (a) => a.type === "review_escalation"
+    (a) => a.type === "review_escalation",
   );
 
   const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation"
+    (a) => a.type !== "escalate" && a.type !== "review_escalation",
   );
   const hasResolutionAction = resolutionActions.length > 0;
   const resolutionActionTime = resolutionActions[0]?.performed_at || null;
@@ -798,7 +852,7 @@ function EscalationTimeline({ issue }) {
     reviewAction?.performed_at ||
     (issue.escalation_admin_review_status === "resolved" ||
     issue.escalation_admin_review_status === "reviewed"
-      ? (resolutionActionTime || issue.escalation_resolved_at)
+      ? resolutionActionTime || issue.escalation_resolved_at
       : null) ||
     null;
 
@@ -882,15 +936,24 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
   const isEscalated = !!issue.is_escalated;
   const hasBeenEscalated = !!issue.escalated_at;
 
-  const currentActions = issue.escalation_resolution_actions?.filter(
-    (a) => a.performed_at >= (issue.escalated_at || 0)
-  ) || [];
+  const currentActions =
+    issue.escalation_resolution_actions?.filter(
+      (a) => a.performed_at >= (issue.escalated_at || 0),
+    ) || [];
   const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation"
+    (a) => a.type !== "escalate" && a.type !== "review_escalation",
   );
   const hasResolutionAction = resolutionActions.length > 0;
   const isBreached = sla.status === "breached";
   const isAtRisk = sla.status === "at_risk";
+
+  const escalationResolved = !!issue.escalation_resolved;
+  const resolvedEscalationBreachedAgain = escalationResolved && isBreached;
+  const resolvedEscalationAtRiskAgain = escalationResolved && isAtRisk;
+  const needsFreshSlaActionAfterResolvedEscalation =
+    escalationResolved && (isBreached || isAtRisk);
+  const canTakeSlaAction =
+    isBreached || isAtRisk || needsFreshSlaActionAfterResolvedEscalation;
 
   const cardBorder =
     isEscalated && isBreached
@@ -1111,14 +1174,24 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
             </div>
             {issue.escalation_reason && (
               <div className="mt-2.5 pt-2 border-t border-purple-200/50 dark:border-purple-800/40 text-[11px]">
-                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">Reason:</span>
-                <span className="text-slate-800 dark:text-slate-200">{issue.escalation_reason}</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">
+                  Reason:
+                </span>
+                <span className="text-slate-800 dark:text-slate-200">
+                  {issue.escalation_reason}
+                </span>
               </div>
             )}
             {issue.escalation_comments && (
-              <div className={`mt-2 text-[11px] ${!issue.escalation_reason ? "border-t border-purple-200/50 dark:border-purple-800/40 pt-2" : ""}`}>
-                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">Comments:</span>
-                <span className="text-slate-800 dark:text-slate-200">{issue.escalation_comments}</span>
+              <div
+                className={`mt-2 text-[11px] ${!issue.escalation_reason ? "border-t border-purple-200/50 dark:border-purple-800/40 pt-2" : ""}`}
+              >
+                <span className="text-slate-500 dark:text-slate-400 font-bold block mb-0.5">
+                  Comments:
+                </span>
+                <span className="text-slate-800 dark:text-slate-200">
+                  {issue.escalation_comments}
+                </span>
               </div>
             )}
             {issue.escalation_resolved && (
@@ -1235,7 +1308,7 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               </ActionBtn>
             </>
           )}
-          {hasBeenEscalated && !issue.escalation_resolved && (
+          {hasBeenEscalated && !escalationResolved && (
             <>
               <ActionBtn
                 onClick={() => onOpenEscalation(issue)}
@@ -1244,6 +1317,7 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               >
                 Review
               </ActionBtn>
+
               <ActionBtn
                 onClick={() => onAction(issue, "resolve_escalation")}
                 variant="emerald"
@@ -1251,7 +1325,8 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               >
                 Resolve
               </ActionBtn>
-              {!hasResolutionAction && (
+
+              {canTakeSlaAction && (
                 <ActionBtn
                   onClick={() => onAction(issue, "reassign")}
                   variant="cyan"
@@ -1260,7 +1335,8 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                   Reassign
                 </ActionBtn>
               )}
-              {!hasResolutionAction && (
+
+              {canTakeSlaAction && (
                 <ActionBtn
                   onClick={() => onAction(issue, "extend_sla")}
                   variant="amber"
@@ -1269,6 +1345,7 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                   Extend SLA
                 </ActionBtn>
               )}
+
               <ActionBtn
                 onClick={() => onViewIssue(issue)}
                 variant="default"
@@ -1278,24 +1355,79 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               </ActionBtn>
             </>
           )}
-          {hasBeenEscalated && issue.escalation_resolved && (
-            <>
-              <ActionBtn
-                onClick={() => onAction(issue, "view_resolution")}
-                variant="teal"
-                icon={<Flag size={12} />}
-              >
-                View Resolution
-              </ActionBtn>
-              <ActionBtn
-                onClick={() => onViewIssue(issue)}
-                variant="default"
-                icon={<Eye size={12} />}
-              >
-                View Issue
-              </ActionBtn>
-            </>
-          )}
+          {hasBeenEscalated &&
+            escalationResolved &&
+            !needsFreshSlaActionAfterResolvedEscalation && (
+              <>
+                <ActionBtn
+                  onClick={() => onAction(issue, "view_resolution")}
+                  variant="teal"
+                  icon={<Flag size={12} />}
+                >
+                  View Resolution
+                </ActionBtn>
+                <ActionBtn
+                  onClick={() => onViewIssue(issue)}
+                  variant="default"
+                  icon={<Eye size={12} />}
+                >
+                  View Issue
+                </ActionBtn>
+              </>
+            )}
+          {hasBeenEscalated &&
+            escalationResolved &&
+            needsFreshSlaActionAfterResolvedEscalation && (
+              <>
+                <ActionBtn
+                  onClick={() => onAction(issue, "extend_sla")}
+                  variant="amber"
+                  icon={<Timer size={12} />}
+                >
+                  Extend SLA
+                </ActionBtn>
+
+                <ActionBtn
+                  onClick={() => onAction(issue, "reassign")}
+                  variant="cyan"
+                  icon={<Users size={12} />}
+                >
+                  Reassign
+                </ActionBtn>
+
+                <ActionBtn
+                  onClick={() => onOpenEscalation(issue)}
+                  variant="purple"
+                  icon={<Eye size={12} />}
+                >
+                  Review Again
+                </ActionBtn>
+
+                <ActionBtn
+                  onClick={() => onAction(issue, "escalate")}
+                  variant="purple"
+                  icon={<ArrowUpCircle size={12} />}
+                >
+                  Re-escalate
+                </ActionBtn>
+
+                <ActionBtn
+                  onClick={() => onAction(issue, "view_resolution")}
+                  variant="teal"
+                  icon={<Flag size={12} />}
+                >
+                  Previous Resolution
+                </ActionBtn>
+
+                <ActionBtn
+                  onClick={() => onViewIssue(issue)}
+                  variant="default"
+                  icon={<Eye size={12} />}
+                >
+                  View Issue
+                </ActionBtn>
+              </>
+            )}
         </div>
       </div>
     </div>

@@ -23,15 +23,42 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
   const adminUserId = "2"; // fallback local admin userId matching AdminDashboard context
   const [loading, setLoading] = useState(false);
 
-  const currentActions = issue.escalation_resolution_actions?.filter(
-    (a) => a.performed_at >= (issue.escalated_at || 0)
-  ) || [];
+  const currentActions =
+    issue.escalation_resolution_actions?.filter(
+      (a) => a.performed_at >= (issue.escalated_at || 0),
+    ) || [];
   const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation"
+    (a) => a.type !== "escalate" && a.type !== "review_escalation",
   );
   const hasResolutionAction = resolutionActions.length > 0;
 
-  const [actionType, setActionType] = useState(hasResolutionAction ? "approve" : "extend_sla");
+  const isSlaBreached =
+    issue.sla_status === "breached" ||
+    (issue.sla_deadline && new Date(issue.sla_deadline).getTime() < Date.now());
+
+  const isSlaAtRisk = issue.sla_status === "at_risk";
+  const escalationResolved = !!issue.escalation_resolved;
+
+  const shouldAllowFreshSlaActions =
+    isSlaBreached || isSlaAtRisk || (escalationResolved && isSlaBreached);
+
+  const [actionType, setActionType] = useState(
+    shouldAllowFreshSlaActions
+      ? "extend_sla"
+      : hasResolutionAction
+        ? "approve"
+        : "extend_sla",
+  );
+
+  useEffect(() => {
+    if (shouldAllowFreshSlaActions) {
+      setActionType("extend_sla");
+    } else if (hasResolutionAction) {
+      setActionType("approve");
+    } else {
+      setActionType("extend_sla");
+    }
+  }, [issue.id, issue._id, shouldAllowFreshSlaActions, hasResolutionAction]);
   const [newSlaDeadline, setNewSlaDeadline] = useState("");
   const [wardOfficers, setWardOfficers] = useState([]);
   const [fieldOfficers, setFieldOfficers] = useState([]);
@@ -51,8 +78,15 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
   const reviewEscalation = useMutation(api.escalation.reviewEscalation);
 
   useEffect(() => {
-    if (issue && issue.is_escalated && (issue.escalation_admin_review_status === "pending" || !issue.escalation_admin_review_status)) {
-      reviewEscalation({ issueId: issue.id, reviewedBy: adminUserId }).catch(console.error);
+    if (
+      issue &&
+      issue.is_escalated &&
+      (issue.escalation_admin_review_status === "pending" ||
+        !issue.escalation_admin_review_status)
+    ) {
+      reviewEscalation({ issueId: issue.id, reviewedBy: adminUserId }).catch(
+        console.error,
+      );
     }
   }, [issue, reviewEscalation]);
 
@@ -71,8 +105,14 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
       setWardOfficers(uos);
       setFieldOfficers(fos);
 
-      const currentUoId = issue.assigned_officer?.id || issue.assignedUnitOfficer || issue.ward_officer_id;
-      const currentFoId = issue.field_officer?.id || issue.assignedFieldOfficer || issue.field_officer_id;
+      const currentUoId =
+        issue.assigned_officer?.id ||
+        issue.assignedUnitOfficer ||
+        issue.ward_officer_id;
+      const currentFoId =
+        issue.field_officer?.id ||
+        issue.assignedFieldOfficer ||
+        issue.field_officer_id;
       if (currentUoId) setSelectedWardOfficer(currentUoId);
       if (currentFoId) setSelectedFieldOfficer(currentFoId);
     }
@@ -287,6 +327,22 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
         </div>
 
         <div className="p-8 space-y-8 max-h-[calc(95vh-200px)] overflow-y-auto">
+          {escalationResolved && isSlaBreached && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="text-red-650 flex-shrink-0" size={20} />
+              <div>
+                <p className="text-sm font-black text-red-800">
+                  SLA breached again after previous escalation resolution
+                </p>
+                <p className="text-xs text-red-700 mt-1">
+                  The earlier escalation was resolved, but the current SLA
+                  deadline has been breached again. Admin corrective actions are
+                  available again for this new breach.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-slate-200 rounded-2xl p-6 shadow-inner">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
@@ -389,14 +445,22 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
                     </div>
                     {issue.escalation_reason && (
                       <div>
-                        <p className="text-slate-500 text-xs font-semibold mb-0.5">Reason for Escalation</p>
-                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">"{issue.escalation_reason}"</p>
+                        <p className="text-slate-500 text-xs font-semibold mb-0.5">
+                          Reason for Escalation
+                        </p>
+                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">
+                          "{issue.escalation_reason}"
+                        </p>
                       </div>
                     )}
                     {issue.escalation_comments && (
                       <div>
-                        <p className="text-slate-500 text-xs font-semibold mb-0.5">Additional Comments</p>
-                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">"{issue.escalation_comments}"</p>
+                        <p className="text-slate-500 text-xs font-semibold mb-0.5">
+                          Additional Comments
+                        </p>
+                        <p className="text-slate-800 font-semibold text-sm leading-relaxed">
+                          "{issue.escalation_comments}"
+                        </p>
                       </div>
                     )}
                   </div>
@@ -422,86 +486,96 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
                 "change_category",
                 "approve",
                 "reject",
-              ].filter(type => !hasResolutionAction || type === "approve").map((type) => {
-                const typeConfig = {
-                  extend_sla: {
-                    icon: Clock,
-                    gradient: "from-blue-500 to-cyan-500",
-                    label: "Extend SLA",
-                  },
-                  reassign_ward: {
-                    icon: Shield,
-                    gradient: "from-purple-500 to-pink-500",
-                    label: "Ward Officer",
-                  },
-                  reassign_field: {
-                    icon: Users,
-                    gradient: "from-indigo-500 to-purple-500",
-                    label: "Field Officer",
-                  },
-                  change_category: {
-                    icon: Tag,
-                    gradient: "from-amber-500 to-orange-500",
-                    label: "Recategorize",
-                  },
-                  approve: {
-                    icon: CheckCircle,
-                    gradient: "from-green-500 to-emerald-500",
-                    label: "Approve",
-                  },
-                  reject: {
-                    icon: XCircle,
-                    gradient: "from-red-500 to-rose-500",
-                    label: "Reject",
-                  },
-                }[type];
+              ]
+                .filter((type) => {
+                  if (shouldAllowFreshSlaActions) {
+                    return true;
+                  }
+                  if (hasResolutionAction) {
+                    return type === "approve";
+                  }
+                  return true;
+                })
+                .map((type) => {
+                  const typeConfig = {
+                    extend_sla: {
+                      icon: Clock,
+                      gradient: "from-blue-500 to-cyan-500",
+                      label: "Extend SLA",
+                    },
+                    reassign_ward: {
+                      icon: Shield,
+                      gradient: "from-purple-500 to-pink-500",
+                      label: "Ward Officer",
+                    },
+                    reassign_field: {
+                      icon: Users,
+                      gradient: "from-indigo-500 to-purple-500",
+                      label: "Field Officer",
+                    },
+                    change_category: {
+                      icon: Tag,
+                      gradient: "from-amber-500 to-orange-500",
+                      label: "Recategorize",
+                    },
+                    approve: {
+                      icon: CheckCircle,
+                      gradient: "from-green-500 to-emerald-500",
+                      label: "Approve",
+                    },
+                    reject: {
+                      icon: XCircle,
+                      gradient: "from-red-500 to-rose-500",
+                      label: "Reject",
+                    },
+                  }[type];
 
-                const TypeIcon = typeConfig.icon;
-                const isSelected = actionType === type;
+                  const TypeIcon = typeConfig.icon;
+                  const isSelected = actionType === type;
 
-                return (
-                  <button
-                    key={type}
-                    onClick={() => setActionType(type)}
-                    className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                      isSelected
-                        ? `border-transparent bg-gradient-to-br ${typeConfig.gradient} shadow-2xl scale-105`
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-lg hover:scale-102"
-                    }`}
-                  >
-                    <div
-                      className={`w-14 h-14 rounded-xl flex items-center justify-center mb-3 mx-auto transition-all ${
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => setActionType(type)}
+                      className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
                         isSelected
-                          ? "bg-white/30 backdrop-blur-sm shadow-lg"
-                          : `bg-gradient-to-br ${typeConfig.gradient}`
+                          ? `border-transparent bg-gradient-to-br ${typeConfig.gradient} shadow-2xl scale-105`
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-lg hover:scale-102"
                       }`}
                     >
-                      <TypeIcon
-                        size={28}
-                        className={
+                      <div
+                        className={`w-14 h-14 rounded-xl flex items-center justify-center mb-3 mx-auto transition-all ${
                           isSelected
-                            ? "text-white"
-                            : "text-white group-hover:scale-110 transition-transform"
-                        }
-                      />
-                    </div>
-                    <p
-                      className={`text-sm font-bold text-center transition-colors ${
-                        isSelected ? "text-white" : "text-slate-900"
-                      }`}
-                    >
-                      {typeConfig.label}
-                    </p>
-                    {isSelected && (
-                      <div className="absolute top-2 right-2">
-                        <div className="w-6 h-6 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center">
-                          <CheckCircle size={16} className="text-white" />
-                        </div>
+                            ? "bg-white/30 backdrop-blur-sm shadow-lg"
+                            : `bg-gradient-to-br ${typeConfig.gradient}`
+                        }`}
+                      >
+                        <TypeIcon
+                          size={28}
+                          className={
+                            isSelected
+                              ? "text-white"
+                              : "text-white group-hover:scale-110 transition-transform"
+                          }
+                        />
                       </div>
-                    )}
-                  </button>
-                );
-              })}
+                      <p
+                        className={`text-sm font-bold text-center transition-colors ${
+                          isSelected ? "text-white" : "text-slate-900"
+                        }`}
+                      >
+                        {typeConfig.label}
+                      </p>
+                      {isSelected && (
+                        <div className="absolute top-2 right-2">
+                          <div className="w-6 h-6 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center">
+                            <CheckCircle size={16} className="text-white" />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
