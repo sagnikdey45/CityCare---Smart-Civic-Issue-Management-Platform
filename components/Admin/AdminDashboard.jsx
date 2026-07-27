@@ -41,20 +41,24 @@ import { MessagesCenter } from "../MessageCenter";
 import { ModeToggle } from "../ModeToggle";
 import SLAMonitoringDashboard from "./SLAMonitoringDashboard";
 import { BadgeManagementSection } from "./BadgeManagementSystem";
-// import SLAMonitoringDashboard from './SLAMonitoringDashboard';
-// import SLAAnalyticsDashboard from './SLAAnalyticsDashboard';
+import SLAAnalyticsDashboard from "./SLAAnalyticsDashboard";
 // import ComprehensiveAuditLog from './ComprehensiveAuditLog';
+
+function displayPercent(value) {
+  if (!Number.isFinite(Number(value))) return 0;
+  return Math.max(0, Math.min(100, Math.round(Number(value))));
+}
 
 // ── internal helper components ────────────────────────────────────────────────
 
 function RoleBadge({ role }) {
   return role === "unit_officer" ? (
-    <span className="inline-flex items-center gap-1.5 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 px-2.5 py-1 rounded-lg text-xs font-bold">
-      <Shield size={12} /> Ward Officer
+    <span className="inline-flex items-center gap-1 bg-cyan-50 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-lg text-xs font-bold border border-cyan-150 dark:border-cyan-900/50">
+      <Shield size={11} /> Ward Officer
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg text-xs font-bold">
-      <Zap size={12} /> Field Officer
+    <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-lg text-xs font-bold border border-emerald-150 dark:border-emerald-900/50">
+      <Zap size={11} /> Field Officer
     </span>
   );
 }
@@ -62,23 +66,192 @@ function RoleBadge({ role }) {
 function WorkloadBadge({ status }) {
   if (status === "overloaded")
     return (
-      <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2.5 py-1 rounded-full text-xs font-bold">
+      <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full text-xs font-bold border border-red-200 dark:border-red-900/50">
         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block"></span>
         Overloaded
       </span>
     );
   if (status === "underutilized")
     return (
-      <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full text-xs font-bold">
+      <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full text-xs font-bold border border-amber-200 dark:border-amber-900/50">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>
         Underutilized
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-full text-xs font-bold">
+    <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-xs font-bold border border-emerald-200 dark:border-emerald-900/50">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
       Balanced
     </span>
+  );
+}
+
+function RiskBadge({ level }) {
+  if (level === "High Risk") {
+    return (
+      <span className="inline-flex items-center gap-1 bg-rose-105 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300 px-2.5 py-1 rounded-full text-xs font-bold border border-rose-200 dark:border-rose-900/50">
+        <AlertTriangle size={12} className="text-rose-500" />
+        High Risk
+      </span>
+    );
+  }
+  if (level === "Needs Attention") {
+    return (
+      <span className="inline-flex items-center gap-1 bg-amber-105 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full text-xs font-bold border border-amber-200 dark:border-amber-900/50">
+        <AlertCircle size={12} className="text-amber-505" />
+        Needs Attention
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-200 dark:border-emerald-900/50">
+      <CheckCircle size={12} className="text-emerald-500" />
+      Good
+    </span>
+  );
+}
+
+function LeaderboardList({ title, list, metricKey, suffix = "" }) {
+  const safeList = Array.isArray(list) ? list : [];
+  return (
+    <div className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-3.5 shadow-md">
+      <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center justify-between">
+        <span>{title}</span>
+        <span className="text-[10px] text-emerald-500 font-bold">
+          Top {safeList.length}
+        </span>
+      </h4>
+      <div className="space-y-2">
+        {safeList.length === 0 ? (
+          <div className="text-xs text-slate-450 dark:text-slate-550 text-center py-6">
+            No officers listed
+          </div>
+        ) : (
+          safeList.slice(0, 5).map((ow, idx) => {
+            const officer = ow?.officer ?? {};
+            const val = ow?.[metricKey] ?? 0;
+            return (
+              <div
+                key={officer.id || officer.userId || idx}
+                className="flex items-center justify-between gap-3 text-xs bg-slate-50 dark:bg-slate-800/35 p-2 rounded-xl"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-extrabold text-slate-400 w-4 text-center">
+                    {idx + 1}
+                  </span>
+                  {officer.profilePictureUrl ? (
+                    <img
+                      src={officer.profilePictureUrl}
+                      alt=""
+                      className="w-6 h-6 rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-md bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-black text-[9px]">
+                      {(officer.fullName || "Un").slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 dark:text-white truncate">
+                      {officer.fullName || "Unknown"}
+                    </div>
+                    <div className="text-[9px] text-slate-400 truncate capitalize">
+                      {officer.department || "No Dept"} •{" "}
+                      {officer.city || "No City"}
+                    </div>
+                  </div>
+                </div>
+                <div className="font-extrabold text-slate-950 dark:text-slate-100 whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/20 px-2 py-1 rounded">
+                  {metricKey === "citizenRating"
+                    ? `★ ${val}`
+                    : `${val}${suffix}`}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PerformanceTable({ data, typeLabel }) {
+  return (
+    <div className="bg-white dark:bg-slate-900/90 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-lg">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-800 text-slate-650 dark:text-slate-350 font-black border-b border-slate-200 dark:border-slate-800">
+              <th className="p-4 capitalize">{typeLabel}</th>
+              <th className="p-4 text-center">Issues (Tot/Act/Res)</th>
+              <th className="p-4 text-center">Overdue</th>
+              <th className="p-4 text-center">Officers (U/F)</th>
+              <th className="p-4 text-center">Completion</th>
+              <th className="p-4 text-center">SLA Compliance</th>
+              <th className="p-4 text-center">Avg Resolution</th>
+              <th className="p-4 text-center">Citizen Rating</th>
+              <th className="p-4 text-center">Avg Efficiency</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {!data || data.length === 0 ? (
+              <tr>
+                <td
+                  colSpan="9"
+                  className="p-8 text-center text-slate-550 font-bold"
+                >
+                  No performance records found
+                </td>
+              </tr>
+            ) : (
+              data.map((row) => (
+                <tr
+                  key={row.city || row.department}
+                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-all font-semibold"
+                >
+                  <td className="p-4 font-extrabold text-slate-900 dark:text-white capitalize">
+                    {row.city || row.department}
+                  </td>
+                  <td className="p-4 text-center text-slate-700 dark:text-slate-300">
+                    {row.totalIssues}{" "}
+                    <span className="text-[10px] text-slate-450">
+                      / {row.activeIssues} / {row.resolvedIssues}
+                    </span>
+                  </td>
+                  <td
+                    className={`p-4 text-center ${row.overdueIssues > 0 ? "text-red-500 font-extrabold animate-pulse" : "text-slate-500"}`}
+                  >
+                    {row.overdueIssues}
+                  </td>
+                  <td className="p-4 text-center text-slate-700 dark:text-slate-300">
+                    {row.totalOfficers}{" "}
+                    <span className="text-[10px] text-slate-450">
+                      ({row.unitOfficers}/{row.fieldOfficers})
+                    </span>
+                  </td>
+                  <td className="p-4 text-center text-slate-900 dark:text-white">
+                    {displayPercent(row.avgCompletionRate)}%
+                  </td>
+                  <td className="p-4 text-center text-slate-900 dark:text-white">
+                    {displayPercent(row.avgSlaComplianceRate)}%
+                  </td>
+                  <td className="p-4 text-center text-slate-900 dark:text-white">
+                    {row.avgResolutionTime}h
+                  </td>
+                  <td className="p-4 text-center text-amber-500 font-extrabold">
+                    ★ {row.avgCitizenRating}
+                  </td>
+                  <td className="p-4 text-center">
+                    <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded font-extrabold">
+                      {displayPercent(row.avgEfficiencyScore)}%
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -161,23 +334,29 @@ function MetricTile({ label, value, sub, color }) {
 
 // ── Officer card
 
-function OfficerCard({ ow, onOpen, onMessage }) {
-  const borderColor =
+function OfficerCard({ ow, onOpen, onMessage, isBusy }) {
+  const workloadColor =
     ow.workloadStatus === "overloaded"
-      ? "border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600"
+      ? "text-red-700 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50"
       : ow.workloadStatus === "underutilized"
-        ? "border-amber-300 dark:border-amber-700 hover:border-amber-400 dark:hover:border-amber-600"
-        : "border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600";
-  const glowColor =
-    ow.workloadStatus === "overloaded"
-      ? "from-red-500/10"
-      : ow.workloadStatus === "underutilized"
-        ? "from-amber-500/10"
-        : "from-emerald-500/10";
-  const avatarGrad =
-    ow.officer.role === "unit_officer"
-      ? "from-cyan-500 to-blue-600"
-      : "from-emerald-500 to-teal-600";
+        ? "text-amber-705 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50"
+        : "text-emerald-705 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50";
+
+  const riskColor =
+    ow.riskLevel === "High Risk"
+      ? "text-rose-700 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50"
+      : ow.riskLevel === "Needs Attention"
+        ? "text-amber-705 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50"
+        : "text-emerald-705 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50";
+
+  const gradeColor = ow.performanceGrade.startsWith("A")
+    ? "text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
+    : ow.performanceGrade === "B"
+      ? "text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+      : ow.performanceGrade === "C"
+        ? "text-amber-605 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+        : "text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-850";
+
   const dotColor =
     ow.workloadStatus === "overloaded"
       ? "bg-red-500"
@@ -185,29 +364,38 @@ function OfficerCard({ ow, onOpen, onMessage }) {
         ? "bg-amber-500"
         : "bg-emerald-500";
 
+  const avatarGrad =
+    ow.officer.role === "unit_officer"
+      ? "from-cyan-500 to-blue-600"
+      : "from-emerald-500 to-teal-600";
+
+  const borderColor =
+    ow.riskLevel === "High Risk"
+      ? "border-rose-300 dark:border-rose-700 hover:border-rose-400"
+      : ow.riskLevel === "Needs Attention"
+        ? "border-amber-300 dark:border-amber-700 hover:border-amber-400"
+        : "border-slate-200 dark:border-slate-800 hover:border-emerald-400";
+
   return (
     <div
-      className={`group relative overflow-hidden bg-white dark:bg-slate-800/80 rounded-3xl shadow-md hover:shadow-2xl transition-all duration-400 border-2 ${borderColor} cursor-pointer hover:-translate-y-1`}
+      className={`group relative overflow-hidden bg-white dark:bg-slate-900/90 rounded-3xl shadow-md hover:shadow-2xl transition-all duration-400 border-2 ${borderColor} cursor-pointer hover:-translate-y-1`}
       onClick={onOpen}
     >
-      <div
-        className={`absolute inset-0 bg-gradient-to-br ${glowColor} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
-      ></div>
       <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-slate-100/50 to-transparent dark:from-slate-700/30 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700"></div>
 
-      <div className="relative p-6">
+      <div className="relative p-5 space-y-4">
         {/* Header */}
-        <div className="flex items-start gap-4 mb-5">
+        <div className="flex items-start gap-3">
           <div className="relative flex-shrink-0">
             {ow.officer.profilePictureUrl ? (
               <img
                 src={ow.officer.profilePictureUrl}
                 alt={ow.officer.fullName}
-                className="w-14 h-14 rounded-2xl object-cover shadow-xl group-hover:scale-105 transition-transform duration-300"
+                className="w-12 h-12 rounded-xl object-cover shadow-md group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
               <div
-                className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white font-black text-lg shadow-xl group-hover:scale-105 transition-transform duration-300`}
+                className={`w-12 h-12 rounded-xl bg-gradient-to-br ${avatarGrad} flex items-center justify-center text-white font-black text-sm shadow-md group-hover:scale-105 transition-transform duration-300`}
               >
                 {ow.officer.fullName
                   ? ow.officer.fullName
@@ -215,112 +403,149 @@ function OfficerCard({ ow, onOpen, onMessage }) {
                       .map((n) => n[0])
                       .join("")
                       .slice(0, 2)
+                      .toUpperCase()
                   : ""}
               </div>
             )}
             <span
-              className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 shadow ${dotColor} ${ow.workloadStatus === "overloaded" ? "animate-pulse" : ""}`}
+              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow ${dotColor} ${ow.workloadStatus === "overloaded" ? "animate-pulse" : ""}`}
             ></span>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-black text-slate-900 dark:text-white text-base leading-tight truncate mb-1.5">
+          <div className="flex-1 min-w-0 pr-6">
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm leading-tight truncate mb-1">
               {ow.officer.fullName}
             </h3>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1 items-center">
               <RoleBadge role={ow.officer.role} />
-              {(ow.officer.city || ow.officer.district) && (
-                <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-lg text-xs font-semibold">
-                  <MapPin size={10} />
-                  {ow.officer.city || ow.officer.district}
-                </span>
-              )}
+              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-605 dark:text-slate-400 px-1.5 py-0.5 rounded font-bold capitalize">
+                {ow.officer.department}
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-505 mt-0.5 truncate font-semibold">
+              {ow.officer.city || ow.officer.district || "General Ward"}
             </div>
           </div>
-          <WorkloadBadge status={ow.workloadStatus} />
+          {/* Grade Badge */}
+          <div
+            className={`absolute top-4 right-4 w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs shadow-sm border ${gradeColor}`}
+          >
+            {ow.performanceGrade}
+          </div>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        {/* Status badges row */}
+        <div className="flex flex-wrap gap-1.5">
+          <span
+            className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${workloadColor}`}
+          >
+            {ow.workloadStatus}
+          </span>
+          <span
+            className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${riskColor}`}
+          >
+            {ow.riskLevel}
+          </span>
+        </div>
+
+        {/* Simple KPI metrics grid */}
+        <div className="grid grid-cols-4 gap-1.5 text-center">
           {[
             {
-              label: "Total",
-              value: ow.total,
-              color: "text-slate-900 dark:text-white",
+              label: "Assigned",
+              val: ow.total,
+              col: "text-slate-800 dark:text-slate-200",
             },
+            { label: "Active", val: ow.inProgress, col: "text-blue-500" },
+            { label: "Resolved", val: ow.resolved, col: "text-emerald-500" },
             {
-              label: "Pending",
-              value: ow.pending,
-              color: "text-amber-600 dark:text-amber-400",
+              label: "Overdue",
+              val: ow.overdue,
+              col:
+                ow.overdue > 0
+                  ? "text-rose-500 font-extrabold animate-pulse"
+                  : "text-slate-500",
             },
-            {
-              label: "Active",
-              value: ow.inProgress,
-              color: "text-blue-600 dark:text-blue-400",
-            },
-            {
-              label: "Resolved",
-              value: ow.resolved,
-              color: "text-emerald-600 dark:text-emerald-400",
-            },
-          ].map((s) => (
+          ].map((k) => (
             <div
-              key={s.label}
-              className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl py-2 px-1"
+              key={k.label}
+              className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-1.5"
             >
-              <div className={`text-xl font-black ${s.color}`}>{s.value}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                {s.label}
+              <div className={`text-xs font-black ${k.col}`}>{k.val}</div>
+              <div className="text-[9px] text-slate-450 font-semibold">
+                {k.label}
               </div>
             </div>
           ))}
         </div>
 
-        {/* Completion bar */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between text-xs font-bold mb-1.5">
-            <span className="text-slate-600 dark:text-slate-400">
-              Completion
-            </span>
-            <span className="text-slate-900 dark:text-white">
+        {/* Completion Progress Bar */}
+        <div>
+          <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+            <span className="text-slate-500">Completion Rate</span>
+            <span className="text-slate-805 dark:text-slate-200">
               {ow.completionRate}%
             </span>
           </div>
-          <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
               style={{ width: `${ow.completionRate}%` }}
             ></div>
           </div>
         </div>
 
-        {/* Footer row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-            <span className="flex items-center gap-1 font-semibold">
-              <Star size={11} className="text-amber-400 fill-amber-400" />
-              {ow.rating}
-            </span>
-            <span className="flex items-center gap-1 font-semibold">
-              <Clock size={11} />
-              {ow.avgResolutionTime}h avg
+        {/* Performance metrics breakdown */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-505 font-semibold">
+          <div className="flex justify-between">
+            <span>Efficiency:</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-200">
+              {ow.efficiencyScore}%
             </span>
           </div>
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={onMessage}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all hover:shadow-md hover:shadow-blue-500/30"
-            >
-              <Mail size={12} />
-              Message
-            </button>
-            <button
-              onClick={onOpen}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-bold transition-all hover:shadow-md hover:shadow-emerald-500/30"
-            >
-              <Eye size={12} />
-              Details
-            </button>
+          <div className="flex justify-between">
+            <span>SLA Compliance:</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-200">
+              {ow.slaComplianceRate}%
+            </span>
           </div>
+          <div className="flex justify-between">
+            <span>Satisfaction:</span>
+            <span className="font-extrabold text-amber-500 flex items-center gap-0.5">
+              ★ {ow.citizenRating || "N/A"}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Avg Resol. Time:</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-200">
+              {ow.avgResolutionTime}h
+            </span>
+          </div>
+          <div className="flex justify-between col-span-2">
+            <span>First-Time Fix Rate:</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-200">
+              {ow.firstTimeFixRate}%
+            </span>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onMessage}
+            disabled={isBusy}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all hover:shadow-md hover:shadow-blue-500/30"
+          >
+            <Mail size={12} />
+            Message
+          </button>
+          <button
+            onClick={onOpen}
+            disabled={isBusy}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all hover:shadow-md hover:shadow-emerald-500/30"
+          >
+            <Eye size={12} />
+            Details
+          </button>
         </div>
       </div>
     </div>
@@ -448,6 +673,7 @@ function OfficerDetailsDialog({
   const [statusF, setStatusF] = useState("all");
   const [severityF, setSeverityF] = useState("all");
   const [categoryF, setCategoryF] = useState("all");
+  const [slaStatusF, setSlaStatusF] = useState("all");
 
   const avatarGrad =
     ow.officer.role === "unit_officer"
@@ -459,6 +685,28 @@ function OfficerDetailsDialog({
       ow.issues.map((i) => ("category" in i ? i.category : "")).filter(Boolean),
     ),
   ];
+
+  function getIssueSlaStatus(issue) {
+    const status = (issue.status || "").toLowerCase().trim();
+    if (["resolved", "closed"].includes(status)) {
+      if (
+        issue.slaDeadline &&
+        (issue.resolvedAt ?? issue.closedAt) > issue.slaDeadline
+      ) {
+        return "Breached";
+      }
+      return "On Track";
+    }
+    if (issue.slaDeadline) {
+      if (issue.slaDeadline < Date.now()) {
+        return "Overdue";
+      }
+      if (issue.slaDeadline - Date.now() < 24 * 60 * 60 * 1000) {
+        return "Due Soon";
+      }
+    }
+    return "On Track";
+  }
 
   const filtered = ow.issues.filter((issue) => {
     if (
@@ -480,6 +728,8 @@ function OfficerDetailsDialog({
       ("category" in issue ? issue.category : "") !== categoryF
     )
       return false;
+    if (slaStatusF !== "all" && getIssueSlaStatus(issue) !== slaStatusF)
+      return false;
     return true;
   });
 
@@ -488,14 +738,14 @@ function OfficerDetailsDialog({
       <div className="absolute inset-0 bg-slate-900/70" onClick={onClose}></div>
 
       <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        {/* Dialog header with gradient */}
+        {/* Dialog header */}
         <div
           className={`relative overflow-hidden bg-gradient-to-br ${avatarGrad} p-6 flex-shrink-0`}
         >
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_30%_50%,white,transparent_60%)]"></div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
 
-          <div className="relative flex items-start justify-between gap-4">
+          <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-5">
               <div className="relative flex-shrink-0">
                 {ow.officer.profilePictureUrl ? (
@@ -512,43 +762,50 @@ function OfficerDetailsDialog({
                           .map((n) => n[0])
                           .join("")
                           .slice(0, 2)
+                          .toUpperCase()
                       : ""}
                   </div>
                 )}
               </div>
               <div>
-                <h2 className="text-2xl font-black text-white mb-1">
+                <h2 className="text-2xl font-black text-white mb-1 flex items-center gap-2">
                   {ow.officer.fullName}
+                  <span className="text-xs font-black px-2 py-0.5 rounded bg-white/20 text-white border border-white/30">
+                    Grade {ow.performanceGrade}
+                  </span>
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-sm font-bold border border-white/30">
+                  <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-xs font-bold border border-white/30">
                     {ow.officer.role === "unit_officer" ? (
                       <>
-                        <Shield size={13} />
-                        Ward Officer
+                        <Shield size={13} /> Ward Officer
                       </>
                     ) : (
                       <>
-                        <Zap size={13} />
-                        Field Officer
+                        <Zap size={13} /> Field Officer
                       </>
                     )}
                   </span>
                   {(ow.officer.city || ow.officer.district) && (
-                    <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-sm font-semibold border border-white/30">
+                    <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-xs font-semibold border border-white/30">
                       <MapPin size={13} />
                       {ow.officer.city || ow.officer.district}
                     </span>
                   )}
-                  <WorkloadBadge status={ow.workloadStatus} />
+                  <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-xs font-bold border border-white/30 uppercase">
+                    Dept: {ow.officer.department || "General"}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-xs font-bold border border-white/30">
+                    Risk: {ow.riskLevel}
+                  </span>
                 </div>
-                <div className="flex items-center gap-4 text-white/80 text-sm">
+                <div className="flex items-center gap-4 text-white/80 text-sm font-semibold">
                   <span className="flex items-center gap-1">
                     <Star
                       size={14}
                       className="text-yellow-300 fill-yellow-300"
                     />
-                    {ow.rating} rating
+                    {ow.citizenRating || 0} rating
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock size={14} />
@@ -557,7 +814,7 @@ function OfficerDetailsDialog({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
               <button
                 onClick={onMessage}
                 className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 text-white rounded-xl font-bold text-sm transition-all"
@@ -575,21 +832,23 @@ function OfficerDetailsDialog({
           </div>
 
           {/* KPI strip */}
-          <div className="relative mt-5 grid grid-cols-3 sm:grid-cols-6 gap-3">
+          <div className="relative mt-5 grid grid-cols-4 sm:grid-cols-8 gap-3">
             {[
               { label: "Total", value: ow.total },
-              { label: "Pending", value: ow.pending },
               { label: "Active", value: ow.inProgress },
               { label: "Resolved", value: ow.resolved },
+              { label: "Overdue", value: ow.overdue },
               { label: "Completion", value: `${ow.completionRate}%` },
-              { label: "Rating", value: `${ow.rating}/5` },
+              { label: "Efficiency", value: `${ow.efficiencyScore}%` },
+              { label: "SLA", value: `${ow.slaComplianceRate}%` },
+              { label: "Rating", value: `${ow.citizenRating}/5` },
             ].map((k) => (
               <div
                 key={k.label}
-                className="bg-white/15 border border-white/20 rounded-2xl px-3 py-2 text-center"
+                className="bg-white/15 border border-white/20 rounded-2xl px-2 py-2 text-center"
               >
-                <div className="text-xl font-black text-white">{k.value}</div>
-                <div className="text-xs text-white/70 font-semibold">
+                <div className="text-lg font-black text-white">{k.value}</div>
+                <div className="text-[10px] text-white/70 font-semibold">
                   {k.label}
                 </div>
               </div>
@@ -600,24 +859,17 @@ function OfficerDetailsDialog({
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Officer Profile Details */}
-            <div className="space-y-4 lg:col-span-1">
+            {/* Left Column: Officer Profile & Performance Analytics */}
+            <div className="space-y-6 lg:col-span-1">
+              {/* Profile Card */}
               <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <h3 className="font-black text-slate-900 dark:text-white text-base mb-4 flex items-center gap-2">
-                  <User size={18} className="text-emerald-500" />
+                <h3 className="font-black text-slate-900 dark:text-white text-sm mb-4 flex items-center gap-2 uppercase tracking-wide">
+                  <User size={16} className="text-emerald-500" />
                   Officer Profile
                 </h3>
-                <div className="space-y-4 text-sm">
+                <div className="space-y-3.5 text-xs">
                   <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
-                      Department
-                    </span>
-                    <span className="text-slate-950 dark:text-white font-extrabold capitalize">
-                      {ow.officer.department}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
+                    <span className="text-slate-400 dark:text-slate-500 block font-bold uppercase tracking-wider mb-0.5">
                       Email Address
                     </span>
                     <span className="text-slate-950 dark:text-white font-extrabold break-all">
@@ -625,15 +877,15 @@ function OfficerDetailsDialog({
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
+                    <span className="text-slate-400 dark:text-slate-500 block font-bold uppercase tracking-wider mb-0.5">
                       Phone Number
                     </span>
                     <span className="text-slate-950 dark:text-white font-extrabold">
-                      {ow.officer.phone}
+                      {ow.officer.phone || "N/A"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
+                    <span className="text-slate-400 dark:text-slate-500 block font-bold uppercase tracking-wider mb-0.5">
                       District / City
                     </span>
                     <span className="text-slate-950 dark:text-white font-extrabold">
@@ -642,63 +894,130 @@ function OfficerDetailsDialog({
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
-                      Efficiency Score
-                    </span>
-                    <span className="text-slate-950 dark:text-white font-extrabold">
-                      {ow.officer.efficiencyScore ?? ow.officer.completionRate}%
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-0.5">
+                    <span className="text-slate-400 dark:text-slate-500 block font-bold uppercase tracking-wider mb-0.5">
                       Account Status
                     </span>
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${ow.officer.accountApproved ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold ${
+                        ow.officer.accountApproved
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+                      }`}
                     >
                       {ow.officer.accountApproved
                         ? "Approved"
                         : "Pending Approval"}
                     </span>
                   </div>
-                  {ow.officer.role === "field_officer" &&
-                    ow.officer.specialisations &&
-                    ow.officer.specialisations.length > 0 && (
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500 block font-bold text-xs uppercase tracking-wider mb-1.5">
-                          Specialisations
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {ow.officer.specialisations.map((spec) => (
-                            <span
-                              key={spec}
-                              className="inline-flex bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-xs font-extrabold capitalize text-slate-800 dark:text-slate-200"
-                            >
-                              {spec}
-                            </span>
-                          ))}
-                        </div>
+                </div>
+              </div>
+
+              {/* Performance Analytics Card */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <h3 className="font-black text-slate-900 dark:text-white text-sm mb-4 flex items-center gap-2 uppercase tracking-wide">
+                  <Activity size={16} className="text-emerald-500" />
+                  Performance Analytics
+                </h3>
+                <div className="space-y-4 text-xs font-semibold text-slate-650 dark:text-slate-400">
+                  <div className="flex justify-between items-center">
+                    <span>Efficiency Score</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.efficiencyScore}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>SLA Compliance Rate</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.slaComplianceRate}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>First-Time Fix Rate</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.firstTimeFixRate}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Quality Score</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.qualityScore}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Workload Percentage</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.workloadPercentage}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Citizen Rating</span>
+                    <span className="text-slate-950 dark:text-white font-extrabold text-sm">
+                      {ow.citizenRating || 0}/5
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Issue Quality Stats Card */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <h3 className="font-black text-slate-900 dark:text-white text-sm mb-4 flex items-center gap-2 uppercase tracking-wide">
+                  <TrendingUp size={16} className="text-emerald-500" />
+                  Issue Quality & Breaches
+                </h3>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  {[
+                    {
+                      label: "Rework Request",
+                      value: ow.rework || 0,
+                      col: "text-amber-600",
+                    },
+                    {
+                      label: "Reopened Issues",
+                      value: ow.reopened || 0,
+                      col: "text-rose-500",
+                    },
+                    {
+                      label: "Escalated to Admin",
+                      value: ow.escalated || 0,
+                      col: "text-rose-500",
+                    },
+                    {
+                      label: "SLA Breaches",
+                      value: ow.slaBreaches || 0,
+                      col: "text-red-650",
+                    },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm"
+                    >
+                      <div className={`text-sm font-black ${stat.col}`}>
+                        {stat.value}
                       </div>
-                    )}
+                      <div className="text-[9.5px] text-slate-400 font-semibold">
+                        {stat.label}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Issue List & Filters */}
+            {/* Right Column: Assigned Issues & Filters */}
             <div className="lg:col-span-2 space-y-4">
               {/* Issue filters */}
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
+              <div className="flex flex-wrap gap-2">
+                <div className="relative flex-1 min-w-[180px]">
                   <Search
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-505"
+                    size={15}
                   />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search issues..."
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                    placeholder="Search issues by code or title..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs text-slate-900 dark:text-white"
                   />
                 </div>
                 {[
@@ -706,21 +1025,35 @@ function OfficerDetailsDialog({
                     value: statusF,
                     onChange: setStatusF,
                     options: [
-                      ["all", "All Status"],
+                      ["all", "All Statuses"],
                       ["pending", "Pending"],
+                      ["assigned", "Assigned"],
                       ["in_progress", "In Progress"],
+                      ["pending_uo_verification", "Under Review"],
+                      ["rework_required", "Rework Required"],
                       ["resolved", "Resolved"],
-                      ["under_review", "Under Review"],
+                      ["closed", "Closed"],
                     ],
                   },
                   {
                     value: severityF,
                     onChange: setSeverityF,
                     options: [
-                      ["all", "All Severity"],
-                      ["high", "High"],
-                      ["medium", "Medium"],
-                      ["low", "Low"],
+                      ["all", "All Priorities"],
+                      ["high", "High Priority"],
+                      ["medium", "Medium Priority"],
+                      ["low", "Low Priority"],
+                    ],
+                  },
+                  {
+                    value: slaStatusF,
+                    onChange: setSlaStatusF,
+                    options: [
+                      ["all", "All SLA Status"],
+                      ["On Track", "On Track"],
+                      ["Due Soon", "Due Soon"],
+                      ["Overdue", "Overdue"],
+                      ["Breached", "Breached"],
                     ],
                   },
                   ...(categories.length > 0
@@ -743,7 +1076,7 @@ function OfficerDetailsDialog({
                     <select
                       value={sel.value}
                       onChange={(e) => sel.onChange(e.target.value)}
-                      className="appearance-none pl-3 pr-8 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-900 dark:text-white font-medium cursor-pointer"
+                      className="appearance-none pl-3 pr-8 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs text-slate-900 dark:text-white font-medium cursor-pointer"
                     >
                       {sel.options.map(([v, l]) => (
                         <option key={v} value={v}>
@@ -752,42 +1085,62 @@ function OfficerDetailsDialog({
                       ))}
                     </select>
                     <ChevronDown
-                      size={14}
+                      size={12}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                     />
                   </div>
                 ))}
-                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 font-semibold">
-                  <Filter size={14} />
-                  {filtered.length} of {ow.total}
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold ml-auto self-center">
+                  <Filter size={12} />
+                  <span>
+                    {filtered.length} of {ow.total} issues
+                  </span>
                 </div>
               </div>
 
-              {/* Issue grid */}
+              {/* Issue list */}
               {filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/20 rounded-3xl flex items-center justify-center mb-4">
-                    <CheckCircle size={40} className="text-emerald-500" />
+                <div className="flex flex-col items-center justify-center py-20 text-center bg-slate-50 dark:bg-slate-800/20 rounded-2xl border border-dashed border-slate-250 dark:border-slate-700">
+                  <div className="w-16 h-16 bg-emerald-105 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center mb-3">
+                    <CheckCircle size={32} className="text-emerald-500" />
                   </div>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">
-                    {ow.total === 0 ? "No Active Issues" : "No Issues Match"}
-                  </h3>
-                  <p className="text-slate-500 dark:text-slate-400 max-w-sm">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white mb-1">
                     {ow.total === 0
-                      ? "This officer is currently available for new assignments."
-                      : "Try adjusting your search or filters."}
+                      ? "No issues assigned"
+                      : "No matching issues"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
+                    {ow.total === 0
+                      ? "This officer is currently clear of any active workloads."
+                      : "Try widening your search or filter values."}
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filtered.map((issue, index) => (
-                    <OfficerIssueCard
-                      key={index}
-                      issue={issue}
-                      onView={() => onViewIssue(issue)}
-                      onReassign={() => onReassignIssue(issue)}
-                    />
-                  ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1">
+                  {filtered.map((issue) => {
+                    const slaStatus = getIssueSlaStatus(issue);
+                    const slaBadgeColor =
+                      slaStatus === "Overdue" || slaStatus === "Breached"
+                        ? "bg-rose-100 text-rose-700 dark:bg-rose-950/20 dark:text-rose-450 border-rose-200 dark:border-rose-900"
+                        : slaStatus === "Due Soon"
+                          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-450 border-amber-200 dark:border-amber-900"
+                          : "bg-emerald-100 text-emerald-705 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-250 dark:border-emerald-900";
+
+                    return (
+                      <div key={issue._id} className="relative">
+                        <OfficerIssueCard
+                          issue={issue}
+                          onView={() => onViewIssue(issue)}
+                          onReassign={() => onReassignIssue(issue)}
+                        />
+                        <span
+                          className={`absolute top-3 right-3 text-[9px] font-black px-2 py-0.5 rounded-full border shadow-sm ${slaBadgeColor}`}
+                        >
+                          SLA: {slaStatus}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -817,7 +1170,11 @@ export function AdminDashboard() {
   const [officerFilter, setOfficerFilter] = useState("all");
   const [workloadFilter, setWorkloadFilter] = useState("all");
   const [officerSearchTerm, setOfficerSearchTerm] = useState("");
-  const [officerSort, setOfficerSort] = useState("highest_workload");
+  const [officerSort, setOfficerSort] = useState("efficiency");
+  const [officerCityFilter, setOfficerCityFilter] = useState("all");
+  const [officerDeptFilter, setOfficerDeptFilter] = useState("all");
+  const [officerRiskFilter, setOfficerRiskFilter] = useState("all");
+  const [officersSubTab, setOfficersSubTab] = useState("overview");
 
   const [selectedOfficerWorkload, setSelectedOfficerWorkload] = useState(null);
   const [isOfficerDialogOpen, setIsOfficerDialogOpen] = useState(false);
@@ -983,178 +1340,144 @@ export function AdminDashboard() {
   }
 
   const officers = commandCenterData?.officers ?? [];
+  const officerWorkload = commandCenterData?.officerWorkload ?? [];
+  const performanceSummary = commandCenterData?.performanceSummary ?? {};
+  const cityPerformance = commandCenterData?.cityPerformance ?? [];
+  const departmentPerformance = commandCenterData?.departmentPerformance ?? [];
+  const officerLeaderboards = commandCenterData?.officerLeaderboards ?? {};
+  const riskAnalysis = commandCenterData?.riskAnalysis ?? {};
+  const workloadDistribution = commandCenterData?.workloadDistribution ?? {};
+  const qualityMetrics = commandCenterData?.qualityMetrics ?? {};
+  const filters = commandCenterData?.filters ?? {
+    cities: [],
+    departments: [],
+    roles: ["all", "unit_officer", "field_officer"],
+    riskLevels: ["all", "Good", "Needs Attention", "High Risk"],
+    workloadStatuses: ["all", "balanced", "overloaded", "underutilized"],
+  };
 
-  const officerWorkload = officers.map((officer) => {
-    const assignedIssues = issues.filter((issue) => {
-      if (officer.role === "field_officer") {
-        return issue.assignedFieldOfficer === officer.userId;
-      } else {
-        return issue.assignedUnitOfficer === officer.userId;
-      }
-    });
+  const availableCities = filters.cities ?? [];
+  const availableDepts = filters.departments ?? [];
 
-    const total = assignedIssues.length;
-
-    let pending = 0;
-    let inProgress = 0;
-    let resolved = 0;
-    let rejected = 0;
-    let overdue = 0;
-
-    assignedIssues.forEach((issue) => {
-      const status = (issue.status || "").toLowerCase().trim();
-      const daysSince = Math.floor(
-        (Date.now() -
-          (issue.createdAt ||
-            new Date(issue.created_at || Date.now()).getTime())) /
-          (1000 * 60 * 60 * 24),
-      );
-
-      const isOverdue = issue.slaDeadline
-        ? issue.slaDeadline < Date.now() &&
-          !["resolved", "closed", "rejected", "withdrawn"].includes(status)
-        : daysSince > 7 &&
-          !["resolved", "closed", "rejected", "withdrawn"].includes(status);
-
-      if (isOverdue) {
-        overdue++;
-      }
-
-      if (officer.role === "field_officer") {
-        if (status === "pending") {
-          pending++;
-        } else if (
-          [
-            "assigned",
-            "in_progress",
-            "rework_required",
-            "pending_uo_verification",
-          ].includes(status)
-        ) {
-          inProgress++;
-        } else if (["resolved", "closed"].includes(status)) {
-          resolved++;
-        } else if (status === "rejected") {
-          rejected++;
-        }
-      } else {
-        // Unit officer
-        if (["pending", "verified"].includes(status)) {
-          pending++;
-        } else if (
-          [
-            "assigned",
-            "in_progress",
-            "pending_uo_verification",
-            "rework_required",
-          ].includes(status)
-        ) {
-          inProgress++;
-        } else if (["resolved", "closed"].includes(status)) {
-          resolved++;
-        } else if (status === "rejected") {
-          rejected++;
-        }
-      }
-    });
-
-    const completionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
-
-    // Workload Status
-    let workloadStatus = "balanced";
-    if (officer.role === "field_officer") {
-      const activeCount = officer.currentActiveIssues;
-      const capacity = officer.maxIssueCapacity || 15;
-      const workloadPct = capacity > 0 ? (activeCount / capacity) * 100 : 0;
-      if (activeCount >= capacity || workloadPct >= 85) {
-        workloadStatus = "overloaded";
-      } else if (activeCount <= 1 || workloadPct <= 25) {
-        workloadStatus = "underutilized";
-      }
-    } else {
-      // Unit Officer workload rules
-      const activeCount = assignedIssues.filter(
-        (i) =>
-          !["resolved", "closed", "rejected", "withdrawn"].includes(
-            (i.status || "").toLowerCase().trim(),
-          ),
-      ).length;
-      if (activeCount >= 15) {
-        workloadStatus = "overloaded";
-      } else if (activeCount <= 4) {
-        workloadStatus = "underutilized";
-      }
-    }
-
-    return {
-      officer,
-      total,
-      pending,
-      inProgress,
-      resolved,
-      rejected,
-      overdue,
-      issues: assignedIssues,
-      completionRate,
-      avgResolutionTime: officer.avgResolutionTime ?? 0,
-      workloadStatus,
-      rating: officer.rating ?? 0,
-    };
-  });
-
-  const assignedIssues = issues.filter(
-    (i) => i.assignedUnitOfficer || i.assignedFieldOfficer || i.assignedTo,
-  );
-  const overdueIssues = issues.filter((issue) => {
-    const status = (issue.status || "").toLowerCase().trim();
-    const daysSince = Math.floor(
-      (Date.now() -
-        (issue.createdAt ||
-          new Date(issue.created_at || Date.now()).getTime())) /
-        (1000 * 60 * 60 * 24),
-    );
-    return issue.slaDeadline
-      ? issue.slaDeadline < Date.now() &&
-          !["resolved", "closed", "rejected", "withdrawn"].includes(status)
-      : daysSince > 7 &&
-          !["resolved", "closed", "rejected", "withdrawn"].includes(status);
-  });
-
+  const commandStats = commandCenterData?.stats ?? {};
   const stats = {
-    total: issues.length,
-    pending: issues.filter((i) => i.status === "pending").length,
-    in_progress: issues.filter((i) =>
-      [
-        "assigned",
-        "in_progress",
-        "rework_required",
-        "pending_uo_verification",
-      ].includes(i.status),
-    ).length,
-    resolved: issues.filter((i) => ["resolved", "closed"].includes(i.status))
-      .length,
-    escalated: issues.filter(
-      (i) => i.escalatedToAdmin === true || i.status === "escalated",
-    ).length,
+    total: performanceSummary.totalIssues ?? commandStats.totalIssues ?? 0,
+
+    pending:
+      performanceSummary.pendingIssues ?? commandStats.pendingIssues ?? 0,
+
+    in_progress:
+      performanceSummary.activeIssues ?? commandStats.activeIssues ?? 0,
+
+    resolved:
+      performanceSummary.resolvedIssues ?? commandStats.resolvedIssues ?? 0,
+
+    totalOfficers:
+      performanceSummary.totalOfficers ?? commandStats.totalOfficers ?? 0,
+
+    totalUnitOfficers:
+      performanceSummary.totalUnitOfficers ??
+      commandStats.totalUnitOfficers ??
+      0,
+
+    totalFieldOfficers:
+      performanceSummary.totalFieldOfficers ??
+      commandStats.totalFieldOfficers ??
+      0,
+
+    assignedIssues:
+      performanceSummary.assignedIssues ?? commandStats.assignedIssues ?? 0,
+
+    overdueIssues:
+      performanceSummary.overdueIssues ?? commandStats.overdueIssues ?? 0,
+
+    escalated:
+      performanceSummary.escalatedIssues ??
+      commandStats.escalated ??
+      commandStats.escalatedIssues ??
+      0,
+
+    overloadedCount:
+      performanceSummary.overloadedCount ??
+      commandStats.overloadedCount ??
+      riskAnalysis?.overloadedCount ??
+      0,
+
+    underutilizedCount:
+      performanceSummary.underutilizedCount ??
+      commandStats.underutilizedCount ??
+      riskAnalysis?.underutilizedCount ??
+      0,
+
+    balancedCount:
+      commandStats.balancedCount ?? workloadDistribution?.balanced ?? 0,
+
+    avgCompletion:
+      performanceSummary.avgCompletionRate ?? commandStats.avgCompletion ?? 0,
+
+    avgEfficiencyScore: performanceSummary.avgEfficiencyScore ?? 0,
+
+    avgSlaComplianceRate: performanceSummary.avgSlaComplianceRate ?? 0,
+
+    avgResolutionTime: performanceSummary.avgResolutionTime ?? 0,
   };
 
   const filteredOfficers = officerWorkload
     .filter((ow) => {
-      if (officerFilter !== "all" && ow.officer.role !== officerFilter)
-        return false;
-      if (workloadFilter !== "all" && ow.workloadStatus !== workloadFilter)
-        return false;
+      // 1. Search term (name or email)
       if (
         officerSearchTerm &&
         !ow.officer.fullName
           .toLowerCase()
+          .includes(officerSearchTerm.toLowerCase()) &&
+        !ow.officer.email
+          .toLowerCase()
           .includes(officerSearchTerm.toLowerCase())
-      )
+      ) {
         return false;
+      }
+      // 2. Role filter
+      if (officerFilter !== "all" && ow.officer.role !== officerFilter) {
+        return false;
+      }
+      // 3. City filter
+      if (
+        officerCityFilter !== "all" &&
+        ow.officer.city !== officerCityFilter
+      ) {
+        return false;
+      }
+      // 4. Department filter
+      if (
+        officerDeptFilter !== "all" &&
+        ow.officer.department !== officerDeptFilter
+      ) {
+        return false;
+      }
+      // 5. Risk Level filter
+      if (officerRiskFilter !== "all" && ow.riskLevel !== officerRiskFilter) {
+        return false;
+      }
+      // 6. Workload status filter
+      if (workloadFilter !== "all" && ow.workloadStatus !== workloadFilter) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
       switch (officerSort) {
+        case "efficiency":
+          return b.efficiencyScore - a.efficiencyScore;
+        case "sla":
+          return b.slaComplianceRate - a.slaComplianceRate;
+        case "rating":
+          return b.citizenRating - a.citizenRating;
+        case "resolution_time":
+          return a.avgResolutionTime - b.avgResolutionTime;
+        case "workload":
+          return b.workloadPercentage - a.workloadPercentage;
+        case "completion":
+          return b.completionRate - a.completionRate;
         case "highest_workload":
           return b.total - a.total;
         case "lowest_workload":
@@ -1170,23 +1493,14 @@ export function AdminDashboard() {
       }
     });
 
-  console.log("filteredOfficers", filteredOfficers);
+  const avgCompletion = performanceSummary.avgCompletionRate ?? 0;
+  const balancedCount = workloadDistribution.balanced ?? 0;
 
-  const avgCompletion =
-    officerWorkload.length > 0
-      ? Math.round(
-          officerWorkload.reduce((sum, ow) => sum + ow.completionRate, 0) /
-            officerWorkload.length,
-        )
-      : 0;
-  const balancedCount = officerWorkload.filter(
-    (ow) => ow.workloadStatus === "balanced",
-  ).length;
-
-  // Keep selectedOfficerWorkload in sync with updated issues
   const liveSelectedOfficerWorkload = selectedOfficerWorkload
     ? (officerWorkload.find(
-        (ow) => ow.officer.id === selectedOfficerWorkload.officer.id,
+        (ow) =>
+          ow.officer.id === selectedOfficerWorkload.officer.id ||
+          ow.officer.userId === selectedOfficerWorkload.officer.userId,
       ) ?? null)
     : null;
 
@@ -1390,7 +1704,6 @@ export function AdminDashboard() {
         </div>
 
         <div className="space-y-8">
-          {/* Officers Command Center tab */}
           {activeTab === "officers" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Hero banner */}
@@ -1416,19 +1729,15 @@ export function AdminDashboard() {
                       {[
                         {
                           label: "Ward Officers",
-                          value: officers.filter(
-                            (o) => o.role === "unit_officer",
-                          ).length,
+                          value: performanceSummary.totalUnitOfficers ?? 0,
                         },
                         {
                           label: "Field Officers",
-                          value: officers.filter(
-                            (o) => o.role === "field_officer",
-                          ).length,
+                          value: performanceSummary.totalFieldOfficers ?? 0,
                         },
                         {
                           label: "Overdue Issues",
-                          value: overdueIssues.length,
+                          value: performanceSummary.overdueIssues ?? 0,
                         },
                         { label: "Avg Completion", value: `${avgCompletion}%` },
                       ].map((s) => (
@@ -1449,174 +1758,534 @@ export function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Summary metric tiles */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {/* Sub-navigation inside Officers tab */}
+              <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
                 {[
                   {
-                    label: "Total Officers",
-                    value: officers.length,
-                    sub: "Active",
-                    color:
-                      "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200",
+                    id: "overview",
+                    label: "Overview",
+                    icon: <Layers size={14} />,
                   },
                   {
-                    label: "Balanced",
-                    value: balancedCount,
-                    sub: "Healthy workload",
-                    color:
-                      "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200",
+                    id: "leaderboards",
+                    label: "Leaderboards",
+                    icon: <Trophy size={14} />,
                   },
                   {
-                    label: "Overloaded",
-                    value: officerWorkload.filter(
-                      (o) => o.workloadStatus === "overloaded",
-                    ).length,
-                    sub: "Need attention",
-                    color:
-                      "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200",
+                    id: "risk_monitor",
+                    label: "Risk Monitor",
+                    icon: <AlertTriangle size={14} />,
                   },
                   {
-                    label: "Assigned Issues",
-                    value: assignedIssues.length,
-                    sub: "Total active",
-                    color:
-                      "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800 text-cyan-800 dark:text-cyan-200",
+                    id: "city_dept",
+                    label: "City & Dept Analysis",
+                    icon: <Activity size={14} />,
                   },
-                  {
-                    label: "Overdue Issues",
-                    value: overdueIssues.length,
-                    sub: "> 7 days",
-                    color:
-                      "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200",
-                  },
-                  {
-                    label: "Avg Completion",
-                    value: `${avgCompletion}%`,
-                    sub: "Across all officers",
-                    color:
-                      "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200",
-                  },
-                ].map((t) => (
-                  <MetricTile
-                    key={t.label}
-                    label={t.label}
-                    value={t.value}
-                    sub={t.sub}
-                    color={t.color}
-                  />
+                ].map((sub) => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setOfficersSubTab(sub.id)}
+                    className={`px-5 py-2.5 text-xs font-black rounded-xl transition-all duration-300 flex items-center gap-2 ${
+                      officersSubTab === sub.id
+                        ? "bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow"
+                        : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {sub.icon}
+                    {sub.label}
+                  </button>
                 ))}
               </div>
 
-              {/* Controls bar */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 p-5">
-                <div className="flex flex-wrap gap-3 items-center">
-                  <div className="relative flex-1 min-w-[260px]">
-                    <Search
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-                      size={18}
-                    />
-                    <input
-                      type="text"
-                      value={officerSearchTerm}
-                      onChange={(e) => setOfficerSearchTerm(e.target.value)}
-                      placeholder="Search officers by name..."
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium text-sm"
-                    />
-                  </div>
-
-                  {[
-                    {
-                      value: officerFilter,
-                      onChange: (v) => setOfficerFilter(v),
-                      options: [
-                        ["all", "All Roles"],
-                        ["unit_officer", "Ward Officers"],
-                        ["field_officer", "Field Officers"],
-                      ],
-                      color:
-                        "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20",
-                    },
-                    {
-                      value: workloadFilter,
-                      onChange: (v) => setWorkloadFilter(v),
-                      options: [
-                        ["all", "All Workloads"],
-                        ["overloaded", "Overloaded"],
-                        ["balanced", "Balanced"],
-                        ["underutilized", "Underutilized"],
-                      ],
-                      color:
-                        "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20",
-                    },
-                    {
-                      value: officerSort,
-                      onChange: (v) => setOfficerSort(v),
-                      options: [
-                        ["highest_workload", "Highest Workload"],
-                        ["lowest_workload", "Lowest Workload"],
-                        ["highest_completion", "Highest Completion"],
-                        ["most_active", "Most Active"],
-                        ["name_az", "Name A–Z"],
-                      ],
-                      color:
-                        "border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/20",
-                    },
-                  ].map((sel, i) => (
-                    <div key={i} className="relative">
-                      <select
-                        value={sel.value ?? "all"}
-                        onChange={(e) => sel.onChange(e.target.value)}
-                        className={`appearance-none pl-4 pr-9 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-slate-900 dark:text-white font-bold cursor-pointer text-sm ${sel.color}`}
-                      >
-                        {sel.options.map(([v, l]) => (
-                          <option key={v} value={v}>
-                            {l}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={15}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+              {/* Sub-tab Content: Overview */}
+              {officersSubTab === "overview" && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* Summary metric tiles */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {[
+                      {
+                        label: "Total Officers",
+                        value: performanceSummary.totalOfficers ?? 0,
+                        sub: `${performanceSummary.totalUnitOfficers ?? 0} UO / ${performanceSummary.totalFieldOfficers ?? 0} FO`,
+                        color:
+                          "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200",
+                      },
+                      {
+                        label: "Avg Efficiency",
+                        value: `${displayPercent(performanceSummary.avgEfficiencyScore)}%`,
+                        sub: "Average officer efficiency",
+                        color:
+                          "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200",
+                      },
+                      {
+                        label: "Avg SLA Compliance",
+                        value: `${displayPercent(performanceSummary.avgSlaComplianceRate)}%`,
+                        sub: `${riskAnalysis.slaBreachCount ?? 0} total breaches`,
+                        color:
+                          "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200",
+                      },
+                      {
+                        label: "Avg Resolution Time",
+                        value: `${performanceSummary.avgResolutionTime ?? 0}h`,
+                        sub: "Lifecycle average",
+                        color:
+                          "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800 text-cyan-800 dark:text-cyan-200",
+                      },
+                      {
+                        label: "High Risk Officers",
+                        value: riskAnalysis.highRiskCount ?? 0,
+                        sub: "Needs urgent review",
+                        color:
+                          (riskAnalysis.highRiskCount ?? 0) > 0
+                            ? "bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 animate-pulse font-black"
+                            : "bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200",
+                      },
+                      {
+                        label: "Overloaded Officers",
+                        value: riskAnalysis.overloadedCount ?? 0,
+                        sub: "Workload >= 85%",
+                        color:
+                          "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200",
+                      },
+                    ].map((t) => (
+                      <MetricTile
+                        key={t.label}
+                        label={t.label}
+                        value={t.value}
+                        sub={t.sub}
+                        color={t.color}
                       />
+                    ))}
+                  </div>
+
+                  {/* Controls bar */}
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 p-5">
+                    <div className="flex flex-wrap gap-3 items-center">
+                      {/* Search */}
+                      <div className="relative flex-1 min-w-[260px]">
+                        <Search
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                          size={18}
+                        />
+                        <input
+                          type="text"
+                          value={officerSearchTerm}
+                          onChange={(e) => setOfficerSearchTerm(e.target.value)}
+                          placeholder="Search officers by name or email..."
+                          className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-slate-900 dark:text-white placeholder:text-slate-405 dark:placeholder:text-slate-500 font-bold text-xs"
+                        />
+                      </div>
+
+                      {/* Dropdown Filters */}
+                      {[
+                        {
+                          value: officerFilter,
+                          onChange: setOfficerFilter,
+                          options: [
+                            ["all", "All Roles"],
+                            ["unit_officer", "Ward Officers"],
+                            ["field_officer", "Field Officers"],
+                          ],
+                          color:
+                            "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10",
+                        },
+                        {
+                          value: workloadFilter,
+                          onChange: setWorkloadFilter,
+                          options: [
+                            ["all", "All Workloads"],
+                            ["balanced", "Balanced"],
+                            ["overloaded", "Overloaded"],
+                            ["underutilized", "Underutilized"],
+                          ],
+                          color:
+                            "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10",
+                        },
+                        {
+                          value: officerCityFilter,
+                          onChange: setOfficerCityFilter,
+                          options: [
+                            ["all", "All Cities"],
+                            ...availableCities.map((c) => [
+                              c,
+                              c.charAt(0).toUpperCase() + c.slice(1),
+                            ]),
+                          ],
+                          color:
+                            "border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-900/10",
+                        },
+                        {
+                          value: officerDeptFilter,
+                          onChange: setOfficerDeptFilter,
+                          options: [
+                            ["all", "All Depts"],
+                            ...availableDepts.map((d) => [
+                              d,
+                              d.charAt(0).toUpperCase() + d.slice(1),
+                            ]),
+                          ],
+                          color:
+                            "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10",
+                        },
+                        {
+                          value: officerRiskFilter,
+                          onChange: setOfficerRiskFilter,
+                          options: [
+                            ["all", "All Risks"],
+                            ["Good", "Good"],
+                            ["Needs Attention", "Needs Attention"],
+                            ["High Risk", "High Risk"],
+                          ],
+                          color:
+                            "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10",
+                        },
+                        {
+                          value: officerSort,
+                          onChange: setOfficerSort,
+                          options: [
+                            ["efficiency", "Efficiency Score"],
+                            ["sla", "SLA Compliance"],
+                            ["rating", "Citizen Rating"],
+                            ["resolution_time", "Resolution Time"],
+                            ["workload", "Workload Pct"],
+                            ["completion", "Completion Rate"],
+                            ["highest_workload", "Total Assigned"],
+                            ["name_az", "Name A–Z"],
+                          ],
+                          color:
+                            "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40",
+                        },
+                      ].map((sel, i) => (
+                        <div key={i} className="relative">
+                          <select
+                            value={sel.value ?? "all"}
+                            onChange={(e) => sel.onChange(e.target.value)}
+                            className={`appearance-none pl-4 pr-9 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-slate-900 dark:text-white font-black text-xs cursor-pointer ${sel.color}`}
+                          >
+                            {sel.options.map(([val, label]) => (
+                              <option key={val} value={val}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            size={14}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                          />
+                        </div>
+                      ))}
+
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-extrabold ml-auto">
+                        {filteredOfficers.length} officer
+                        {filteredOfficers.length !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                  ))}
+                  </div>
 
-                  <span className="text-sm text-slate-500 dark:text-slate-400 font-semibold ml-auto">
-                    {filteredOfficers.length} officer
-                    {filteredOfficers.length !== 1 ? "s" : ""}
-                  </span>
+                  {/* Officer card grid */}
+                  {filteredOfficers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-center">
+                      <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-3xl flex items-center justify-center mb-4">
+                        <Users
+                          size={48}
+                          className="text-slate-350 dark:text-slate-600"
+                        />
+                      </div>
+                      <p className="text-slate-600 dark:text-slate-400 text-lg font-bold">
+                        No officers match your filters
+                      </p>
+                      <p className="text-slate-400 dark:text-slate-600 text-sm mt-1">
+                        Try adjusting your search or filter criteria.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                      {filteredOfficers.map((ow) => (
+                        <OfficerCard
+                          key={ow.officer.id || ow.officer.userId}
+                          ow={ow}
+                          onOpen={() => {
+                            setSelectedOfficerWorkload(ow);
+                            setIsOfficerDialogOpen(true);
+                          }}
+                          onMessage={() =>
+                            openMessageModal(ow.officer, ow.issues)
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
-              {/* Officer card grid */}
-              {filteredOfficers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-3xl flex items-center justify-center mb-4">
-                    <Users
-                      size={48}
-                      className="text-slate-300 dark:text-slate-600"
+              {/* Sub-tab Content: Leaderboards */}
+              {officersSubTab === "leaderboards" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+                  <LeaderboardList
+                    title="Top Overall Performers"
+                    list={officerLeaderboards.topOverall}
+                    metricKey="efficiencyScore"
+                    suffix="%"
+                  />
+                  <LeaderboardList
+                    title="Top Ward Officers"
+                    list={officerLeaderboards.topUnitOfficers}
+                    metricKey="efficiencyScore"
+                    suffix="%"
+                  />
+                  <LeaderboardList
+                    title="Top Field Officers"
+                    list={officerLeaderboards.topFieldOfficers}
+                    metricKey="efficiencyScore"
+                    suffix="%"
+                  />
+                  <LeaderboardList
+                    title="Best SLA Compliance"
+                    list={officerLeaderboards.bestSla}
+                    metricKey="slaComplianceRate"
+                    suffix="%"
+                  />
+                  <LeaderboardList
+                    title="Highest Rated (Citizen Satisfaction)"
+                    list={officerLeaderboards.bestRated}
+                    metricKey="citizenRating"
+                  />
+                  <LeaderboardList
+                    title="Fastest Avg Resolution Time"
+                    list={officerLeaderboards.fastestResolution}
+                    metricKey="avgResolutionTime"
+                    suffix="h"
+                  />
+                </div>
+              )}
+
+              {/* Sub-tab Content: Risk Monitor */}
+              {officersSubTab === "risk_monitor" && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* Risk Overview KPI Row */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                    {[
+                      {
+                        label: "High Risk Count",
+                        value: riskAnalysis.highRiskCount ?? 0,
+                        col: "text-rose-600 bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900",
+                      },
+                      {
+                        label: "Needs Attention",
+                        value: riskAnalysis.needsAttentionCount ?? 0,
+                        col: "text-amber-600 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900",
+                      },
+                      {
+                        label: "Overloaded",
+                        value: riskAnalysis.overloadedCount ?? 0,
+                        col: "text-red-655 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900",
+                      },
+                      {
+                        label: "SLA Breaches",
+                        value: riskAnalysis.slaBreachCount ?? 0,
+                        col: "text-rose-705 bg-rose-50/50 dark:bg-rose-950/10 border-rose-200/50 dark:border-rose-900/50",
+                      },
+                      {
+                        label: "Overdue Issues",
+                        value: riskAnalysis.overdueCount ?? 0,
+                        col: "text-rose-600 bg-rose-50/50 dark:bg-rose-950/10 border-rose-200/50 dark:border-rose-900/50",
+                      },
+                      {
+                        label: "Escalations",
+                        value: riskAnalysis.escalationCount ?? 0,
+                        col: "text-rose-505 bg-rose-50/50 dark:bg-rose-950/10 border-rose-200/50 dark:border-rose-900/50",
+                      },
+                      {
+                        label: "Rework Required",
+                        value: riskAnalysis.reworkCount ?? 0,
+                        col: "text-amber-550 bg-amber-50/50 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/50",
+                      },
+                      {
+                        label: "Reopened Issues",
+                        value: riskAnalysis.reopenCount ?? 0,
+                        col: "text-rose-505 bg-rose-50/50 dark:bg-rose-950/10 border-rose-200/50 dark:border-rose-900/50",
+                      },
+                    ].map((item, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-4 rounded-2xl border text-center ${item.col} shadow-sm`}
+                      >
+                        <div className="text-2xl font-black">{item.value}</div>
+                        <div className="text-[10px] font-bold mt-1 uppercase tracking-wider">
+                          {item.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left Column: High Risk & Needs Attention Officers */}
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-lg">
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <AlertTriangle className="text-rose-500" size={16} />
+                        High Risk Officers List
+                      </h3>
+                      <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                        {officerWorkload.filter(
+                          (ow) =>
+                            ow.riskLevel === "High Risk" ||
+                            ow.riskLevel === "Needs Attention",
+                        ).length === 0 ? (
+                          <div className="text-xs text-slate-450 text-center py-10 font-bold">
+                            No officers fall under risk categories currently.
+                          </div>
+                        ) : (
+                          officerWorkload
+                            .filter(
+                              (ow) =>
+                                ow.riskLevel === "High Risk" ||
+                                ow.riskLevel === "Needs Attention",
+                            )
+                            .sort(
+                              (a, b) => a.efficiencyScore - b.efficiencyScore,
+                            )
+                            .map((ow) => {
+                              const badgeCol =
+                                ow.riskLevel === "High Risk"
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/20 dark:text-rose-300"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300";
+                              return (
+                                <div
+                                  key={ow.officer.id}
+                                  onClick={() => {
+                                    setSelectedOfficerWorkload(ow);
+                                    setIsOfficerDialogOpen(true);
+                                  }}
+                                  className="flex items-center justify-between gap-4 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="relative">
+                                      {ow.officer.profilePictureUrl ? (
+                                        <img
+                                          src={ow.officer.profilePictureUrl}
+                                          alt=""
+                                          className="w-9 h-9 rounded-xl object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-black text-xs">
+                                          {ow.officer.fullName
+                                            .slice(0, 2)
+                                            .toUpperCase()}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="font-extrabold text-slate-900 dark:text-white text-xs truncate">
+                                        {ow.officer.fullName}
+                                      </div>
+                                      <div className="text-[10px] text-slate-455 dark:text-slate-400 font-semibold truncate capitalize">
+                                        {ow.officer.role.replace(/_/g, " ")} •{" "}
+                                        {ow.officer.department}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${badgeCol}`}
+                                    >
+                                      {ow.riskLevel}
+                                    </span>
+                                    <div className="text-right whitespace-nowrap">
+                                      <div className="text-xs font-black text-slate-900 dark:text-white">
+                                        Eff: {ow.efficiencyScore}%
+                                      </div>
+                                      <div className="text-[9px] text-slate-400 font-bold">
+                                        SLA: {ow.slaComplianceRate}%
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Column: Risk breakdown maps by City and Department */}
+                    <div className="space-y-6">
+                      {/* Risk by City */}
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          Risk Distribution by City
+                        </h3>
+                        <div className="space-y-2.5 max-h-[25vh] overflow-y-auto pr-1">
+                          {riskAnalysis.riskByCity?.map((row) => (
+                            <div
+                              key={row.city}
+                              className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800"
+                            >
+                              <span className="font-extrabold text-slate-900 dark:text-white capitalize">
+                                {row.city}
+                              </span>
+                              <div className="flex gap-2">
+                                <span className="bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-450 px-2 py-0.5 rounded font-black text-[10px]">
+                                  High Risk: {row.highRiskCount}
+                                </span>
+                                <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-450 px-2 py-0.5 rounded font-black text-[10px]">
+                                  Needs Attention: {row.needsAttentionCount}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Risk by Department */}
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          Risk Distribution by Department
+                        </h3>
+                        <div className="space-y-2.5 max-h-[25vh] overflow-y-auto pr-1">
+                          {riskAnalysis.riskByDepartment?.map((row) => (
+                            <div
+                              key={row.department}
+                              className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800"
+                            >
+                              <span className="font-extrabold text-slate-900 dark:text-white capitalize">
+                                {row.department}
+                              </span>
+                              <div className="flex gap-2">
+                                <span className="bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-450 px-2 py-0.5 rounded font-black text-[10px]">
+                                  High Risk: {row.highRiskCount}
+                                </span>
+                                <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-450 px-2 py-0.5 rounded font-black text-[10px]">
+                                  Needs Attention: {row.needsAttentionCount}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab Content: City & Dept Analysis */}
+              {officersSubTab === "city_dept" && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="space-y-4">
+                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <MapPin size={18} className="text-emerald-500" />
+                      City Performance Analysis
+                    </h3>
+                    <PerformanceTable data={cityPerformance} typeLabel="city" />
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2 pt-4">
+                      <Activity size={18} className="text-emerald-500" />
+                      Department Performance Analysis
+                    </h3>
+                    <PerformanceTable
+                      data={departmentPerformance}
+                      typeLabel="department"
                     />
                   </div>
-                  <p className="text-slate-600 dark:text-slate-400 text-lg font-bold">
-                    No officers match your filters
-                  </p>
-                  <p className="text-slate-400 dark:text-slate-600 text-sm mt-1">
-                    Try adjusting your search or filter criteria.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                  {filteredOfficers.map((ow) => (
-                    <OfficerCard
-                      key={ow.officer.id}
-                      ow={ow}
-                      onOpen={() => {
-                        setSelectedOfficerWorkload(ow);
-                        setIsOfficerDialogOpen(true);
-                      }}
-                      onMessage={() => openMessageModal(ow.officer, ow.issues)}
-                    />
-                  ))}
                 </div>
               )}
             </div>
@@ -1663,43 +2332,94 @@ export function AdminDashboard() {
           )}
 
           {/* Analytics tab */}
-          {/* {activeTab === 'analytics' && (
+          {activeTab === "analytics" && (
             <>
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
                 <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-4">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2"><BarChart3 size={24} />SLA Analytics</h2>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <BarChart3 size={24} />
+                    SLA Analytics
+                  </h2>
                 </div>
-                <div className="p-6"><SLAAnalyticsDashboard /></div>
+                <div className="p-6">
+                  <SLAAnalyticsDashboard />
+                </div>
               </div>
 
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden mt-8">
                 <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-4">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2"><TrendingUp size={24} />Performance Analytics</h2>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <TrendingUp size={24} />
+                    Performance Analytics
+                  </h2>
                 </div>
                 <div className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     {[
-                      { label: 'Avg Resolution Time', value: '36h', icon: <BarChart3 size={22} />, bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600 dark:text-blue-400' },
-                      { label: 'Success Rate', value: '94%', icon: <TrendingUp size={22} />, bg: 'bg-emerald-100 dark:bg-emerald-900/30', color: 'text-emerald-600 dark:text-emerald-400' },
-                      { label: 'Active Officers', value: officers.length, icon: <Users size={22} />, bg: 'bg-cyan-100 dark:bg-cyan-900/30', color: 'text-cyan-600 dark:text-cyan-400' },
-                      { label: 'Avg Workload', value: Math.round(issues.length / officers.length), icon: <Activity size={22} />, bg: 'bg-amber-100 dark:bg-amber-900/30', color: 'text-amber-600 dark:text-amber-400' },
-                    ].map(m => (
-                      <div key={m.label} className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-lg">
-                        <div className={`inline-flex p-3 ${m.bg} rounded-xl mb-3`}><span className={m.color}>{m.icon}</span></div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">{m.label}</p>
-                        <p className="text-3xl font-black text-slate-900 dark:text-white">{m.value}</p>
+                      {
+                        label: "Avg Resolution Time",
+                        value: "36h",
+                        icon: <BarChart3 size={22} />,
+                        bg: "bg-blue-100 dark:bg-blue-900/30",
+                        color: "text-blue-600 dark:text-blue-400",
+                      },
+                      {
+                        label: "Success Rate",
+                        value: "94%",
+                        icon: <TrendingUp size={22} />,
+                        bg: "bg-emerald-100 dark:bg-emerald-900/30",
+                        color: "text-emerald-600 dark:text-emerald-400",
+                      },
+                      {
+                        label: "Active Officers",
+                        value: officers.length,
+                        icon: <Users size={22} />,
+                        bg: "bg-cyan-100 dark:bg-cyan-900/30",
+                        color: "text-cyan-600 dark:text-cyan-400",
+                      },
+                      {
+                        label: "Avg Workload",
+                        value: Math.round(issues.length / officers.length),
+                        icon: <Activity size={22} />,
+                        bg: "bg-amber-100 dark:bg-amber-900/30",
+                        color: "text-amber-600 dark:text-amber-400",
+                      },
+                    ].map((m) => (
+                      <div
+                        key={m.label}
+                        className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-lg"
+                      >
+                        <div
+                          className={`inline-flex p-3 ${m.bg} rounded-xl mb-3`}
+                        >
+                          <span className={m.color}>{m.icon}</span>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+                          {m.label}
+                        </p>
+                        <p className="text-3xl font-black text-slate-900 dark:text-white">
+                          {m.value}
+                        </p>
                       </div>
                     ))}
                   </div>
                   <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl text-center">
-                    <TrendingUp size={64} className="mx-auto text-slate-300 dark:text-slate-700 mb-4" />
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Advanced Analytics Coming Soon</h3>
-                    <p className="text-slate-600 dark:text-slate-400">Detailed charts, trends, and insights will be available here</p>
+                    <TrendingUp
+                      size={64}
+                      className="mx-auto text-slate-300 dark:text-slate-700 mb-4"
+                    />
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                      Advanced Analytics Coming Soon
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Detailed charts, trends, and insights will be available
+                      here
+                    </p>
                   </div>
                 </div>
               </div>
             </>
-          )} */}
+          )}
 
           {/* Audit tab */}
           {/* {activeTab === 'audit' && (
