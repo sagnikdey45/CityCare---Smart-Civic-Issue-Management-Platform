@@ -293,7 +293,8 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_department", ["department"])
-    .index("by_unit_officer", ["reportingUnitOfficerId"]),
+    .index("by_unit_officer", ["reportingUnitOfficerId"])
+    .index("by_city", ["city"]),
 
   issues: defineTable({
     // Core
@@ -425,7 +426,7 @@ export default defineSchema({
         reason: v.string(),
         comments: v.optional(v.string()),
         escalatedBy: v.id("users"),
-        prevIssueStatus: v.optional(v.string()),
+        prevIssueStatus: v.string(),
         escalatedAt: v.number(),
         resolved: v.optional(v.boolean()),
         resolvedAt: v.optional(v.number()),

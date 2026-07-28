@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import CityAdminOverview from "../city-admin/CityAdminOverview";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -63,10 +67,43 @@ import { ModeToggle } from "../ModeToggle";
 // import { CityCitizenGamificationSection } from './admin/CityCitizenGamificationSection';
 
 export default function CityAdminDashboard() {
+  const { data: session, status: sessionStatus } = useSession();
+  const dbUser = useQuery(
+    api.users.getUserByEmail,
+    session?.user?.email ? { email: session.user.email } : "skip",
+  );
+
   const [activeTab, setActiveTab] = useState("overview");
-  const [selectedCity, setSelectedCity] = useState("Varanasi");
-  const [dateRange, setDateRange] = useState("7d");
+  const [dateRange, setDateRange] = useState("custom");
   const [selectedIssue, setSelectedIssue] = useState(null);
+
+  const rangeDays =
+    dateRange === "today"
+      ? 1
+      : dateRange === "7d"
+        ? 7
+        : dateRange === "30d"
+          ? 30
+          : dateRange === "90d"
+            ? 90
+            : 0;
+
+  const overviewData = useQuery(
+    api.cityAdmin.getCityAdminOverview,
+    dbUser?._id && dbUser.role === "city_admin"
+      ? { cityAdminUserId: dbUser._id, days: rangeDays }
+      : "skip",
+  );
+
+  const isUserLoading =
+    sessionStatus === "loading" || (session && dbUser === undefined);
+  const isUnauthorized =
+    sessionStatus === "unauthenticated" ||
+    (dbUser && dbUser.role !== "city_admin");
+  const isProfileMissing =
+    dbUser && dbUser.role === "city_admin" && overviewData === null;
+  const isOverviewLoading =
+    dbUser && dbUser.role === "city_admin" && overviewData === undefined;
   const [heatmapFilter, setHeatmapFilter] = useState("category");
   const [showWardBoundaries, setShowWardBoundaries] = useState(true);
   const [officerTab, setOfficerTab] = useState("pending");
@@ -603,15 +640,15 @@ export default function CityAdminDashboard() {
   const renderTopbar = () => (
     <div className="fixed left-72 right-0 top-0 h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between px-8 z-40 shadow-sm">
       <div className="flex items-center gap-4">
-        <select
-          value={selectedCity}
-          onChange={(e) => setSelectedCity(e.target.value)}
-          className="px-4 py-2.5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all shadow-sm hover:shadow-md"
-        >
-          <option>Varanasi</option>
-          <option>Lucknow</option>
-          <option>Prayagraj</option>
-        </select>
+        {overviewData?.scope?.city && (
+          <div className="flex items-center gap-2 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-750 border border-slate-200 dark:border-slate-650 px-4 py-2.5 rounded-xl text-xs font-black text-slate-750 dark:text-slate-200 shadow-sm">
+            <Shield size={14} className="text-cyan-500 flex-shrink-0" />
+            <span>
+              Administrative Scope: {overviewData.scope.city},{" "}
+              {overviewData.scope.state}
+            </span>
+          </div>
+        )}
 
         <select
           value={dateRange}
@@ -621,7 +658,7 @@ export default function CityAdminDashboard() {
           <option value="today">Today</option>
           <option value="7d">Last 7 Days</option>
           <option value="30d">Last 30 Days</option>
-          <option value="custom">Custom Range</option>
+          <option value="custom">All</option>
         </select>
 
         <div className="relative">
@@ -1972,28 +2009,78 @@ export default function CityAdminDashboard() {
         {renderTopbar()}
 
         <div className="ml-72 pt-20 p-8">
-          {activeTab === "overview" && (
-            <>
-              {renderKPIs()}
-              {renderHeatmapSection()}
-              {renderSLAMonitoring()}
-              {renderEscalations()}
-            </>
+          {isUserLoading && (
+            <div className="flex flex-col items-center justify-center py-24 space-y-4">
+              <RefreshCw className="w-12 h-12 text-cyan-550 animate-spin" />
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Loading administrative profile...
+              </p>
+            </div>
           )}
 
-          {activeTab === "issues" && renderAllIssues()}
-          {activeTab === "escalations" && renderEscalations()}
-          {activeTab === "sla" && renderSLAMonitoring()}
-          {activeTab === "duplicates" && renderDuplicateDetection()}
-          {activeTab === "officers" && renderOfficerManagement()}
-          {activeTab === "departments" && renderDepartmentPerformance()}
-          {activeTab === "audit" && renderAuditLogs()}
-          {activeTab === "ai" && renderAIInsights()}
-          {activeTab === "heatmap" && renderHeatmapSection()}
-          {/* {activeTab === "public-moderation" && <PublicDashboardModeration />} */}
-          {/* {activeTab === "citizen-rewards" && (
-            <CityCitizenGamificationSection />
-          )} */}
+          {isUnauthorized && (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+              <AlertCircle size={48} className="text-red-500" />
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                Unauthorized Access
+              </h3>
+              <p className="text-sm text-slate-500 max-w-md">
+                You do not have permission to view the City Operations
+                dashboard.
+              </p>
+            </div>
+          )}
+
+          {isProfileMissing && (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+              <AlertCircle size={48} className="text-amber-500" />
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                Profile Not Configured
+              </h3>
+              <p className="text-sm text-slate-500 max-w-md">
+                Your City Admin profile has not been initialized. Please contact
+                system support.
+              </p>
+            </div>
+          )}
+
+          {isOverviewLoading &&
+            !isUserLoading &&
+            !isUnauthorized &&
+            !isProfileMissing && (
+              <div className="flex flex-col items-center justify-center py-24 space-y-4">
+                <RefreshCw className="w-12 h-12 text-cyan-500 animate-spin" />
+                <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  Compiling city operations overview...
+                </p>
+              </div>
+            )}
+
+          {!isUserLoading &&
+            !isUnauthorized &&
+            !isProfileMissing &&
+            !isOverviewLoading && (
+              <>
+                {activeTab === "overview" && (
+                  <CityAdminOverview
+                    overviewData={overviewData}
+                    onSelectIssue={setSelectedIssue}
+                    dateRange={dateRange}
+                    onSetDateRange={setDateRange}
+                  />
+                )}
+
+                {activeTab === "issues" && renderAllIssues()}
+                {activeTab === "escalations" && renderEscalations()}
+                {activeTab === "sla" && renderSLAMonitoring()}
+                {activeTab === "duplicates" && renderDuplicateDetection()}
+                {activeTab === "officers" && renderOfficerManagement()}
+                {activeTab === "departments" && renderDepartmentPerformance()}
+                {activeTab === "audit" && renderAuditLogs()}
+                {activeTab === "ai" && renderAIInsights()}
+                {activeTab === "heatmap" && renderHeatmapSection()}
+              </>
+            )}
         </div>
 
         {renderIssueDetailModal()}
