@@ -58,6 +58,7 @@ import {
   getCityAdminAuditLogs,
   addCityAdminAuditLog,
 } from "@/lib/cityAdminMockData";
+import { ModeToggle } from "../ModeToggle";
 // import PublicDashboardModeration from './PublicDashboardModeration';
 // import { CityCitizenGamificationSection } from './admin/CityCitizenGamificationSection';
 
@@ -66,7 +67,6 @@ export default function CityAdminDashboard() {
   const [selectedCity, setSelectedCity] = useState("Varanasi");
   const [dateRange, setDateRange] = useState("7d");
   const [selectedIssue, setSelectedIssue] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
   const [heatmapFilter, setHeatmapFilter] = useState("category");
   const [showWardBoundaries, setShowWardBoundaries] = useState(true);
   const [officerTab, setOfficerTab] = useState("pending");
@@ -642,12 +642,7 @@ export default function CityAdminDashboard() {
           <span className="absolute top-2 right-2 w-2 h-2 bg-gradient-to-br from-red-500 to-rose-600 rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse"></span>
         </button>
 
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all group"
-        >
-          <Settings className="w-5 h-5 text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors" />
-        </button>
+        <ModeToggle />
 
         <div className="flex items-center gap-3 pl-4 ml-2 border-l border-slate-200 dark:border-slate-700">
           <div className="relative">
@@ -1971,7 +1966,7 @@ export default function CityAdminDashboard() {
   };
 
   return (
-    <div className={darkMode ? "dark" : ""}>
+    <div>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         {renderSidebar()}
         {renderTopbar()}
