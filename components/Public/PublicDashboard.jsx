@@ -32,7 +32,7 @@ import {
   Recycle,
   Package,
   HeartPulse,
-  MoreHorizontal
+  MoreHorizontal,
 } from "lucide-react";
 import { PublicNavbar } from "./PublicNavbar";
 import { format } from "date-fns";
@@ -53,6 +53,19 @@ export function PublicDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const userRole = session?.user?.role;
+  const isForbiddenRole = userRole === "city_admin" || userRole === "admin";
+
+  useEffect(() => {
+    if (status !== "loading" && isForbiddenRole) {
+      if (userRole === "admin") {
+        router.replace("/admin");
+      } else if (userRole === "city_admin") {
+        router.replace("/city-admin");
+      }
+    }
+  }, [status, userRole, isForbiddenRole, router]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -80,12 +93,12 @@ export function PublicDashboard() {
 
   const citizenCityQuery = useQuery(
     api.issues.getCitizenCityByUserId,
-    session?.user?.id ? { userId: session.user.id } : "skip"
+    session?.user?.id ? { userId: session.user.id } : "skip",
   );
 
   const publicIssues = useQuery(
     api.publicIssues.getCityPublicIssues,
-    cityName !== "Loading..." ? { city: cityName } : "skip"
+    cityName !== "Loading..." ? { city: cityName } : "skip",
   );
 
   useEffect(() => {
@@ -105,7 +118,7 @@ export function PublicDashboard() {
             const { latitude, longitude } = position.coords;
             try {
               const res = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`,
               );
               const data = await res.json();
 
@@ -127,7 +140,7 @@ export function PublicDashboard() {
           (error) => {
             console.error("Geolocation error:", error);
             if (active) setCityName("Varanasi");
-          }
+          },
         );
       } else {
         setCityName("Varanasi");
@@ -173,7 +186,7 @@ export function PublicDashboard() {
     api.publicIssues.getCityPublicIssueByIssueCode,
     (cityFromUrl || cityName !== "Loading...") && idFromUrl
       ? { city: cityFromUrl || cityName, issueCode: idFromUrl }
-      : "skip"
+      : "skip",
   );
 
   useEffect(() => {
@@ -182,7 +195,7 @@ export function PublicDashboard() {
         setSelectedIssue(urlSpecificIssue);
       } else {
         const foundIssue = (publicIssues || []).find(
-          (issue) => issue.issueCode === idFromUrl
+          (issue) => issue.issueCode === idFromUrl,
         );
         if (foundIssue) {
           setSelectedIssue(foundIssue);
@@ -195,7 +208,9 @@ export function PublicDashboard() {
 
   // Filtered and sorted issues
   const filteredIssues = useMemo(() => {
-    let filtered = (publicIssues || []).filter(issue => issue.publishStatus === "published");
+    let filtered = (publicIssues || []).filter(
+      (issue) => issue.publishStatus === "published",
+    );
 
     // Only show resolved/rejected
     filtered = filtered.filter(
@@ -234,18 +249,30 @@ export function PublicDashboard() {
         return (b.citizenRating || 0) - (a.citizenRating || 0);
       } else {
         return (
-          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime()
         );
       }
     });
 
     return filtered;
-  }, [searchTerm, statusFilter, categoryFilter, wardFilter, sortBy, publicIssues]);
+  }, [
+    searchTerm,
+    statusFilter,
+    categoryFilter,
+    wardFilter,
+    sortBy,
+    publicIssues,
+  ]);
 
   // Calculate KPIs
   const kpis = useMemo(() => {
-    const resolved = (publicIssues || []).filter((i) => i.status === "resolved" && i.publishStatus === "published");
-    const rejected = (publicIssues || []).filter((i) => i.status === "rejected" && i.publishStatus === "published");
+    const resolved = (publicIssues || []).filter(
+      (i) => i.status === "resolved" && i.publishStatus === "published",
+    );
+    const rejected = (publicIssues || []).filter(
+      (i) => i.status === "rejected" && i.publishStatus === "published",
+    );
 
     const avgResolutionTime =
       resolved.reduce((acc, issue) => {
@@ -266,6 +293,17 @@ export function PublicDashboard() {
       avgRating: avgRating.toFixed(1),
     };
   }, [publicIssues]);
+
+  if (status === "loading" || (session && isForbiddenRole)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 space-y-4">
+        <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+          Redirecting to authorized administration portal...
+        </p>
+      </div>
+    );
+  }
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -365,7 +403,9 @@ export function PublicDashboard() {
             </h2>
             <p className="relative text-gray-600 dark:text-gray-400 text-lg md:text-xl max-w-2xl mx-auto font-medium">
               Real-time civic progress tracking across{" "}
-              <span className="font-bold text-teal-600 dark:text-teal-400">{cityName === "Loading..." ? "your city" : cityName}</span>
+              <span className="font-bold text-teal-600 dark:text-teal-400">
+                {cityName === "Loading..." ? "your city" : cityName}
+              </span>
             </p>
           </div>
 
@@ -422,7 +462,9 @@ export function PublicDashboard() {
               </p>
               <p className="text-5xl font-extrabold text-gray-900 dark:text-white relative flex items-baseline gap-2">
                 {kpis.avgResolutionTime}
-                <span className="text-lg font-semibold text-gray-500 dark:text-gray-400">days</span>
+                <span className="text-lg font-semibold text-gray-500 dark:text-gray-400">
+                  days
+                </span>
               </p>
             </div>
 
@@ -441,7 +483,9 @@ export function PublicDashboard() {
               </p>
               <p className="text-5xl font-extrabold text-gray-900 dark:text-white relative flex items-baseline gap-2">
                 {kpis.avgRating}
-                <span className="text-lg font-semibold text-gray-500 dark:text-gray-400">/5</span>
+                <span className="text-lg font-semibold text-gray-500 dark:text-gray-400">
+                  /5
+                </span>
               </p>
             </div>
           </div>
@@ -451,7 +495,10 @@ export function PublicDashboard() {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                 <div className="p-2 bg-teal-100 dark:bg-teal-900/50 rounded-xl">
-                  <MapIcon className="text-teal-600 dark:text-teal-400" size={24} />
+                  <MapIcon
+                    className="text-teal-600 dark:text-teal-400"
+                    size={24}
+                  />
                 </div>
                 Geographic Insights
               </h3>
@@ -485,7 +532,9 @@ export function PublicDashboard() {
               {!isLoaded || !center ? (
                 <div className="h-[400px] flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-800/50">
                   <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin mb-4"></div>
-                  <p className="text-gray-500 dark:text-gray-400 font-medium">Initializing Map Data...</p>
+                  <p className="text-gray-500 dark:text-gray-400 font-medium">
+                    Initializing Map Data...
+                  </p>
                 </div>
               ) : (
                 <GoogleMap
@@ -538,9 +587,12 @@ export function PublicDashboard() {
                         }}
                         onClick={() => {
                           setSelectedIssue(issue);
-                          router.push(`/public-dashboard?id=${issue.issueCode}`, {
-                            scroll: false,
-                          });
+                          router.push(
+                            `/public-dashboard?id=${issue.issueCode}`,
+                            {
+                              scroll: false,
+                            },
+                          );
                         }}
                       />
                     ))}
@@ -588,7 +640,10 @@ export function PublicDashboard() {
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700/50">
-                <Filter size={18} className="text-teal-600 dark:text-teal-400" />
+                <Filter
+                  size={18}
+                  className="text-teal-600 dark:text-teal-400"
+                />
                 <span className="font-bold text-sm tracking-wide">Filters</span>
               </div>
 
@@ -666,7 +721,8 @@ export function PublicDashboard() {
                   </button>
                 )}
                 <div className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 px-4 py-2 rounded-xl font-bold border border-teal-200/50 dark:border-teal-800/50 shadow-sm">
-                  {filteredIssues.length} <span className="font-medium">results</span>
+                  {filteredIssues.length}{" "}
+                  <span className="font-medium">results</span>
                 </div>
               </div>
             </div>
@@ -679,13 +735,17 @@ export function PublicDashboard() {
               {filteredIssues.length === 0 ? (
                 <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/40 dark:border-white/10 p-16 text-center shadow-xl">
                   <div className="w-24 h-24 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Search className="text-gray-400 dark:text-gray-500" size={40} />
+                    <Search
+                      className="text-gray-400 dark:text-gray-500"
+                      size={40}
+                    />
                   </div>
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 tracking-tight">
                     No Matching Issues
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-lg">
-                    We couldn't find any issues matching your exact filters. Try broadening your search criteria.
+                    We couldn't find any issues matching your exact filters. Try
+                    broadening your search criteria.
                   </p>
                 </div>
               ) : (
@@ -726,10 +786,15 @@ export function PublicDashboard() {
                             {issue.issueCode}
                           </span>
                           {(() => {
-                            const cat = categories.find(c => c.value === issue.category) || categories[categories.length - 1];
+                            const cat =
+                              categories.find(
+                                (c) => c.value === issue.category,
+                              ) || categories[categories.length - 1];
                             const Icon = cat.icon;
                             return (
-                              <span className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide shadow-sm border border-gray-100 dark:border-slate-700/50 ${cat.color} bg-white dark:bg-slate-800`}>
+                              <span
+                                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide shadow-sm border border-gray-100 dark:border-slate-700/50 ${cat.color} bg-white dark:bg-slate-800`}
+                              >
                                 <Icon size={14} />
                                 {cat.label}
                               </span>
@@ -759,17 +824,13 @@ export function PublicDashboard() {
 
                       <div className="flex flex-wrap items-center gap-6 text-sm text-gray-500 dark:text-gray-400 font-medium bg-gray-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-slate-800/50">
                         <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700">
-                          <MapPin
-                            size={16}
-                            className="text-teal-500"
-                          />
-                          <span className="text-gray-700 dark:text-gray-300">{issue.ward}</span>
+                          <MapPin size={16} className="text-teal-500" />
+                          <span className="text-gray-700 dark:text-gray-300">
+                            {issue.ward}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700">
-                          <Calendar
-                            size={16}
-                            className="text-teal-500"
-                          />
+                          <Calendar size={16} className="text-teal-500" />
                           <span className="text-gray-700 dark:text-gray-300">
                             {format(new Date(issue.createdAt), "MMM d, yyyy")}
                           </span>
@@ -784,12 +845,13 @@ export function PublicDashboard() {
                             </div>
                           )}
 
-                        {issue.status === "rejected" && issue.rejectionReason && (
-                           <div className="flex items-center gap-2 text-xs bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-800 font-bold ml-auto max-w-[200px] truncate shadow-sm">
-                             <XCircle size={14} />
-                             {issue.rejectionReason}
-                           </div>
-                        )}
+                        {issue.status === "rejected" &&
+                          issue.rejectionReason && (
+                            <div className="flex items-center gap-2 text-xs bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-800 font-bold ml-auto max-w-[200px] truncate shadow-sm">
+                              <XCircle size={14} />
+                              {issue.rejectionReason}
+                            </div>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -812,7 +874,7 @@ export function PublicDashboard() {
                       {/* Decorative background blobs */}
                       <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
                       <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-xl -ml-8 -mb-8"></div>
-                      
+
                       <h3 className="relative text-2xl font-extrabold text-white mb-4 tracking-tight drop-shadow-md leading-snug">
                         {selectedIssue.title}
                       </h3>
@@ -907,36 +969,64 @@ export function PublicDashboard() {
                         <div className="relative border-l-2 border-gray-200 dark:border-slate-700 ml-3 space-y-6 pb-2">
                           <div className="relative pl-6">
                             <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-gray-300 dark:bg-slate-600 border-2 border-white dark:border-slate-800 shadow-sm"></div>
-                            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Issue Reported</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{format(new Date(selectedIssue.createdAt), "PPP")}</p>
+                            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                              Issue Reported
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                              {format(new Date(selectedIssue.createdAt), "PPP")}
+                            </p>
                           </div>
-                          
+
                           <div className="relative pl-6">
                             <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-cyan-400 border-2 border-white dark:border-slate-800 shadow-sm shadow-cyan-400/50"></div>
-                            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Verified & Reviewed</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{format(new Date(selectedIssue.reviewedAt || selectedIssue.createdAt), "PPP")}</p>
+                            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                              Verified & Reviewed
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                              {format(
+                                new Date(
+                                  selectedIssue.reviewedAt ||
+                                    selectedIssue.createdAt,
+                                ),
+                                "PPP",
+                              )}
+                            </p>
                           </div>
 
                           {selectedIssue.resolvedAt && (
                             <div className="relative pl-6">
                               <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-800 shadow-sm shadow-emerald-500/50"></div>
-                              <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Successfully Resolved</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{format(new Date(selectedIssue.resolvedAt), "PPPpp")}</p>
+                              <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                                Successfully Resolved
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                                {format(
+                                  new Date(selectedIssue.resolvedAt),
+                                  "PPPpp",
+                                )}
+                              </p>
                             </div>
                           )}
-                          
+
                           {selectedIssue.rejectedAt && (
                             <div className="relative pl-6">
                               <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-red-500 border-2 border-white dark:border-slate-800 shadow-sm shadow-red-500/50"></div>
-                              <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Rejected</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{new Date(selectedIssue.rejectedAt).toLocaleString()}</p>
+                              <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                                Rejected
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                                {new Date(
+                                  selectedIssue.rejectedAt,
+                                ).toLocaleString()}
+                              </p>
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Public Notes */}
-                      {(selectedIssue.publicCompletionNote || selectedIssue.rejectionReason) && (
+                      {(selectedIssue.publicCompletionNote ||
+                        selectedIssue.rejectionReason) && (
                         <div className="mb-8">
                           <h4 className="text-xs font-extrabold text-gray-400 dark:text-gray-500 mb-3 uppercase tracking-widest flex items-center gap-2">
                             <MessageSquare size={14} /> Official Response
@@ -973,7 +1063,10 @@ export function PublicDashboard() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleShare(selectedIssue.issueCode, selectedIssue.city);
+                            handleShare(
+                              selectedIssue.issueCode,
+                              selectedIssue.city,
+                            );
                           }}
                           className="flex items-center justify-center gap-2 px-5 py-3.5 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-slate-600 rounded-xl font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
                         >
@@ -987,13 +1080,17 @@ export function PublicDashboard() {
                   <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/40 dark:border-white/10 p-16 text-center shadow-lg sticky top-28 h-[600px] flex flex-col justify-center">
                     <div className="w-24 h-24 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 relative">
                       <div className="absolute inset-0 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-full animate-spin-slow"></div>
-                      <Layers className="text-gray-400 dark:text-gray-500" size={32} />
+                      <Layers
+                        className="text-gray-400 dark:text-gray-500"
+                        size={32}
+                      />
                     </div>
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
                       Select an Issue
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400 text-base max-w-[250px] mx-auto">
-                      Click on any civic issue card from the list to view comprehensive details, timeline, and official responses.
+                      Click on any civic issue card from the list to view
+                      comprehensive details, timeline, and official responses.
                     </p>
                   </div>
                 )}
@@ -1020,7 +1117,9 @@ export function PublicDashboard() {
               <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
                 Trust & Transparency Metrics
               </h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">Real-time civic performance indicators</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">
+                Real-time civic performance indicators
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1028,7 +1127,10 @@ export function PublicDashboard() {
                 <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-teal-600">
                   <Award size={120} />
                 </div>
-                <Award className="text-teal-500 mb-4 drop-shadow-sm" size={36} />
+                <Award
+                  className="text-teal-500 mb-4 drop-shadow-sm"
+                  size={36}
+                />
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
                   Completion Rate
                 </p>
@@ -1046,7 +1148,10 @@ export function PublicDashboard() {
                   Avg Review Time
                 </p>
                 <p className="text-4xl font-black text-gray-900 dark:text-white">
-                  1.2<span className="text-lg font-bold text-cyan-500 ml-2">days</span>
+                  1.2
+                  <span className="text-lg font-bold text-cyan-500 ml-2">
+                    days
+                  </span>
                 </p>
               </div>
 
@@ -1054,7 +1159,10 @@ export function PublicDashboard() {
                 <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-emerald-600">
                   <Target size={120} />
                 </div>
-                <Target className="text-emerald-500 mb-4 drop-shadow-sm" size={36} />
+                <Target
+                  className="text-emerald-500 mb-4 drop-shadow-sm"
+                  size={36}
+                />
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
                   Top Ward Focus
                 </p>
@@ -1067,7 +1175,10 @@ export function PublicDashboard() {
                 <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-amber-600">
                   <TrendingUp size={120} />
                 </div>
-                <TrendingUp className="text-amber-500 mb-4 drop-shadow-sm" size={36} />
+                <TrendingUp
+                  className="text-amber-500 mb-4 drop-shadow-sm"
+                  size={36}
+                />
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
                   Most Common
                 </p>
@@ -1083,7 +1194,9 @@ export function PublicDashboard() {
         {showToast && (
           <div className="fixed bottom-8 right-8 bg-emerald-500 dark:bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(16,185,129,0.3)] flex items-center gap-3 animate-slide-up z-50 border border-emerald-400 dark:border-emerald-500">
             <CheckCircle size={24} className="animate-pulse" />
-            <span className="font-bold tracking-wide">Link successfully copied!</span>
+            <span className="font-bold tracking-wide">
+              Link successfully copied!
+            </span>
           </div>
         )}
       </div>
