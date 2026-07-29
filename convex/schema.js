@@ -714,4 +714,20 @@ export default defineSchema({
     newValue: v.optional(v.string()),
     notes: v.optional(v.string()),
   }).index("by_issue", ["issueId"]),
+
+  cityAdminAuditLogs: defineTable({
+    action: v.string(),
+    performedByUserId: v.id("users"),
+    performerRole: v.literal("city_admin"),
+    city: v.string(),
+    affectedEntityType: v.string(),
+    affectedEntityId: v.id("issues"),
+    issueCode: v.string(),
+    oldValue: v.string(),
+    newValue: v.string(),
+    reason: v.string(),
+    timestamp: v.number(),
+  })
+    .index("by_city", ["city"])
+    .index("by_issue", ["affectedEntityId"]),
 });

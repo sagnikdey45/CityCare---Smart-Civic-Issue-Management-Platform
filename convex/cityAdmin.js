@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 
 const normalizeKey = (val) => (val || "").toLowerCase().trim();
 
@@ -700,5 +700,1596 @@ export const getCityAdminProfile = query({
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
     return profile;
+  },
+});
+
+async function requireCityAdmin(ctx, cityAdminUserId) {
+  const user = await ctx.db.get(cityAdminUserId);
+  if (!user || user.role !== "city_admin") {
+    throw new Error("Unauthorised: City Admin access required");
+  }
+
+  const profile = await ctx.db
+    .query("cityAdmins")
+    .withIndex("by_user", (q) => q.eq("userId", cityAdminUserId))
+    .unique();
+
+  if (!profile) {
+    throw new Error("City Admin profile not found");
+  }
+
+  return {
+    user,
+    profile,
+    city: profile.city,
+    state: profile.state,
+  };
+}
+
+export const getCityAdminIssues = query({
+  args: {
+    cityAdminUserId: v.id("users"),
+    search: v.optional(v.string()),
+    status: v.optional(v.string()),
+    category: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    department: v.optional(v.string()),
+    assignmentStatus: v.optional(v.string()),
+    slaStatus: v.optional(v.string()),
+    escalationStatus: v.optional(v.string()),
+    dateRange: v.optional(
+      v.union(
+        v.literal("today"),
+        v.literal("7d"),
+        v.literal("30d"),
+        v.literal("all"),
+      ),
+    ),
+    sortBy: v.optional(v.string()),
+    sortDirection: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+    page: v.optional(v.number()),
+    pageSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { city, state } = await requireCityAdmin(ctx, args.cityAdminUserId);
+
+    // Fetch all issues in the city (indexed)
+    const allIssues = await ctx.db
+      .query("issues")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+
+    const now = Date.now();
+
+    // Collect all unique user IDs to resolve in one batch
+    const userIds = new Set();
+    allIssues.forEach((issue) => {
+      if (issue.reportedBy) userIds.add(issue.reportedBy);
+      if (issue.assignedUnitOfficer) userIds.add(issue.assignedUnitOfficer);
+      if (issue.assignedFieldOfficer) userIds.add(issue.assignedFieldOfficer);
+    });
+
+    const usersList = await Promise.all(
+      Array.from(userIds).map((id) => ctx.db.get(id)),
+    );
+    const userMap = new Map(
+      usersList.filter(Boolean).map((u) => [String(u._id), u]),
+    );
+
+    // Batch fetch unitOfficer profiles
+    const unitOfficersList = await ctx.db
+      .query("unitOfficers")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+    const unitOfficerMap = new Map(
+      unitOfficersList.map((o) => [String(o.userId), o]),
+    );
+
+    // Batch fetch fieldOfficer profiles
+    const fieldOfficersList = await ctx.db
+      .query("fieldOfficers")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+    const fieldOfficerMap = new Map(
+      fieldOfficersList.map((o) => [String(o.userId), o]),
+    );
+
+    // Filter issues in memory
+    let filtered = allIssues;
+
+    // 1. Search
+    if (args.search) {
+      const q = args.search.toLowerCase().trim();
+      filtered = filtered.filter((i) => {
+        const citizenUser = userMap.get(String(i.reportedBy));
+        const uoUser = i.assignedUnitOfficer
+          ? userMap.get(String(i.assignedUnitOfficer))
+          : null;
+        const foUser = i.assignedFieldOfficer
+          ? userMap.get(String(i.assignedFieldOfficer))
+          : null;
+
+        return (
+          (i.issueCode || "").toLowerCase().includes(q) ||
+          (i.title || "").toLowerCase().includes(q) ||
+          (i.description || "").toLowerCase().includes(q) ||
+          (i.address || "").toLowerCase().includes(q) ||
+          (i.category || "").toLowerCase().includes(q) ||
+          (citizenUser?.fullName || "").toLowerCase().includes(q) ||
+          (uoUser?.fullName || "").toLowerCase().includes(q) ||
+          (foUser?.fullName || "").toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // 2. Date Range
+    if (args.dateRange && args.dateRange !== "all") {
+      let limit = 0;
+      if (args.dateRange === "today") limit = now - 24 * 60 * 60 * 1000;
+      else if (args.dateRange === "7d") limit = now - 7 * 24 * 60 * 60 * 1000;
+      else if (args.dateRange === "30d") limit = now - 30 * 24 * 60 * 60 * 1000;
+
+      filtered = filtered.filter((i) => {
+        const created = i.createdAt ?? i._creationTime ?? now;
+        return created >= limit;
+      });
+    }
+
+    // Compute filter counts on filtered issues (before page layout split)
+    const activeStatuses = [
+      "pending",
+      "verified",
+      "assigned",
+      "in_progress",
+      "pending_uo_verification",
+      "rework_required",
+      "reopened",
+      "escalated",
+    ];
+
+    const getCount = (list, filterFn) => list.filter(filterFn).length;
+
+    const filterCounts = {
+      total: filtered.length,
+      active: getCount(filtered, (i) => activeStatuses.includes(i.status)),
+      pending: getCount(filtered, (i) => i.status === "pending"),
+      verified: getCount(filtered, (i) => i.status === "verified"),
+      assigned: getCount(filtered, (i) => i.status === "assigned"),
+      inProgress: getCount(filtered, (i) => i.status === "in_progress"),
+      pendingVerification: getCount(
+        filtered,
+        (i) => i.status === "pending_uo_verification",
+      ),
+      reworkRequired: getCount(filtered, (i) => i.status === "rework_required"),
+      reopened: getCount(
+        filtered,
+        (i) => i.status === "reopened" || i.isReopened,
+      ),
+      escalated: getCount(
+        filtered,
+        (i) =>
+          i.status === "escalated" || (i.escalation && !i.escalation.resolved),
+      ),
+      resolved: getCount(filtered, (i) => i.status === "resolved"),
+      closed: getCount(filtered, (i) => i.status === "closed"),
+      rejected: getCount(filtered, (i) => i.status === "rejected"),
+      overdue: getCount(filtered, (i) =>
+        i.slaDeadline
+          ? i.slaDeadline < now &&
+            !["resolved", "closed", "rejected", "withdrawn"].includes(i.status)
+          : false,
+      ),
+      dueSoon: getCount(filtered, (i) =>
+        i.slaDeadline
+          ? i.slaDeadline >= now &&
+            i.slaDeadline - now < 48 * 60 * 60 * 1000 &&
+            !["resolved", "closed", "rejected", "withdrawn"].includes(i.status)
+          : false,
+      ),
+      unassigned: getCount(
+        filtered,
+        (i) => !i.assignedUnitOfficer && !i.assignedFieldOfficer,
+      ),
+    };
+
+    // 3. Status
+    if (args.status && args.status !== "all") {
+      filtered = filtered.filter((i) => i.status === args.status);
+    }
+
+    // 4. Category
+    if (args.category && args.category !== "all") {
+      filtered = filtered.filter((i) => i.category === args.category);
+    }
+
+    // 5. Priority
+    if (args.priority && args.priority !== "all") {
+      filtered = filtered.filter((i) => i.priority === args.priority);
+    }
+
+    // 6. Department
+    if (args.department && args.department !== "all") {
+      filtered = filtered.filter((i) => i.department === args.department);
+    }
+
+    // 7. Assignment Status
+    if (args.assignmentStatus && args.assignmentStatus !== "all") {
+      filtered = filtered.filter((i) => {
+        const hasUO = !!i.assignedUnitOfficer;
+        const hasFO = !!i.assignedFieldOfficer;
+        if (args.assignmentStatus === "fully_assigned") return hasUO && hasFO;
+        if (args.assignmentStatus === "unit_officer_only")
+          return hasUO && !hasFO;
+        if (args.assignmentStatus === "field_officer_only")
+          return !hasUO && hasFO;
+        if (args.assignmentStatus === "unassigned") return !hasUO && !hasFO;
+        return true;
+      });
+    }
+
+    // 8. SLA Status
+    if (args.slaStatus && args.slaStatus !== "all") {
+      filtered = filtered.filter((i) => {
+        const slaStatus = i.slaDeadline
+          ? i.slaDeadline < now
+            ? "overdue"
+            : i.slaDeadline - now < 48 * 60 * 60 * 1000
+              ? "due_soon"
+              : "on_track"
+          : "no_deadline";
+        return slaStatus === args.slaStatus;
+      });
+    }
+
+    // 9. Escalation Status
+    if (args.escalationStatus && args.escalationStatus !== "all") {
+      filtered = filtered.filter((i) => {
+        const isEscalated =
+          !!i.escalatedToAdmin || (i.escalation && !i.escalation.resolved);
+        if (args.escalationStatus === "escalated") return isEscalated;
+        if (args.escalationStatus === "not_escalated") return !isEscalated;
+        return true;
+      });
+    }
+
+    // Sorting
+    const priorityWeight = { critical: 4, high: 3, medium: 2, low: 1 };
+    filtered.sort((a, b) => {
+      const aCreated = a.createdAt ?? a._creationTime ?? 0;
+      const bCreated = b.createdAt ?? b._creationTime ?? 0;
+
+      if (args.sortBy === "oldest") {
+        return aCreated - bCreated;
+      }
+      if (args.sortBy === "priority_high") {
+        const aP = priorityWeight[a.priority] ?? 0;
+        const bP = priorityWeight[b.priority] ?? 0;
+        return bP - aP;
+      }
+      if (args.sortBy === "priority_low") {
+        const aP = priorityWeight[a.priority] ?? 0;
+        const bP = priorityWeight[b.priority] ?? 0;
+        return aP - bP;
+      }
+      if (args.sortBy === "sla_soon") {
+        const aDl = a.slaDeadline ?? Infinity;
+        const bDl = b.slaDeadline ?? Infinity;
+        return aDl - bDl;
+      }
+      if (args.sortBy === "sla_overdue") {
+        const aOver = a.slaDeadline ? Math.max(0, now - a.slaDeadline) : 0;
+        const bOver = b.slaDeadline ? Math.max(0, now - b.slaDeadline) : 0;
+        return bOver - aOver;
+      }
+      if (args.sortBy === "updated") {
+        return (b.updatedAt ?? bCreated) - (a.updatedAt ?? aCreated);
+      }
+      return bCreated - aCreated; // default newest
+    });
+
+    // Pagination
+    const page = args.page ?? 1;
+    const pageSize = args.pageSize ?? 20;
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const paginatedIssues = filtered.slice(startIndex, startIndex + pageSize);
+
+    const mappedIssues = [];
+    for (const issue of paginatedIssues) {
+      const citizenUser = userMap.get(String(issue.reportedBy));
+
+      const uoUser = issue.assignedUnitOfficer
+        ? userMap.get(String(issue.assignedUnitOfficer))
+        : null;
+      const uoProfile = issue.assignedUnitOfficer
+        ? unitOfficerMap.get(String(issue.assignedUnitOfficer))
+        : null;
+
+      const foUser = issue.assignedFieldOfficer
+        ? userMap.get(String(issue.assignedFieldOfficer))
+        : null;
+      const foProfile = issue.assignedFieldOfficer
+        ? fieldOfficerMap.get(String(issue.assignedFieldOfficer))
+        : null;
+
+      // SLA calculations
+      let calculatedSlaStatus = "no_sla";
+      let hoursRemaining = 0;
+      let overdueHours = 0;
+      if (issue.slaDeadline) {
+        const diff = issue.slaDeadline - now;
+        hoursRemaining = Math.max(0, Math.floor(diff / (1000 * 60 * 60)));
+        overdueHours = Math.max(0, Math.floor(-diff / (1000 * 60 * 60)));
+
+        if (issue.status === "resolved" || issue.status === "closed") {
+          const completedAt = issue.resolvedAt ?? issue.closedAt ?? now;
+          calculatedSlaStatus =
+            completedAt <= issue.slaDeadline ? "resolved_on_time" : "breached";
+        } else {
+          if (issue.slaDeadline < now) {
+            calculatedSlaStatus = "breached";
+          } else if (diff < 48 * 60 * 60 * 1000) {
+            calculatedSlaStatus = "at_risk";
+          } else {
+            calculatedSlaStatus = "on_track";
+          }
+        }
+      }
+
+      const commentCount = 0;
+      const evidenceCount =
+        (issue.photos?.length || 0) + (issue.videos ? 1 : 0);
+
+      mappedIssues.push({
+        id: issue._id,
+        code: issue.issueCode,
+        title: issue.title,
+        description: issue.description,
+        category: issue.category,
+        subcategory: issue.subcategory ?? [],
+        department: issue.department,
+        status: issue.status,
+        priority: issue.priority,
+        address: issue.address,
+        city: issue.city,
+        state: issue.state,
+        postal: issue.postal,
+        latitude: issue.latitude,
+        longitude: issue.longitude,
+        createdAt: issue.createdAt ?? issue._creationTime,
+        updatedAt: issue.updatedAt ?? issue.createdAt ?? issue._creationTime,
+
+        citizen: {
+          id: citizenUser?._id,
+          name: citizenUser?.fullName || "Anonymous",
+          email: citizenUser?.email || "",
+          phone: "",
+        },
+
+        assignedUnitOfficer: uoProfile
+          ? {
+              profileId: uoProfile._id,
+              userId: uoProfile.userId,
+              name: uoUser?.fullName || "",
+              email: uoUser?.email || "",
+              department: uoProfile.department,
+            }
+          : null,
+
+        assignedFieldOfficer: foProfile
+          ? {
+              profileId: foProfile._id,
+              userId: foProfile.userId,
+              name: foUser?.fullName || "",
+              email: foUser?.email || "",
+              department: foProfile.department,
+            }
+          : null,
+
+        sla: {
+          deadline: issue.slaDeadline,
+          originalDeadline: issue.originalSlaDeadline ?? issue.slaDeadline,
+          status: calculatedSlaStatus,
+          hoursRemaining,
+          overdueHours,
+          extensionCount: issue.slaExtendedCount ?? 0,
+        },
+
+        escalation: {
+          isEscalated:
+            !!issue.escalatedToAdmin ||
+            (issue.escalation && !issue.escalation.resolved),
+          category: issue.escalation?.category ?? "",
+          reason: issue.escalation?.reason ?? "",
+          escalatedAt: issue.escalation?.escalatedAt ?? 0,
+          escalatedBy: issue.escalation?.escalatedBy ?? "",
+        },
+
+        duplicate: {
+          isPotentialDuplicate: (issue.possibleDuplicateIds || []).length > 0,
+          groupId: issue.duplicateGroupId ?? "",
+          confidence: issue.duplicateConfidence ?? 0,
+        },
+
+        evidenceCount,
+        commentCount,
+        activityCount: 0,
+      });
+    }
+
+    return {
+      scope: {
+        city,
+        state,
+      },
+      issues: mappedIssues,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+      filterCounts,
+    };
+  },
+});
+
+export const getAssignmentCandidates = query({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    officerType: v.union(v.literal("unit_officer"), v.literal("field_officer")),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    if (args.officerType === "unit_officer") {
+      const officers = await ctx.db
+        .query("unitOfficers")
+        .withIndex("by_city", (q) => q.eq("city", city))
+        .collect();
+
+      const userIds = officers.map((o) => o.userId);
+      const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
+      const userMap = new Map(
+        users.filter(Boolean).map((u) => [String(u._id), u]),
+      );
+
+      return officers
+        .map((o) => {
+          const u = userMap.get(String(o.userId));
+          const activeCount = (o.activeIssueIds || []).length;
+          const workload = activeCount;
+          const limit = 50;
+
+          return {
+            profileId: o._id,
+            userId: o.userId,
+            name: o.fullName || u?.fullName || "",
+            email: o.email || u?.email || "",
+            department: o.department,
+            currentWorkload: workload,
+            maximumCapacity: limit,
+            availableCapacity: Math.max(0, limit - workload),
+            activeIssueCount: activeCount,
+            overdueIssueCount: 0,
+            performanceScore: o.efficiencyScore || 80,
+            isRecommended: o.department === issue.category && workload < limit,
+            recommendationReason:
+              o.department === issue.category
+                ? "Compatible department and available capacity"
+                : "Available capacity",
+            compatibilityWarnings:
+              o.department !== issue.category ? ["Department mismatch"] : [],
+          };
+        })
+        .sort(
+          (a, b) =>
+            (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0) ||
+            a.currentWorkload - b.currentWorkload,
+        );
+    } else {
+      const officers = await ctx.db
+        .query("fieldOfficers")
+        .withIndex("by_city", (q) => q.eq("city", city))
+        .collect();
+
+      const userIds = officers.map((o) => o.userId);
+      const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
+      const userMap = new Map(
+        users.filter(Boolean).map((u) => [String(u._id), u]),
+      );
+
+      return officers
+        .map((o) => {
+          const u = userMap.get(String(o.userId));
+          const activeCount = o.currentActiveIssues || 0;
+          const limit = o.maxIssueCapacity || 10;
+
+          return {
+            profileId: o._id,
+            userId: o.userId,
+            name: o.fullName || u?.fullName || "",
+            email: o.email || u?.email || "",
+            department: o.department,
+            currentWorkload: activeCount,
+            maximumCapacity: limit,
+            availableCapacity: Math.max(0, limit - activeCount),
+            activeIssueCount: activeCount,
+            overdueIssueCount: 0,
+            performanceScore: o.efficiencyScore || 80,
+            isRecommended:
+              o.department === issue.category && activeCount < limit,
+            recommendationReason:
+              o.department === issue.category
+                ? "Compatible department and available capacity"
+                : "Available capacity",
+            compatibilityWarnings:
+              o.department !== issue.category ? ["Department mismatch"] : [],
+          };
+        })
+        .sort(
+          (a, b) =>
+            (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0) ||
+            a.currentWorkload - b.currentWorkload,
+        );
+    }
+  },
+});
+
+export const assignOrReassignUnitOfficer = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    newUnitOfficerId: v.id("unitOfficers"),
+    reason: v.string(),
+    clearIncompatibleFieldOfficer: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    const newOfficer = await ctx.db.get(args.newUnitOfficerId);
+    if (
+      !newOfficer ||
+      newOfficer.city !== city ||
+      !newOfficer.accountApproved
+    ) {
+      throw new Error("Invalid or unapproved Unit Officer selected");
+    }
+
+    const previousUnitOfficerUserId = issue.assignedUnitOfficer;
+    const now = Date.now();
+
+    // Check compatibility of existing Field Officer if any
+    if (issue.assignedFieldOfficer) {
+      const foProfile = await ctx.db
+        .query("fieldOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", issue.assignedFieldOfficer))
+        .unique();
+
+      if (
+        foProfile &&
+        foProfile.reportingUnitOfficerId &&
+        String(foProfile.reportingUnitOfficerId) !==
+          String(args.newUnitOfficerId)
+      ) {
+        if (!args.clearIncompatibleFieldOfficer) {
+          return {
+            success: false,
+            code: "INCOMPATIBLE_FIELD_OFFICER",
+            message: `The current Field Officer (${foProfile.fullName}) reports to a different Unit Officer. Reassigning will require clearing or replacing the Field Officer.`,
+          };
+        } else {
+          // Clear field officer workload
+          const assignedList = (foProfile.assignedIssueIds || []).filter(
+            (id) => String(id) !== String(issue._id),
+          );
+          await ctx.db.patch(foProfile._id, {
+            assignedIssueIds: assignedList,
+            currentActiveIssues: Math.max(
+              0,
+              (foProfile.currentActiveIssues || 0) - 1,
+            ),
+          });
+
+          await ctx.db.patch(issue._id, {
+            assignedFieldOfficer: null,
+          });
+
+          // Insert timeline note
+          await ctx.db.insert("issueUpdates", {
+            issueId: issue._id,
+            status: issue.status,
+            comment: `Field Officer (${foProfile.fullName}) assignment cleared due to Unit Officer reassignment incompatibility.`,
+            updatedBy: args.cityAdminUserId,
+            role: "city_admin",
+            attachments: [],
+            scope: "officer_and_citizen",
+            createdAt: now,
+          });
+
+          // Notification to old Field Officer
+          await ctx.db.insert("notifications", {
+            userId: foProfile.userId,
+            title: "Issue Assignment Cleared",
+            message: `Your assignment on issue ${issue.issueCode} was cleared due to Unit Officer reassignment.`,
+            type: "assigned",
+            read: false,
+            createdAt: now,
+          });
+        }
+      }
+    }
+
+    // 1. Remove issue from previous Unit Officer's active list
+    if (previousUnitOfficerUserId) {
+      const prevOfficerProfile = await ctx.db
+        .query("unitOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", previousUnitOfficerUserId))
+        .unique();
+      if (prevOfficerProfile) {
+        const activeList = (prevOfficerProfile.activeIssueIds || []).filter(
+          (id) => String(id) !== String(issue._id),
+        );
+        await ctx.db.patch(prevOfficerProfile._id, {
+          activeIssueIds: activeList,
+        });
+      }
+    }
+
+    // 2. Add issue to new Unit Officer's active list
+    const newActiveList = Array.from(
+      new Set([...(newOfficer.activeIssueIds || []), issue._id]),
+    );
+    await ctx.db.patch(newOfficer._id, { activeIssueIds: newActiveList });
+
+    // 3. Update issues fields
+    const nextStatus =
+      issue.status === "pending" || issue.status === "verified"
+        ? "assigned"
+        : issue.status;
+    await ctx.db.patch(issue._id, {
+      assignedUnitOfficer: newOfficer.userId,
+      status: nextStatus,
+      updatedAt: now,
+    });
+
+    // 4. Create timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: nextStatus,
+      comment: `Unit Officer assigned by City Admin.\nNew Officer: ${newOfficer.fullName}\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // 5. Create audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "assign_unit_officer",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: previousUnitOfficerUserId
+        ? String(previousUnitOfficerUserId)
+        : "Unassigned",
+      newValue: String(newOfficer.userId),
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // 6. Create notifications
+    if (previousUnitOfficerUserId) {
+      await ctx.db.insert("notifications", {
+        userId: previousUnitOfficerUserId,
+        title: "Issue Assignment Revoked",
+        message: `The issue ${issue.issueCode} has been reassigned to another Unit Officer.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    await ctx.db.insert("notifications", {
+      userId: newOfficer.userId,
+      title: "New Issue Assigned",
+      message: `You have been assigned issue ${issue.issueCode}.`,
+      type: "assigned",
+      read: false,
+      createdAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+export const assignOrReassignFieldOfficer = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    newFieldOfficerId: v.id("fieldOfficers"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    const newOfficer = await ctx.db.get(args.newFieldOfficerId);
+    if (
+      !newOfficer ||
+      newOfficer.city !== city ||
+      !newOfficer.accountApproved
+    ) {
+      throw new Error("Invalid or unapproved Field Officer selected");
+    }
+
+    const currentActive = newOfficer.currentActiveIssues || 0;
+    const maxCapacity = newOfficer.maxIssueCapacity || 10;
+    if (currentActive >= maxCapacity) {
+      throw new Error("Officer has reached maximum active workload capacity");
+    }
+
+    const previousFieldOfficerUserId = issue.assignedFieldOfficer;
+    const now = Date.now();
+
+    // 1. Remove issue from previous Field Officer's active list
+    if (previousFieldOfficerUserId) {
+      const prevOfficerProfile = await ctx.db
+        .query("fieldOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", previousFieldOfficerUserId))
+        .unique();
+      if (prevOfficerProfile) {
+        const assignedList = (prevOfficerProfile.assignedIssueIds || []).filter(
+          (id) => String(id) !== String(issue._id),
+        );
+        await ctx.db.patch(prevOfficerProfile._id, {
+          assignedIssueIds: assignedList,
+          currentActiveIssues: Math.max(
+            0,
+            (prevOfficerProfile.currentActiveIssues || 0) - 1,
+          ),
+        });
+      }
+    }
+
+    // 2. Add issue to new Field Officer's active list
+    const newAssignedList = Array.from(
+      new Set([...(newOfficer.assignedIssueIds || []), issue._id]),
+    );
+    await ctx.db.patch(newOfficer._id, {
+      assignedIssueIds: newAssignedList,
+      currentActiveIssues: (newOfficer.currentActiveIssues || 0) + 1,
+    });
+
+    // 3. Update issue fields
+    const nextStatus =
+      issue.status === "assigned" ? "in_progress" : issue.status;
+    await ctx.db.patch(issue._id, {
+      assignedFieldOfficer: newOfficer.userId,
+      status: nextStatus,
+      updatedAt: now,
+    });
+
+    // 4. Create timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: nextStatus,
+      comment: `Field Officer assigned by City Admin.\nNew Officer: ${newOfficer.fullName}\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // 5. Create audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "assign_field_officer",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: previousFieldOfficerUserId
+        ? String(previousFieldOfficerUserId)
+        : "Unassigned",
+      newValue: String(newOfficer.userId),
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // 6. Create notifications
+    if (previousFieldOfficerUserId) {
+      await ctx.db.insert("notifications", {
+        userId: previousFieldOfficerUserId,
+        title: "Issue Assignment Revoked",
+        message: `The issue ${issue.issueCode} has been reassigned to another Field Officer.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    await ctx.db.insert("notifications", {
+      userId: newOfficer.userId,
+      title: "New Issue Assigned",
+      message: `You have been assigned issue ${issue.issueCode}.`,
+      type: "assigned",
+      read: false,
+      createdAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+export const changeIssueClassification = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    category: v.string(),
+    subcategory: v.array(v.string()),
+    department: v.string(),
+    reason: v.string(),
+    clearIncompatibleOfficers: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    const now = Date.now();
+    let uoCleared = false;
+    let foCleared = false;
+
+    // Check compatibility of current Unit Officer
+    if (issue.assignedUnitOfficer) {
+      const uoProfile = await ctx.db
+        .query("unitOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", issue.assignedUnitOfficer))
+        .unique();
+
+      if (uoProfile && uoProfile.department !== args.category) {
+        if (!args.clearIncompatibleOfficers) {
+          return {
+            success: false,
+            code: "INCOMPATIBLE_OFFICERS",
+            message: `The current Unit Officer (${uoProfile.fullName}) works in a different department (${uoProfile.department}). Reclassifying requires clearing or replacing the assignments.`,
+          };
+        } else {
+          // Clear unit officer active list
+          const activeList = (uoProfile.activeIssueIds || []).filter(
+            (id) => String(id) !== String(issue._id),
+          );
+          await ctx.db.patch(uoProfile._id, { activeIssueIds: activeList });
+          uoCleared = true;
+        }
+      }
+    }
+
+    // Check compatibility of current Field Officer
+    if (issue.assignedFieldOfficer) {
+      const foProfile = await ctx.db
+        .query("fieldOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", issue.assignedFieldOfficer))
+        .unique();
+
+      if (foProfile && foProfile.department !== args.category) {
+        if (!args.clearIncompatibleOfficers) {
+          return {
+            success: false,
+            code: "INCOMPATIBLE_OFFICERS",
+            message: `The current Field Officer (${foProfile.fullName}) works in a different department (${foProfile.department}). Reclassifying requires clearing or replacing the assignments.`,
+          };
+        } else {
+          // Clear field officer active list
+          const assignedList = (foProfile.assignedIssueIds || []).filter(
+            (id) => String(id) !== String(issue._id),
+          );
+          await ctx.db.patch(foProfile._id, {
+            assignedIssueIds: assignedList,
+            currentActiveIssues: Math.max(
+              0,
+              (foProfile.currentActiveIssues || 0) - 1,
+            ),
+          });
+          foCleared = true;
+        }
+      }
+    }
+
+    // Perform reclassification patch
+    const updatePayload = {
+      category: args.category,
+      subcategory: args.subcategory,
+      department: args.department,
+      updatedAt: now,
+    };
+    if (uoCleared) updatePayload.assignedUnitOfficer = null;
+    if (foCleared) updatePayload.assignedFieldOfficer = null;
+
+    await ctx.db.patch(issue._id, updatePayload);
+
+    // Timeline comment
+    let comment = `Issue classification updated by City Admin.\nNew Category: ${args.category}\nNew Department: ${args.department}\nReason: ${args.reason}`;
+    if (uoCleared || foCleared) {
+      comment += `\nCleared incompatible assignments: ${uoCleared ? "Unit Officer" : ""} ${foCleared ? "Field Officer" : ""}`;
+    }
+
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: issue.status,
+      comment,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // Audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "reclassify_issue",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: `${issue.category} | ${issue.department}`,
+      newValue: `${args.category} | ${args.department}`,
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    return { success: true };
+  },
+});
+
+export const updateIssuePriority = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    priority: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    if (
+      (args.priority === "high" || args.priority === "critical") &&
+      !args.reason.trim()
+    ) {
+      throw new Error(
+        "A reason is required when raising priority to High or Critical",
+      );
+    }
+
+    const now = Date.now();
+    const oldPriority = issue.priority;
+
+    await ctx.db.patch(issue._id, {
+      priority: args.priority,
+      updatedAt: now,
+    });
+
+    // Timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: issue.status,
+      comment: `Issue priority updated by City Admin from "${oldPriority}" to "${args.priority}".\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // Audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "update_priority",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: oldPriority,
+      newValue: args.priority,
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // Notifications
+    const notifyUserIds = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+    ].filter(Boolean);
+    for (const userId of notifyUserIds) {
+      await ctx.db.insert("notifications", {
+        userId,
+        title: "Issue Priority Changed",
+        message: `Priority for issue ${issue.issueCode} was updated to ${args.priority.toUpperCase()}.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+export const overrideIssueStatus = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    newStatus: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    if (!args.reason.trim()) {
+      throw new Error("A reason is required to perform status override");
+    }
+
+    const currentStatus = issue.status;
+    const newStatus = args.newStatus;
+
+    // Disallowed transitions
+    if (currentStatus === "withdrawn") {
+      throw new Error("Withdrawn issues cannot be reactivated");
+    }
+    if (currentStatus === "rejected" && newStatus === "resolved") {
+      throw new Error(
+        "Rejected issues must be reopened or reactivated, not directly marked resolved",
+      );
+    }
+    if (currentStatus === "closed") {
+      throw new Error(
+        "Closed issues cannot be returned to active state directly",
+      );
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(issue._id, {
+      status: newStatus,
+      updatedAt: now,
+      resolvedAt: newStatus === "resolved" ? now : issue.resolvedAt,
+      closedAt: newStatus === "closed" ? now : issue.closedAt,
+    });
+
+    // Timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: newStatus,
+      comment: `Status overridden by City Admin from "${currentStatus}" to "${newStatus}".\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // Audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "status_override",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: currentStatus,
+      newValue: newStatus,
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // Notifications
+    const notifyUserIds = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+      issue.reportedBy,
+    ].filter(Boolean);
+    for (const userId of notifyUserIds) {
+      await ctx.db.insert("notifications", {
+        userId,
+        title: "Issue Status Overridden",
+        message: `Status for issue ${issue.issueCode} was overridden to ${newStatus.replace(/_/g, " ")}.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+export const escalateIssue = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    category: v.string(),
+    priority: v.union(
+      v.literal("medium"),
+      v.literal("high"),
+      v.literal("critical"),
+    ),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    if (
+      issue.escalatedToAdmin ||
+      (issue.escalation && !issue.escalation.resolved)
+    ) {
+      throw new Error("Issue is already escalated");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(issue._id, {
+      escalatedToAdmin: true,
+      status: "escalated",
+      escalation: {
+        category: args.category,
+        priority: args.priority,
+        reason: args.reason,
+        escalatedBy: args.cityAdminUserId,
+        prevIssueStatus: issue.status,
+        escalatedAt: now,
+        resolved: false,
+        adminReviewStatus: "pending",
+        escalationCount: (issue.escalation?.escalationCount || 0) + 1,
+      },
+      updatedAt: now,
+    });
+
+    // Timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: "escalated",
+      comment: `Issue escalated by City Admin to Platform Administration.\nCategory: ${args.category}\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // Audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "escalate_issue",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: issue.status,
+      newValue: "escalated",
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // Notifications
+    const notifyUserIds = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+    ].filter(Boolean);
+    for (const userId of notifyUserIds) {
+      await ctx.db.insert("notifications", {
+        userId,
+        title: "Issue Escalated",
+        message: `Issue ${issue.issueCode} was escalated by City Administration.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+export const updateSlaDeadline = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    newDeadline: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    const now = Date.now();
+    const oldDeadline = issue.slaDeadline;
+
+    await ctx.db.patch(issue._id, {
+      slaDeadline: args.newDeadline,
+      originalSlaDeadline:
+        issue.originalSlaDeadline ?? oldDeadline ?? args.newDeadline,
+      slaBreached: false,
+      slaExtendedCount: (issue.slaExtendedCount || 0) + 1,
+      lastSlaExtensionAt: now,
+      slaExtension: {
+        reason: args.reason,
+        comment: "",
+        extendedBy: args.cityAdminUserId,
+        extendedAt: now,
+        newSlaDeadline: args.newDeadline,
+      },
+    });
+
+    // Timeline entry
+    await ctx.db.insert("issueUpdates", {
+      issueId: issue._id,
+      status: issue.status,
+      comment: `SLA Deadline updated by City Admin.\nNew Deadline: ${new Date(args.newDeadline).toLocaleDateString()}\nReason: ${args.reason}`,
+      updatedBy: args.cityAdminUserId,
+      role: "city_admin",
+      attachments: [],
+      scope: "officer_and_citizen",
+      createdAt: now,
+    });
+
+    // Audit log
+    await ctx.db.insert("cityAdminAuditLogs", {
+      action: "extend_sla",
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      city,
+      affectedEntityType: "issue",
+      affectedEntityId: issue._id,
+      issueCode: issue.issueCode,
+      oldValue: oldDeadline ? String(oldDeadline) : "None",
+      newValue: String(args.newDeadline),
+      reason: args.reason,
+      timestamp: now,
+    });
+
+    // Notifications
+    const notifyUserIds = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+    ].filter(Boolean);
+    for (const userId of notifyUserIds) {
+      await ctx.db.insert("notifications", {
+        userId,
+        title: "Issue SLA Updated",
+        message: `The SLA deadline for issue ${issue.issueCode} was updated.`,
+        type: "assigned",
+        read: false,
+        createdAt: now,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+export const sendIssueMessage = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+    recipientUserId: v.id("users"),
+    messageText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city, user: adminUser } = await requireCityAdmin(
+      ctx,
+      args.cityAdminUserId,
+    );
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.city !== city) {
+      throw new Error("Issue not found or unauthorized");
+    }
+
+    const recipient = await ctx.db.get(args.recipientUserId);
+    if (!recipient) {
+      throw new Error("Recipient not found");
+    }
+
+    // Verify recipient belongs to the same city
+    if (recipient.role === "unit_officer") {
+      const uo = await ctx.db
+        .query("unitOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", recipient._id))
+        .unique();
+      if (!uo || uo.city !== city) {
+        throw new Error("Recipient does not belong to authorized city");
+      }
+    } else if (recipient.role === "field_officer") {
+      const fo = await ctx.db
+        .query("fieldOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", recipient._id))
+        .unique();
+      if (!fo || fo.city !== city) {
+        throw new Error("Recipient does not belong to authorized city");
+      }
+    } else {
+      throw new Error("Can only message officers in your city");
+    }
+
+    const now = Date.now();
+    const messageContent = `[Issue Context: ${issue.issueCode} - ${issue.title} (Status: ${issue.status})]\n\n${args.messageText}`;
+
+    // Find if conversation already exists between City Admin and Recipient
+    const conversations = await ctx.db.query("conversations").collect();
+    const existingConv = conversations.find(
+      (c) =>
+        c.participantIds.includes(args.cityAdminUserId) &&
+        c.participantIds.includes(args.recipientUserId),
+    );
+
+    let conversationId;
+    if (existingConv) {
+      conversationId = existingConv._id;
+      await ctx.db.insert("messages", {
+        conversationId,
+        fromId: args.cityAdminUserId,
+        toId: args.recipientUserId,
+        message: messageContent,
+        createdAt: now,
+        read: false,
+        fromName: adminUser.fullName,
+        fromRole: "city_admin",
+        issueIds: [args.issueId],
+      });
+
+      const unreadCountMap = existingConv.unreadCountMap || {};
+      const updatedUnread = { ...unreadCountMap };
+      updatedUnread[args.recipientUserId] =
+        (updatedUnread[args.recipientUserId] || 0) + 1;
+
+      await ctx.db.patch(conversationId, {
+        lastMessage: messageContent,
+        lastMessageTime: now,
+        lastMessageSenderId: args.cityAdminUserId,
+        unreadCountMap: updatedUnread,
+        issueRef: {
+          issueId: issue._id,
+          issueTitle: issue.title,
+          status: issue.status,
+        },
+      });
+    } else {
+      conversationId = await ctx.db.insert("conversations", {
+        participantIds: [args.cityAdminUserId, args.recipientUserId],
+        lastMessage: messageContent,
+        lastMessageTime: now,
+        lastMessageSenderId: args.cityAdminUserId,
+        unreadCountMap: {
+          [args.cityAdminUserId]: 0,
+          [args.recipientUserId]: 1,
+        },
+        issueRef: {
+          issueId: issue._id,
+          issueTitle: issue.title,
+          status: issue.status,
+        },
+      });
+
+      await ctx.db.insert("messages", {
+        conversationId,
+        fromId: args.cityAdminUserId,
+        toId: args.recipientUserId,
+        message: messageContent,
+        createdAt: now,
+        read: false,
+        fromName: adminUser.fullName,
+        fromRole: "city_admin",
+        issueIds: [args.issueId],
+      });
+    }
+
+    return { success: true, conversationId };
+  },
+});
+
+export const bulkUpdateIssues = mutation({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueIds: v.array(v.id("issues")),
+    actionType: v.union(
+      v.literal("send_reminder"),
+      v.literal("change_priority"),
+      v.literal("assign_department"),
+    ),
+    priority: v.optional(v.string()),
+    department: v.optional(v.string()),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
+    const now = Date.now();
+    const successfulIssueIds = [];
+    const skippedIssues = [];
+
+    for (const issueId of args.issueIds) {
+      const issue = await ctx.db.get(issueId);
+      if (!issue) {
+        skippedIssues.push({ issueId, reason: "Issue not found" });
+        continue;
+      }
+      if (issue.city !== city) {
+        skippedIssues.push({
+          issueId,
+          reason: "Unauthorized: Issue belongs to another city",
+        });
+        continue;
+      }
+
+      if (args.actionType === "send_reminder") {
+        const uo = issue.assignedUnitOfficer;
+        const fo = issue.assignedFieldOfficer;
+        if (!uo && !fo) {
+          skippedIssues.push({
+            issueId,
+            reason: "No officers assigned to this issue",
+          });
+          continue;
+        }
+
+        if (uo) {
+          await ctx.db.insert("notifications", {
+            userId: uo,
+            title: "Reminder: Pending Action Required",
+            message: `Administrative reminder to review issue ${issue.issueCode}.`,
+            type: "assigned",
+            read: false,
+            createdAt: now,
+          });
+        }
+        if (fo) {
+          await ctx.db.insert("notifications", {
+            userId: fo,
+            title: "Reminder: Pending Action Required",
+            message: `Administrative reminder to review issue ${issue.issueCode}.`,
+            type: "assigned",
+            read: false,
+            createdAt: now,
+          });
+        }
+
+        await ctx.db.insert("issueUpdates", {
+          issueId: issue._id,
+          status: issue.status,
+          comment: `Reminder sent to assigned officers by City Admin.\nReason: ${args.reason}`,
+          updatedBy: args.cityAdminUserId,
+          role: "city_admin",
+          attachments: [],
+          scope: "officer_and_citizen",
+          createdAt: now,
+        });
+
+        successfulIssueIds.push(issueId);
+      } else if (args.actionType === "change_priority") {
+        if (!args.priority) {
+          skippedIssues.push({ issueId, reason: "Priority value is missing" });
+          continue;
+        }
+        const oldPriority = issue.priority;
+        await ctx.db.patch(issue._id, {
+          priority: args.priority,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("issueUpdates", {
+          issueId: issue._id,
+          status: issue.status,
+          comment: `Priority updated in bulk by City Admin from "${oldPriority}" to "${args.priority}".\nReason: ${args.reason}`,
+          updatedBy: args.cityAdminUserId,
+          role: "city_admin",
+          attachments: [],
+          scope: "officer_and_citizen",
+          createdAt: now,
+        });
+
+        await ctx.db.insert("cityAdminAuditLogs", {
+          action: "bulk_change_priority",
+          performedByUserId: args.cityAdminUserId,
+          performerRole: "city_admin",
+          city,
+          affectedEntityType: "issue",
+          affectedEntityId: issue._id,
+          issueCode: issue.issueCode,
+          oldValue: oldPriority,
+          newValue: args.priority,
+          reason: args.reason,
+          timestamp: now,
+        });
+
+        successfulIssueIds.push(issueId);
+      } else if (args.actionType === "assign_department") {
+        if (!args.department) {
+          skippedIssues.push({
+            issueId,
+            reason: "Department value is missing",
+          });
+          continue;
+        }
+        const oldDept = issue.department || "None";
+        await ctx.db.patch(issue._id, {
+          department: args.department,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("issueUpdates", {
+          issueId: issue._id,
+          status: issue.status,
+          comment: `Department updated in bulk by City Admin from "${oldDept}" to "${args.department}".\nReason: ${args.reason}`,
+          updatedBy: args.cityAdminUserId,
+          role: "city_admin",
+          attachments: [],
+          scope: "officer_and_citizen",
+          createdAt: now,
+        });
+
+        await ctx.db.insert("cityAdminAuditLogs", {
+          action: "bulk_assign_department",
+          performedByUserId: args.cityAdminUserId,
+          performerRole: "city_admin",
+          city,
+          affectedEntityType: "issue",
+          affectedEntityId: issue._id,
+          issueCode: issue.issueCode,
+          oldValue: oldDept,
+          newValue: args.department,
+          reason: args.reason,
+          timestamp: now,
+        });
+
+        successfulIssueIds.push(issueId);
+      }
+    }
+
+    return {
+      successfulIssueIds,
+      skippedIssues,
+    };
   },
 });

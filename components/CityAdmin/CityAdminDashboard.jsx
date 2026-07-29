@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import CityAdminOverview from "../city-admin/CityAdminOverview";
+import CityAdminAllIssues from "../city-admin/CityAdminAllIssues";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -2070,7 +2071,12 @@ export default function CityAdminDashboard() {
                   />
                 )}
 
-                {activeTab === "issues" && renderAllIssues()}
+                {activeTab === "issues" && dbUser?._id && (
+                  <CityAdminAllIssues
+                    cityAdminUserId={dbUser._id}
+                    onSelectIssue={setSelectedIssue}
+                  />
+                )}
                 {activeTab === "escalations" && renderEscalations()}
                 {activeTab === "sla" && renderSLAMonitoring()}
                 {activeTab === "duplicates" && renderDuplicateDetection()}
