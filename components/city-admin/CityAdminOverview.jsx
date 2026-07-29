@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   FileText,
   Activity,
@@ -18,14 +18,31 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-import { GoogleMap, useLoadScript, HeatmapLayer } from "@react-google-maps/api";
 import CityAdminScopeHeader from "./CityAdminScopeHeader";
+import CityIssueMap from "@/components/maps/CityIssueMap";
 
-const CITY_CENTERS = {
-  varanasi: { lat: 25.3176, lng: 82.9739 },
-  lucknow: { lat: 26.8467, lng: 80.9462 },
-  prayagraj: { lat: 25.4358, lng: 81.8463 },
-};
+function CityAdminOverviewSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse p-6">
+      {/* Scope Header Skeleton */}
+      <div className="h-32 bg-slate-200 dark:bg-slate-700 rounded-3xl"></div>
+      {/* KPI Cards Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+        {[...Array(6)].map((_, i) => (
+          <div
+            key={i}
+            className="h-28 bg-slate-200 dark:bg-slate-700 rounded-2xl"
+          ></div>
+        ))}
+      </div>
+      {/* Map & Categories Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="h-[420px] bg-slate-200 dark:bg-slate-700 rounded-3xl"></div>
+        <div className="h-[420px] bg-slate-200 dark:bg-slate-700 rounded-3xl"></div>
+      </div>
+    </div>
+  );
+}
 
 export default function CityAdminOverview({
   overviewData,
@@ -33,10 +50,7 @@ export default function CityAdminOverview({
   dateRange,
   onSetDateRange,
 }) {
-  const [heatmapFilter, setHeatmapFilter] = useState("category");
-  const [showWardBoundaries, setShowWardBoundaries] = useState(true);
-
-  if (!overviewData) return null;
+  const [mapCategoryFilter, setMapCategoryFilter] = useState("all");
 
   const {
     scope = {},
@@ -45,94 +59,77 @@ export default function CityAdminOverview({
     urgentIssues = [],
     recentEscalations = [],
     slaSnapshot = {},
-    heatmapPoints = [],
+    mapIssues = [],
     categoryDistribution = [],
     officerSnapshot = {},
     recentAdministrativeActivity = [],
-  } = overviewData;
+  } = overviewData ?? {};
 
   const city = scope.city || "";
   const state = scope.state || "";
-  const cityKey = city.toLowerCase().trim();
-  const mapCenter =
-    CITY_CENTERS[cityKey] ||
-    (heatmapPoints[0]
-      ? { lat: heatmapPoints[0].latitude, lng: heatmapPoints[0].longitude }
-      : { lat: 25.3176, lng: 82.9739 });
 
-  const libraries = ["visualization"];
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-    version: "3.64",
-    libraries,
-  });
+  const handleReviewIssue = useCallback(
+    (issue) => {
+      onSelectIssue({
+        ...issue,
+        id: issue.id || issue._id,
+        ticket_id: issue.code || issue.ticket_id || issue.issueCode,
+      });
+    },
+    [onSelectIssue],
+  );
 
-  const kpis = [
-    {
-      label: "Total Issues",
-      value: summary.totalIssues,
-      trend: "+12%",
-      icon: FileText,
-      color: "blue",
-    },
-    {
-      label: "Active Issues",
-      value: summary.activeIssues,
-      trend: "+8%",
-      icon: Activity,
-      color: "purple",
-    },
-    {
-      label: "Resolved",
-      value: summary.resolvedIssues,
-      trend: "+15%",
-      icon: CheckCircle2,
-      color: "emerald",
-    },
-    {
-      label: "Closed",
-      value: summary.closedIssues,
-      trend: "+5%",
-      icon: Target,
-      color: "gray",
-    },
-    {
-      label: "SLA Breached",
-      value: summary.overdueIssues,
-      trend: "-3%",
-      icon: AlertTriangle,
-      color: "red",
-    },
-    {
-      label: "High Priority",
-      value: summary.escalatedIssues,
-      trend: "+2",
-      icon: Zap,
-      color: "orange",
-    },
-  ];
+  const kpis = useMemo(
+    () => [
+      {
+        label: "Total Issues",
+        value: summary.totalIssues,
+        trend: "+12%",
+        icon: FileText,
+        color: "blue",
+      },
+      {
+        label: "Active Issues",
+        value: summary.activeIssues,
+        trend: "+8%",
+        icon: Activity,
+        color: "purple",
+      },
+      {
+        label: "Resolved",
+        value: summary.resolvedIssues,
+        trend: "+15%",
+        icon: CheckCircle2,
+        color: "emerald",
+      },
+      {
+        label: "Closed",
+        value: summary.closedIssues,
+        trend: "+5%",
+        icon: Target,
+        color: "gray",
+      },
+      {
+        label: "SLA Breached",
+        value: summary.overdueIssues,
+        trend: "-3%",
+        icon: AlertTriangle,
+        color: "red",
+      },
+      {
+        label: "High Priority",
+        value: summary.escalatedIssues,
+        trend: "+2",
+        icon: Zap,
+        color: "orange",
+      },
+    ],
+    [summary],
+  );
 
-  const googleHeatmapPoints = useMemo(() => {
-    if (!isLoaded || typeof window === "undefined" || !window.google) return [];
-    return heatmapPoints.map((pt) => ({
-      location: new window.google.maps.LatLng(pt.latitude, pt.longitude),
-      weight: pt.priority === "critical" ? 3 : pt.priority === "high" ? 2 : 1,
-    }));
-  }, [heatmapPoints, isLoaded]);
-
-  const mapContainerStyle = {
-    width: "100%",
-    height: "100%",
-  };
-
-  const handleReviewIssue = (issue) => {
-    // Transform simple list issue into expected full detail object format
-    onSelectIssue({
-      ...issue,
-      id: issue.id || issue._id,
-      ticket_id: issue.code || issue.ticket_id,
-    });
-  };
+  if (!overviewData) {
+    return <CityAdminOverviewSkeleton />;
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -216,7 +213,7 @@ export default function CityAdminOverview({
               <p className="text-3xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">
                 {kpi.value}
               </p>
-              <p className="text-sm text-slate-650 dark:text-slate-400 font-semibold">
+              <p className="text-sm text-slate-655 dark:text-slate-400 font-semibold">
                 {kpi.label}
               </p>
             </div>
@@ -224,148 +221,15 @@ export default function CityAdminOverview({
         ))}
       </div>
 
-      {/* Heatmap & Categories Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-2xl transition-all duration-500">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                Heatmap Preview
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                Issue hotspots in {city}
-              </p>
-            </div>
-          </div>
-
-          <div className="mb-6 flex flex-wrap gap-3">
-            <select
-              value={heatmapFilter}
-              onChange={(e) => setHeatmapFilter(e.target.value)}
-              className="px-4 py-2 text-sm bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-600 border border-slate-200 dark:border-slate-600 rounded-xl font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all shadow-sm"
-            >
-              <option value="category">By Category</option>
-              <option value="priority">By Priority</option>
-              <option value="status">By Status</option>
-              <option value="sla">By SLA Risk</option>
-            </select>
-
-            <button
-              onClick={() => setShowWardBoundaries(!showWardBoundaries)}
-              className={`px-4 py-2 text-sm rounded-xl font-semibold transition-all shadow-sm ${
-                showWardBoundaries
-                  ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white"
-                  : "bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              Ward Boundaries {showWardBoundaries ? "ON" : "OFF"}
-            </button>
-          </div>
-
-          <div className="relative h-80 bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-2xl mb-6 overflow-hidden border border-slate-200 dark:border-slate-700">
-            {!isLoaded ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-800/50">
-                <RefreshCw className="w-8 h-8 animate-spin text-cyan-500 mb-2" />
-                <p className="text-gray-500 dark:text-gray-400 font-medium text-xs">
-                  Initializing Map Preview...
-                </p>
-              </div>
-            ) : (
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={mapCenter}
-                zoom={12}
-                options={{
-                  styles: [
-                    {
-                      featureType: "all",
-                      elementType: "labels.text.fill",
-                      stylers: [{ color: "#ffffff" }, { weight: "0.20" }],
-                    },
-                  ],
-                  disableDefaultUI: true,
-                }}
-              >
-                {googleHeatmapPoints.length > 0 && (
-                  <HeatmapLayer data={googleHeatmapPoints} />
-                )}
-              </GoogleMap>
-            )}
-            <div className="absolute top-4 left-4 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm p-4 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                Intensity Scale
-              </p>
-              <div className="flex gap-1">
-                {[
-                  "#e0f2fe",
-                  "#bae6fd",
-                  "#7dd3fc",
-                  "#38bdf8",
-                  "#0284c7",
-                  "#0369a1",
-                ].map((color, i) => (
-                  <div
-                    key={i}
-                    className="w-6 h-4 rounded-sm shadow-sm"
-                    style={{ backgroundColor: color }}
-                  ></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Category Performance Breakdown */}
-        <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-2xl transition-all duration-500">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-cyan-600 rounded-xl blur opacity-40"></div>
-              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                Top Categories
-              </h2>
-              <p className="text-xs text-slate-505 dark:text-slate-400 font-semibold mt-0.5">
-                Distribution of reports
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4 mb-6">
-            {categoryDistribution.slice(0, 4).map((item, idx) => (
-              <div
-                key={idx}
-                className="group/item p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-600 hover:from-cyan-50 hover:to-blue-50 dark:hover:from-cyan-900/10 dark:hover:to-blue-900/10 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-cyan-300 dark:hover:border-cyan-600 transition-all duration-300"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-slate-900 dark:text-white capitalize text-sm">
-                    {item.category}
-                  </span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">
-                    {item.count} issues
-                  </span>
-                </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all"
-                    style={{
-                      width: `${(item.count / (summary.totalIssues || 1)) * 100}%`,
-                    }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-            {categoryDistribution.length === 0 && (
-              <div className="text-center py-10 text-xs font-bold text-slate-400">
-                No category data available
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Map & Categories Section */}
+      <CityIssueMap
+        city={city}
+        state={state}
+        mapIssues={mapIssues}
+        categoryFilter={mapCategoryFilter}
+        onCategoryFilterChange={setMapCategoryFilter}
+        onViewIssue={handleReviewIssue}
+      />
 
       {/* SLA Snapshot Panel */}
       <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg">
@@ -639,14 +503,14 @@ export default function CityAdminOverview({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black tracking-wide bg-red-100 dark:bg-red-950/20 text-red-600 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-black tracking-wide bg-red-100 dark:bg-red-950/20 text-red-650 px-2 py-0.5 rounded">
                       {issue.code}
                     </span>
                     <span className="text-xs font-black text-slate-900 dark:text-white truncate">
                       {issue.title}
                     </span>
                   </div>
-                  <p className="text-[10px] text-red-500 font-bold mt-1">
+                  <p className="text-[10px] text-red-505 font-bold mt-1">
                     Attention Reason: {issue.reason}
                   </p>
                 </div>
@@ -696,7 +560,7 @@ export default function CityAdminOverview({
             </div>
           ))}
           {recentAdministrativeActivity.length === 0 && (
-            <div className="text-center py-10 text-xs font-bold text-slate-450">
+            <div className="text-center py-10 text-xs font-bold text-slate-455 font-semibold">
               No recent administrative actions recorded
             </div>
           )}

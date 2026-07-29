@@ -617,3 +617,10 @@
 .animate-slideUp {
   animation: slideUp 0.3s ease-out;
 }
+
+/* Google Maps Hover Tooltip Fix to prevent flashing/buffering */
+.gm-style-iw-c:has(.hover-tooltip-container),
+.gm-style-iw-c:has(.hover-tooltip-container) *,
+.gm-style-iw-tc:has(+ .gm-style-iw-c .hover-tooltip-container) {
+  pointer-events: none !important;
+}

@@ -74,7 +74,7 @@ export default function CityAdminDashboard() {
   );
 
   const [activeTab, setActiveTab] = useState("overview");
-  const [dateRange, setDateRange] = useState("custom");
+  const [dateRange, setDateRange] = useState("all");
   const [selectedIssue, setSelectedIssue] = useState(null);
 
   const rangeDays =
@@ -84,8 +84,8 @@ export default function CityAdminDashboard() {
         ? 7
         : dateRange === "30d"
           ? 30
-          : dateRange === "90d"
-            ? 90
+          : dateRange === "all"
+            ? 0
             : 0;
 
   const overviewData = useQuery(
@@ -658,7 +658,7 @@ export default function CityAdminDashboard() {
           <option value="today">Today</option>
           <option value="7d">Last 7 Days</option>
           <option value="30d">Last 30 Days</option>
-          <option value="custom">All</option>
+          <option value="all">All</option>
         </select>
 
         <div className="relative">

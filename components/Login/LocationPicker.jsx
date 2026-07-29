@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useCallback, useRef } from "react";
-import { GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, MarkerF } from "@react-google-maps/api";
+import { useGoogleMapsStatus } from "@/components/maps/GoogleMapsProvider";
 import { MapPin } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,10 +20,7 @@ export default function LocationPicker({ onDetect }) {
   const [detectedAddress, setDetectedAddress] = useState("");
   const mapRef = useRef(null);
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-    libraries: ["places"],
-  });
+  const { isLoaded } = useGoogleMapsStatus();
 
   // Detect user’s GPS location
   const detectLocation = useCallback(() => {
@@ -43,7 +41,7 @@ export default function LocationPicker({ onDetect }) {
         console.error(err);
         toast.error("Location access denied or unavailable.");
         setLoading(false);
-      }
+      },
     );
   }, []);
 
@@ -60,7 +58,7 @@ export default function LocationPicker({ onDetect }) {
 
       // Select the most complete (longest) formatted address
       const bestResult = results.results.reduce((a, b) =>
-        a.formatted_address.length > b.formatted_address.length ? a : b
+        a.formatted_address.length > b.formatted_address.length ? a : b,
       );
 
       const components = bestResult.address_components;

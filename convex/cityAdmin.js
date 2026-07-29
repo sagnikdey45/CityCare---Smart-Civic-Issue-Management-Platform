@@ -317,22 +317,99 @@ export const getCityAdminOverview = query({
       }
     }
 
-    // Heatmap Points
-    const heatmapPoints = allCityIssues
+    const getIssueSlaStatusAndHours = (issue, nowTime) => {
+      const isTerminal = [
+        "resolved",
+        "closed",
+        "rejected",
+        "withdrawn",
+      ].includes(normalizeKey(issue.status));
+      if (isTerminal) return { slaStatus: "resolved", hoursRemaining: 0 };
+      if (!issue.slaDeadline) return { slaStatus: "no_sla", hoursRemaining: 0 };
+      const diff = issue.slaDeadline - nowTime;
+      const hours = Math.round(diff / (1000 * 60 * 60));
+      if (diff < 0) {
+        return { slaStatus: "breached", hoursRemaining: hours };
+      }
+      if (diff < 48 * 60 * 60 * 1000) {
+        return { slaStatus: "at_risk", hoursRemaining: hours };
+      }
+      return { slaStatus: "on_track", hoursRemaining: hours };
+    };
+
+    const officerIds = new Set();
+    for (const issue of rangeIssues) {
+      if (issue.assignedUnitOfficer)
+        officerIds.add(String(issue.assignedUnitOfficer));
+      if (issue.assignedFieldOfficer)
+        officerIds.add(String(issue.assignedFieldOfficer));
+    }
+
+    const officerNamesMap = new Map();
+    for (const id of officerIds) {
+      const u = await ctx.db.get(id);
+      if (u) {
+        officerNamesMap.set(id, u.fullName);
+      }
+    }
+
+    const mapIssues = rangeIssues
       .filter((i) => {
-        const lat = parseFloat(i.latitude);
-        const lng = parseFloat(i.longitude);
-        return !isNaN(lat) && !isNaN(lng);
+        const lat = Number(i.latitude);
+        const lng = Number(i.longitude);
+        return (
+          Number.isFinite(lat) &&
+          Number.isFinite(lng) &&
+          lat >= -90 &&
+          lat <= 90 &&
+          lng >= -180 &&
+          lng <= 180
+        );
       })
-      .map((i) => ({
-        id: i._id,
-        latitude: parseFloat(i.latitude),
-        longitude: parseFloat(i.longitude),
-        category: i.category,
-        priority: i.priority,
-        status: i.status,
-        slaStatus: getIssueSlaStatus(i, now),
-      }));
+      .map((i) => {
+        const { slaStatus, hoursRemaining } = getIssueSlaStatusAndHours(i, now);
+        const assignedUnitOfficerName = i.assignedUnitOfficer
+          ? (officerNamesMap.get(String(i.assignedUnitOfficer)) ?? null)
+          : null;
+        const assignedFieldOfficerName = i.assignedFieldOfficer
+          ? (officerNamesMap.get(String(i.assignedFieldOfficer)) ?? null)
+          : null;
+        return {
+          id: i._id,
+          code: i.issueCode,
+          title: i.title,
+          description: i.description || "",
+          category: i.category,
+          subcategory: i.subcategory ?? [],
+          priority: i.priority,
+          status: i.status,
+
+          address: i.address,
+          city: i.city,
+          state: i.state,
+          postal: i.postal,
+
+          latitude: Number(i.latitude),
+          longitude: Number(i.longitude),
+
+          createdAt: i.createdAt ?? i._creationTime,
+          slaDeadline: i.slaDeadline,
+
+          assignedUnitOfficerId: i.assignedUnitOfficer,
+          assignedUnitOfficerName,
+
+          assignedFieldOfficerId: i.assignedFieldOfficer,
+          assignedFieldOfficerName,
+
+          isEscalated:
+            i.escalatedToAdmin === true ||
+            i.status === "escalated" ||
+            Boolean(i.escalation),
+
+          slaStatus,
+          hoursRemaining,
+        };
+      });
 
     function getIssueSlaStatus(issue, nowTime) {
       const isTerminal = [
@@ -532,6 +609,7 @@ export const getCityAdminOverview = query({
 
       summary: {
         totalIssues: rangeIssues.length,
+        invalidCoordsCount: rangeIssues.length - mapIssues.length,
         activeIssues: rangeIssues.filter((i) =>
           activeStatuses.includes(normalizeKey(i.status)),
         ).length,
@@ -585,7 +663,7 @@ export const getCityAdminOverview = query({
         nearestDeadlineIssue,
         mostOverdueIssue,
       },
-      heatmapPoints,
+      mapIssues,
       statusDistribution,
       categoryDistribution,
       departmentPerformance,

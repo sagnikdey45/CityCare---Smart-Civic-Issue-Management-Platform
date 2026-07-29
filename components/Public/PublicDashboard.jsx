@@ -38,12 +38,8 @@ import { PublicNavbar } from "./PublicNavbar";
 import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../ui/button";
-import {
-  GoogleMap,
-  useLoadScript,
-  Marker,
-  HeatmapLayer,
-} from "@react-google-maps/api";
+import { GoogleMap, Marker, HeatmapLayer } from "@react-google-maps/api";
+import { useGoogleMapsStatus } from "@/components/maps/GoogleMapsProvider";
 import IssueDiscussionForum from "./IssueDiscussionForum";
 import { useSession } from "next-auth/react";
 import { useQuery } from "convex/react";
@@ -57,15 +53,15 @@ export function PublicDashboard() {
   const userRole = session?.user?.role;
   const isForbiddenRole = userRole === "city_admin" || userRole === "admin";
 
-  useEffect(() => {
-    if (status !== "loading" && isForbiddenRole) {
-      if (userRole === "admin") {
-        router.replace("/admin");
-      } else if (userRole === "city_admin") {
-        router.replace("/city-admin");
-      }
-    }
-  }, [status, userRole, isForbiddenRole, router]);
+  // useEffect(() => {
+  //   if (status !== "loading" && isForbiddenRole) {
+  //     if (userRole === "admin") {
+  //       router.replace("/admin");
+  //     } else if (userRole === "city_admin") {
+  //       router.replace("/city-admin");
+  //     }
+  //   }
+  // }, [status, userRole, isForbiddenRole, router]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -76,18 +72,12 @@ export function PublicDashboard() {
   const [showToast, setShowToast] = useState(false);
   const [center, setCenter] = useState(null);
 
-  const libraries = ["visualization"];
-
   const mapContainerStyle = {
     width: "100%",
     height: "400px",
   };
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-    version: "3.64",
-    libraries,
-  });
+  const { isLoaded } = useGoogleMapsStatus();
 
   const [cityName, setCityName] = useState("Loading...");
 
@@ -294,16 +284,16 @@ export function PublicDashboard() {
     };
   }, [publicIssues]);
 
-  if (status === "loading" || (session && isForbiddenRole)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 space-y-4">
-        <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
-        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-          Redirecting to authorized administration portal...
-        </p>
-      </div>
-    );
-  }
+  // if (status === "loading" || (session && isForbiddenRole)) {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 space-y-4">
+  //       <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
+  //       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+  //         Redirecting to authorized administration portal...
+  //       </p>
+  //     </div>
+  //   );
+  // }
 
   const clearFilters = () => {
     setSearchTerm("");
