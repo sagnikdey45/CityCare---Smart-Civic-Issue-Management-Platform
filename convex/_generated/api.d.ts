@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as badges from "../badges.js";
+import type * as cityAdmin from "../cityAdmin.js";
 import type * as crons from "../crons.js";
 import type * as directMessages from "../directMessages.js";
 import type * as duplicateIssues from "../duplicateIssues.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
   badges: typeof badges;
+  cityAdmin: typeof cityAdmin;
   crons: typeof crons;
   directMessages: typeof directMessages;
   duplicateIssues: typeof duplicateIssues;
