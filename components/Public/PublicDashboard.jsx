@@ -53,19 +53,19 @@ export function PublicDashboard() {
   const userRole = session?.user?.role;
   const isForbiddenRole = userRole === "city_admin" || userRole === "admin";
 
-  // useEffect(() => {
-  //   if (status !== "loading" && isForbiddenRole) {
-  //     if (userRole === "admin") {
-  //       router.replace("/admin");
-  //     } else if (userRole === "city_admin") {
-  //       router.replace("/city-admin");
-  //     }
-  //   }
-  // }, [status, userRole, isForbiddenRole, router]);
+  useEffect(() => {
+    if (status !== "loading" && isForbiddenRole) {
+      if (userRole === "admin") {
+        router.replace("/admin");
+      } else if (userRole === "city_admin") {
+        router.replace("/city-admin");
+      }
+    }
+  }, [status, userRole, isForbiddenRole, router]);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [wardFilter, setWardFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [mapView, setMapView] = useState("pins");
@@ -228,11 +228,6 @@ export function PublicDashboard() {
       filtered = filtered.filter((issue) => issue.category === categoryFilter);
     }
 
-    // Ward filter
-    if (wardFilter !== "all") {
-      filtered = filtered.filter((issue) => issue.ward === wardFilter);
-    }
-
     // Sort
     filtered = [...filtered].sort((a, b) => {
       if (sortBy === "rating") {
@@ -246,14 +241,7 @@ export function PublicDashboard() {
     });
 
     return filtered;
-  }, [
-    searchTerm,
-    statusFilter,
-    categoryFilter,
-    wardFilter,
-    sortBy,
-    publicIssues,
-  ]);
+  }, [searchTerm, statusFilter, categoryFilter, sortBy, publicIssues]);
 
   // Calculate KPIs
   const kpis = useMemo(() => {
@@ -284,22 +272,21 @@ export function PublicDashboard() {
     };
   }, [publicIssues]);
 
-  // if (status === "loading" || (session && isForbiddenRole)) {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 space-y-4">
-  //       <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
-  //       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-  //         Redirecting to authorized administration portal...
-  //       </p>
-  //     </div>
-  //   );
-  // }
+  if (status === "loading" || (session && isForbiddenRole)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 space-y-4">
+        <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+          Redirecting to authorized administration portal...
+        </p>
+      </div>
+    );
+  }
 
   const clearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
     setCategoryFilter("all");
-    setWardFilter("all");
     setSortBy("newest");
   };
 
@@ -661,24 +648,6 @@ export function PublicDashboard() {
               </select>
 
               <select
-                value={wardFilter}
-                onChange={(e) => setWardFilter(e.target.value)}
-                className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm rounded-xl text-sm font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500 appearance-none cursor-pointer hover:border-teal-400 transition-colors"
-              >
-                <option value="all">Ward: All Areas</option>
-                <option value="Lanka">Lanka</option>
-                <option value="Assi">Assi</option>
-                <option value="Sigra">Sigra</option>
-                <option value="Maldahiya">Maldahiya</option>
-                <option value="Dashashwamedh">Dashashwamedh</option>
-                <option value="Cantt">Cantt</option>
-                <option value="Luxa">Luxa</option>
-                <option value="Ravindrapuri">Ravindrapuri</option>
-                <option value="Chowk">Chowk</option>
-                <option value="Pandeypur">Pandeypur</option>
-              </select>
-
-              <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm rounded-xl text-sm font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500 appearance-none cursor-pointer hover:border-teal-400 transition-colors"
@@ -689,8 +658,7 @@ export function PublicDashboard() {
 
               {(searchTerm ||
                 statusFilter !== "all" ||
-                categoryFilter !== "all" ||
-                wardFilter !== "all") && (
+                categoryFilter !== "all") && (
                 <button
                   onClick={clearFilters}
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold transition-all border border-red-200 dark:border-red-800/50"
@@ -1097,87 +1065,6 @@ export function PublicDashboard() {
               />
             </div>
           )}
-
-          {/* Public Metrics Section */}
-          <div className="mt-16 mb-20 relative z-20">
-            <div className="flex flex-col items-center mb-10 text-center">
-              <div className="p-3 bg-teal-100 dark:bg-teal-900/50 rounded-2xl mb-4 text-teal-600 dark:text-teal-400 shadow-sm">
-                <BarChart3 size={32} />
-              </div>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                Trust & Transparency Metrics
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                Real-time civic performance indicators
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-3xl p-8 shadow-lg hover:shadow-xl transition-all group overflow-hidden relative">
-                <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-teal-600">
-                  <Award size={120} />
-                </div>
-                <Award
-                  className="text-teal-500 mb-4 drop-shadow-sm"
-                  size={36}
-                />
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
-                  Completion Rate
-                </p>
-                <p className="text-4xl font-black text-gray-900 dark:text-white">
-                  57<span className="text-2xl text-teal-500 ml-1">%</span>
-                </p>
-              </div>
-
-              <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-3xl p-8 shadow-lg hover:shadow-xl transition-all group overflow-hidden relative">
-                <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-cyan-600">
-                  <Zap size={120} />
-                </div>
-                <Zap className="text-cyan-500 mb-4 drop-shadow-sm" size={36} />
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
-                  Avg Review Time
-                </p>
-                <p className="text-4xl font-black text-gray-900 dark:text-white">
-                  1.2
-                  <span className="text-lg font-bold text-cyan-500 ml-2">
-                    days
-                  </span>
-                </p>
-              </div>
-
-              <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-3xl p-8 shadow-lg hover:shadow-xl transition-all group overflow-hidden relative">
-                <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-emerald-600">
-                  <Target size={120} />
-                </div>
-                <Target
-                  className="text-emerald-500 mb-4 drop-shadow-sm"
-                  size={36}
-                />
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
-                  Top Ward Focus
-                </p>
-                <p className="text-3xl font-black text-gray-900 dark:text-white truncate">
-                  Lanka
-                </p>
-              </div>
-
-              <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-3xl p-8 shadow-lg hover:shadow-xl transition-all group overflow-hidden relative">
-                <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 duration-500 text-amber-600">
-                  <TrendingUp size={120} />
-                </div>
-                <TrendingUp
-                  className="text-amber-500 mb-4 drop-shadow-sm"
-                  size={36}
-                />
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold tracking-widest uppercase mb-1">
-                  Most Common
-                </p>
-                <p className="text-3xl font-black text-gray-900 dark:text-white truncate">
-                  Waste
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Toast Notification */}

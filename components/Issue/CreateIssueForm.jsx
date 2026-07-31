@@ -23,6 +23,10 @@ const IssueForm = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastSubmissionPoints, setLastSubmissionPoints] = useState(5);
+  const [lastSubmissionHadVideo, setLastSubmissionHadVideo] = useState(false);
+  const [lastSubmittedIssueCode, setLastSubmittedIssueCode] = useState("");
+  const [lastSubmittedIssueTitle, setLastSubmittedIssueTitle] = useState("");
   const [showTutorial, setShowTutorial] = useState(false);
 
   // // Always trigger tutorial on load
@@ -85,7 +89,7 @@ const IssueForm = () => {
     const now = Date.now();
     const resets = [
       rateLimitState?.reset,
-      rateLimitState?.cooldown?.reset
+      rateLimitState?.cooldown?.reset,
     ].filter((t) => t && t > now);
 
     if (resets.length > 0) {
@@ -226,11 +230,15 @@ const IssueForm = () => {
   const handleSubmit = async () => {
     if (rateLimitState) {
       if (rateLimitState.remaining === 0) {
-        toast.error("You have reached the 8-hour reporting limit. Please try again later.");
+        toast.error(
+          "You have reached the 8-hour reporting limit. Please try again later.",
+        );
         return;
       }
       if (rateLimitState.cooldown && rateLimitState.cooldown.remaining === 0) {
-        toast.error("Please wait a few minutes before submitting another report.");
+        toast.error(
+          "Please wait a few minutes before submitting another report.",
+        );
         return;
       }
     }
@@ -269,6 +277,16 @@ const IssueForm = () => {
         videos: formData.videos || null,
       });
 
+      const hasVideoEvidence = Boolean(formData.videos);
+      const earnedPoints = hasVideoEvidence ? 10 : 5;
+
+      setLastSubmissionPoints(earnedPoints);
+      setLastSubmissionHadVideo(hasVideoEvidence);
+      setLastSubmittedIssueTitle(formData.title);
+      setLastSubmittedIssueCode(
+        res?.issueCode || res?.issue?.issueCode || res?.ticketId || "",
+      );
+
       // Reset after success
       setFormData({
         title: "",
@@ -302,7 +320,8 @@ const IssueForm = () => {
           remaining: res.rateLimit.remaining,
           used: res.rateLimit.used,
           reset: res.rateLimit.reset,
-          allowed: res.rateLimit.remaining > 0 && res.rateLimit.cooldown.remaining > 0,
+          allowed:
+            res.rateLimit.remaining > 0 && res.rateLimit.cooldown.remaining > 0,
           window: res.rateLimit.window,
           cooldown: {
             limit: res.rateLimit.cooldown.limit,
@@ -478,31 +497,43 @@ const IssueForm = () => {
                 e.preventDefault();
                 if (rateLimitState) {
                   if (rateLimitState.remaining === 0) {
-                    toast.error("You have reached the 8-hour reporting limit. Please try again later.");
+                    toast.error(
+                      "You have reached the 8-hour reporting limit. Please try again later.",
+                    );
                     return;
                   }
-                  if (rateLimitState.cooldown && rateLimitState.cooldown.remaining === 0) {
-                    toast.error("Please wait a few minutes before submitting another report.");
+                  if (
+                    rateLimitState.cooldown &&
+                    rateLimitState.cooldown.remaining === 0
+                  ) {
+                    toast.error(
+                      "Please wait a few minutes before submitting another report.",
+                    );
                     return;
                   }
                 }
                 handleNext();
               }}
-              disabled={rateLimitState?.remaining === 0 || rateLimitState?.cooldown?.remaining === 0}
+              disabled={
+                rateLimitState?.remaining === 0 ||
+                rateLimitState?.cooldown?.remaining === 0
+              }
               className={`group relative flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-white text-sm overflow-hidden transition-all duration-200 ${
-                (rateLimitState?.remaining === 0 || rateLimitState?.cooldown?.remaining === 0)
+                rateLimitState?.remaining === 0 ||
+                rateLimitState?.cooldown?.remaining === 0
                   ? "bg-slate-300 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-50 shadow-none hover:scale-100 hover:translate-y-0"
                   : "shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.04] hover:-translate-y-0.5 active:scale-[0.97]"
               }`}
             >
               {/* Base gradient */}
-              {(rateLimitState?.remaining !== 0 && rateLimitState?.cooldown?.remaining !== 0) && (
-                <>
-                  <div className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
-                </>
-              )}
+              {rateLimitState?.remaining !== 0 &&
+                rateLimitState?.cooldown?.remaining !== 0 && (
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out" />
+                  </>
+                )}
               <span
                 className="relative flex items-center gap-2"
                 data-tutorial="preview-btn"
@@ -561,7 +592,15 @@ const IssueForm = () => {
         />
       )}
 
-      {showSuccess && <SuccessModal onClose={() => setShowSuccess(false)} />}
+      {showSuccess && (
+        <SuccessModal
+          onClose={() => setShowSuccess(false)}
+          pointsEarned={lastSubmissionPoints}
+          hasVideoEvidence={lastSubmissionHadVideo}
+          issueCode={lastSubmittedIssueCode}
+          issueTitle={lastSubmittedIssueTitle}
+        />
+      )}
 
       <SpotlightTutorial
         currentStep={currentStep}
