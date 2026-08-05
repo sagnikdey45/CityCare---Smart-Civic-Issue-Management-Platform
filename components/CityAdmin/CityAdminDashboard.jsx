@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import CityAdminOverview from "../city-admin/CityAdminOverview";
 import CityAdminAllIssues from "../city-admin/CityAdminAllIssues";
+import CityAdminSLAMonitor from "../city-admin/CityAdminSLAMonitor";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -634,6 +635,16 @@ export default function CityAdminDashboard() {
             </div>
           </div>
         </div>
+
+        <button
+          onClick={() =>
+            signOut({ redirect: true, callbackUrl: "/staff/sign-in" })
+          }
+          className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 dark:bg-red-500/5 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 dark:border-red-500/30 rounded-xl text-sm font-bold transition-all duration-300"
+        >
+          <LogOut size={16} />
+          Sign Out
+        </button>
       </div>
     </div>
   );
@@ -969,168 +980,10 @@ export default function CityAdminDashboard() {
   );
 
   const renderSLAMonitoring = () => (
-    <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 mb-8 shadow-lg hover:shadow-2xl transition-all duration-500">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-400 to-orange-600 rounded-xl blur opacity-40"></div>
-            <div className="relative w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              SLA Monitor
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Track compliance status
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 text-sm bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-600 border border-slate-200 dark:border-slate-600 rounded-xl font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all shadow-sm hover:shadow-md"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-          </select>
-          <button className="px-4 py-2 text-sm bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all">
-            Export
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        </div>
-      ) : slaIssues.length === 0 ? (
-        <div className="text-center py-12">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-          <p className="text-gray-500">All issues are within SLA!</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Issue Code
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Title
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Category
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Time Remaining
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  SLA Status
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {slaIssues.map((issue) => {
-                const slaStatus = getSLAStatus(issue.created_at, issue.status);
-                const timeRemaining = getTimeRemaining(
-                  issue.created_at,
-                  issue.status,
-                );
-
-                return (
-                  <tr
-                    key={issue.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                    onClick={() => setSelectedIssue(issue)}
-                  >
-                    <td className="py-3 px-4">
-                      <span className="text-sm font-mono text-blue-600 dark:text-blue-400">
-                        {issue.ticket_id}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm text-gray-900 dark:text-white">
-                        {issue.title}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">
-                        {issue.category}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`text-sm font-medium ${
-                          timeRemaining.startsWith("-")
-                            ? "text-red-600"
-                            : "text-gray-900 dark:text-white"
-                        }`}
-                      >
-                        {timeRemaining}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          slaStatus === "on_track"
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                            : slaStatus === "at_risk"
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        {slaStatus === "on_track"
-                          ? "On Track"
-                          : slaStatus === "at_risk"
-                            ? "At Risk"
-                            : "Breached"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEscalateIssue(issue.id);
-                          }}
-                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-amber-600"
-                          title="Escalate"
-                        >
-                          <AlertTriangle className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const officerId = prompt(
-                              "Enter Officer ID to reassign:",
-                            );
-                            if (officerId)
-                              handleReassignIssue(issue.id, officerId);
-                          }}
-                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-blue-600"
-                          title="Reassign"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    <CityAdminSLAMonitor
+      cityAdminUserId={dbUser._id}
+      onViewIssue={setSelectedIssue}
+    />
   );
 
   const renderEscalations = () => (

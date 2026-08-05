@@ -29,6 +29,7 @@ import type * as notifications from "../notifications.js";
 import type * as officerAssign from "../officerAssign.js";
 import type * as publicIssues from "../publicIssues.js";
 import type * as signUp from "../signUp.js";
+import type * as slaMonitoring from "../slaMonitoring.js";
 import type * as unitOfficers from "../unitOfficers.js";
 import type * as users from "../users.js";
 
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   officerAssign: typeof officerAssign;
   publicIssues: typeof publicIssues;
   signUp: typeof signUp;
+  slaMonitoring: typeof slaMonitoring;
   unitOfficers: typeof unitOfficers;
   users: typeof users;
 }>;

@@ -1089,7 +1089,7 @@ export const getCityAdminIssues = query({
 
         sla: {
           deadline: issue.slaDeadline,
-          originalDeadline: issue.originalSlaDeadline ?? issue.slaDeadline,
+          originalDeadline: issue.slaDeadline,
           status: calculatedSlaStatus,
           hoursRemaining,
           overdueHours,
@@ -1362,7 +1362,6 @@ export const assignOrReassignUnitOfficer = mutation({
     await ctx.db.patch(issue._id, {
       assignedUnitOfficer: newOfficer.userId,
       status: nextStatus,
-      updatedAt: now,
     });
 
     // 4. Create timeline entry
@@ -1486,7 +1485,6 @@ export const assignOrReassignFieldOfficer = mutation({
     await ctx.db.patch(issue._id, {
       assignedFieldOfficer: newOfficer.userId,
       status: nextStatus,
-      updatedAt: now,
     });
 
     // 4. Create timeline entry
@@ -1625,7 +1623,6 @@ export const changeIssueClassification = mutation({
       category: args.category,
       subcategory: args.subcategory,
       department: args.department,
-      updatedAt: now,
     };
     if (uoCleared) updatePayload.assignedUnitOfficer = null;
     if (foCleared) updatePayload.assignedFieldOfficer = null;
@@ -1696,7 +1693,6 @@ export const updateIssuePriority = mutation({
 
     await ctx.db.patch(issue._id, {
       priority: args.priority,
-      updatedAt: now,
     });
 
     // Timeline entry
@@ -1786,7 +1782,6 @@ export const overrideIssueStatus = mutation({
 
     await ctx.db.patch(issue._id, {
       status: newStatus,
-      updatedAt: now,
       resolvedAt: newStatus === "resolved" ? now : issue.resolvedAt,
       closedAt: newStatus === "closed" ? now : issue.closedAt,
     });
@@ -1881,7 +1876,6 @@ export const escalateIssue = mutation({
         adminReviewStatus: "pending",
         escalationCount: (issue.escalation?.escalationCount || 0) + 1,
       },
-      updatedAt: now,
     });
 
     // Timeline entry
@@ -1950,8 +1944,6 @@ export const updateSlaDeadline = mutation({
 
     await ctx.db.patch(issue._id, {
       slaDeadline: args.newDeadline,
-      originalSlaDeadline:
-        issue.originalSlaDeadline ?? oldDeadline ?? args.newDeadline,
       slaBreached: false,
       slaExtendedCount: (issue.slaExtendedCount || 0) + 1,
       lastSlaExtensionAt: now,
@@ -2213,10 +2205,7 @@ export const bulkUpdateIssues = mutation({
           continue;
         }
         const oldPriority = issue.priority;
-        await ctx.db.patch(issue._id, {
-          priority: args.priority,
-          updatedAt: now,
-        });
+        await ctx.db.patch(issue._id, { priority: args.priority });
 
         await ctx.db.insert("issueUpdates", {
           issueId: issue._id,
@@ -2253,10 +2242,7 @@ export const bulkUpdateIssues = mutation({
           continue;
         }
         const oldDept = issue.department || "None";
-        await ctx.db.patch(issue._id, {
-          department: args.department,
-          updatedAt: now,
-        });
+        await ctx.db.patch(issue._id, { department: args.department });
 
         await ctx.db.insert("issueUpdates", {
           issueId: issue._id,

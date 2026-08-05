@@ -250,6 +250,9 @@ export default defineSchema({
 
     activeIssueIds: v.array(v.id("issues")),
     resolvedIssueIds: v.array(v.id("issues")),
+
+    mustChangePassword: v.optional(v.boolean()),
+    passwordChangedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_department", ["department"])
@@ -290,6 +293,9 @@ export default defineSchema({
     efficiencyScore: v.number(),
 
     lastLogin: v.optional(v.string()),
+
+    mustChangePassword: v.optional(v.boolean()),
+    passwordChangedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_department", ["department"])
@@ -426,7 +432,7 @@ export default defineSchema({
         reason: v.string(),
         comments: v.optional(v.string()),
         escalatedBy: v.id("users"),
-        prevIssueStatus: v.string(),
+        prevIssueStatus: v.optional(v.string()),
         escalatedAt: v.number(),
         resolved: v.optional(v.boolean()),
         resolvedAt: v.optional(v.number()),
@@ -521,6 +527,7 @@ export default defineSchema({
       v.literal("unit_officer"),
       v.literal("field_officer"),
       v.literal("admin"),
+      v.literal("city_admin"),
     ),
 
     // Attachments (photos/videos/documents)
