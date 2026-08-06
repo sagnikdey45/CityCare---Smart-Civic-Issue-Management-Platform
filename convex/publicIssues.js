@@ -7,6 +7,16 @@ const toISO = (value) => {
   return new Date(value).toISOString();
 };
 
+const normalizeDepartment = (value) => {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+};
+
 const getPhotoUrls = async (ctx, storageIds = []) => {
   const urls = await Promise.all(
     storageIds.map(async (id) => await ctx.storage.getUrl(id)),
@@ -134,7 +144,7 @@ export const getPublicIssues = query({
       .collect();
 
     const filteredPublicIssues = publicIssues.filter(
-      (issue) => issue.category === unitOfficer.department,
+      (issue) => issue.category === normalizeDepartment(unitOfficer.department),
     );
 
     const enriched = await Promise.all(

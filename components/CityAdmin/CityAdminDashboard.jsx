@@ -505,14 +505,8 @@ export default function CityAdminDashboard() {
             gradient: "from-blue-500 to-blue-600",
           },
           {
-            id: "escalations",
-            label: "Escalations",
-            icon: AlertTriangle,
-            gradient: "from-orange-500 to-red-500",
-          },
-          {
             id: "sla",
-            label: "SLA Monitor",
+            label: "SLA & Escalations",
             icon: Clock,
             gradient: "from-amber-500 to-orange-500",
           },
@@ -984,97 +978,6 @@ export default function CityAdminDashboard() {
       cityAdminUserId={dbUser._id}
       onViewIssue={setSelectedIssue}
     />
-  );
-
-  const renderEscalations = () => (
-    <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 mb-8 shadow-lg hover:shadow-2xl transition-all duration-500">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-red-600 rounded-xl blur opacity-40"></div>
-          <div className="relative w-12 h-12 bg-gradient-to-br from-orange-400 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-        </div>
-        <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            Escalated Issues
-          </h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400 font-semibold">
-            High priority issues needing immediate attention
-          </p>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-        </div>
-      ) : escalatedIssues.length === 0 ? (
-        <div className="text-center py-12">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-          <p className="text-gray-500">No escalated issues at the moment!</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {escalatedIssues.map((issue) => (
-            <div
-              key={issue.id}
-              className="group p-6 bg-gradient-to-br from-orange-50 via-red-50 to-rose-50 dark:from-orange-900/20 dark:via-red-900/20 dark:to-rose-900/20 border-2 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600 rounded-2xl hover:shadow-xl transition-all duration-300"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-sm font-mono font-black text-orange-700 dark:text-orange-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-lg shadow-sm">
-                      {issue.ticket_id}
-                    </span>
-                    <span className="px-3 py-1 bg-gradient-to-r from-red-500 to-rose-600 text-white text-xs font-black rounded-lg shadow-md">
-                      {issue.severity.toUpperCase()}
-                    </span>
-                  </div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                    {issue.title}
-                  </h3>
-                  <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {issue.address}
-                    </span>
-                    <span className="flex items-center gap-1 capitalize">
-                      <Activity className="w-3 h-3" />
-                      {issue.category}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => {
-                    const officerId = prompt("Enter Officer ID to reassign:");
-                    if (officerId) handleReassignIssue(issue.id, officerId);
-                  }}
-                  className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  Reassign Officer
-                </button>
-                <button
-                  onClick={() => handleVerifyIssue(issue.id)}
-                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  Mark In Progress
-                </button>
-                <button
-                  onClick={() => setSelectedIssue(issue)}
-                  className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  View Details
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 
   const renderDuplicateDetection = () => (
@@ -1930,7 +1833,6 @@ export default function CityAdminDashboard() {
                     onSelectIssue={setSelectedIssue}
                   />
                 )}
-                {activeTab === "escalations" && renderEscalations()}
                 {activeTab === "sla" && renderSLAMonitoring()}
                 {activeTab === "duplicates" && renderDuplicateDetection()}
                 {activeTab === "officers" && renderOfficerManagement()}

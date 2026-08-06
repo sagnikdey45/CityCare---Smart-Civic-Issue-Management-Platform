@@ -1,16 +1,26 @@
-import { v } from 'convex/values';
-import { query, mutation } from './_generated/server';
+import { v } from "convex/values";
+import { query, mutation } from "./_generated/server";
+
+const normalizeDepartment = (value) => {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+};
 
 export const startConversation = mutation({
   args: {
-    participantIds: v.array(v.id('users')),
+    participantIds: v.array(v.id("users")),
     initialMessage: v.string(),
 
-    fromId: v.id('users'),
+    fromId: v.id("users"),
     fromName: v.string(),
     fromRole: v.string(),
 
-    issueId: v.optional(v.id('issues')),
+    issueId: v.optional(v.id("issues")),
     issueTitle: v.optional(v.string()),
     issueStatus: v.optional(v.string()),
   },
@@ -19,7 +29,7 @@ export const startConversation = mutation({
 
     const toId = args.participantIds.find((id) => id !== args.fromId);
 
-    const convId = await ctx.db.insert('conversations', {
+    const convId = await ctx.db.insert("conversations", {
       participantIds: args.participantIds,
       lastMessage: args.initialMessage,
       lastMessageTime: now,
@@ -38,7 +48,7 @@ export const startConversation = mutation({
         : undefined,
     });
 
-    await ctx.db.insert('messages', {
+    await ctx.db.insert("messages", {
       conversationId: convId,
       fromId: args.fromId,
       toId: args.participantIds.find((id) => id !== args.fromId),
@@ -58,26 +68,26 @@ export const startConversation = mutation({
 
 export const sendMessage = mutation({
   args: {
-    conversationId: v.id('conversations'),
+    conversationId: v.id("conversations"),
 
-    fromId: v.id('users'),
+    fromId: v.id("users"),
     fromName: v.string(),
     fromRole: v.string(),
 
     message: v.string(),
 
-    issueIds: v.optional(v.array(v.id('issues'))),
+    issueIds: v.optional(v.array(v.id("issues"))),
   },
   handler: async (ctx, args) => {
     const conv = await ctx.db.get(args.conversationId);
-    if (!conv) throw new Error('Conversation not found');
+    if (!conv) throw new Error("Conversation not found");
 
     const toId = conv.participantIds.find((id) => id !== args.fromId);
-    if (!toId) throw new Error('Invalid conversation');
+    if (!toId) throw new Error("Invalid conversation");
 
     const now = Date.now();
 
-    await ctx.db.insert('messages', {
+    await ctx.db.insert("messages", {
       conversationId: args.conversationId,
       fromId: args.fromId,
       toId,
@@ -111,8 +121,8 @@ export const sendMessage = mutation({
 
 export const updateConversationIssue = mutation({
   args: {
-    conversationId: v.id('conversations'),
-    issueId: v.optional(v.id('issues')),
+    conversationId: v.id("conversations"),
+    issueId: v.optional(v.id("issues")),
     issueTitle: v.optional(v.string()),
     issueStatus: v.optional(v.string()),
   },
@@ -134,34 +144,38 @@ export const updateConversationIssue = mutation({
 });
 
 export const getUserConversations = query({
-  args: { userId: v.id('users') },
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const conversations = await ctx.db.query('conversations').collect();
+    const conversations = await ctx.db.query("conversations").collect();
 
     return conversations.filter((c) => c.participantIds.includes(args.userId));
   },
 });
 
 export const getMessagesByConversation = query({
-  args: { conversationId: v.id('conversations') },
+  args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
     return await ctx.db
-      .query('messages')
-      .withIndex('by_conversation', (q) => q.eq('conversationId', args.conversationId))
-      .order('asc')
+      .query("messages")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
+      .order("asc")
       .collect();
   },
 });
 
 export const markMessagesAsRead = mutation({
   args: {
-    conversationId: v.id('conversations'),
-    userId: v.id('users'),
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const messages = await ctx.db
-      .query('messages')
-      .withIndex('by_conversation', (q) => q.eq('conversationId', args.conversationId))
+      .query("messages")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
       .collect();
 
     let updated = false;
@@ -186,7 +200,7 @@ export const markMessagesAsRead = mutation({
 
 export const getAllOfficials = query({
   args: {
-    userId: v.id('users'),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const officials = [];
@@ -196,12 +210,12 @@ export const getAllOfficials = query({
 
     // We don't have 'by_user' index defined for unitOfficers/fieldOfficers in the provided schema snippet maybe?
     // Let's just collect all and find, or use filter.
-    const allUnitOfficers = await ctx.db.query('unitOfficers').collect();
+    const allUnitOfficers = await ctx.db.query("unitOfficers").collect();
     const currentUO = allUnitOfficers.find((u) => u.userId === args.userId);
     if (currentUO) {
       currentUserDept = currentUO.department;
     } else {
-      const allFieldOfficers = await ctx.db.query('fieldOfficers').collect();
+      const allFieldOfficers = await ctx.db.query("fieldOfficers").collect();
       const currentFO = allFieldOfficers.find((f) => f.userId === args.userId);
       if (currentFO) {
         currentUserDept = currentFO.department;
@@ -209,19 +223,21 @@ export const getAllOfficials = query({
     }
 
     // Fetch Admins and City Admins
-    const allUsers = await ctx.db.query('users').collect();
-    const admins = allUsers.filter((u) => u.role === 'admin' || u.role === 'city_admin');
+    const allUsers = await ctx.db.query("users").collect();
+    const admins = allUsers.filter(
+      (u) => u.role === "admin" || u.role === "city_admin",
+    );
 
     const fallbackAvatar =
       process.env.EXPO_PUBLIC_AVATAR ||
-      'https://ik.imagekit.io/o3jhcpnqcj/Patient-Profile-Photo/avatar.png?updatedAt=1758129736253';
+      "https://ik.imagekit.io/o3jhcpnqcj/Patient-Profile-Photo/avatar.png?updatedAt=1758129736253";
 
     for (const admin of admins) {
-      let city = 'Varanasi';
-      if (admin.role === 'city_admin') {
+      let city = "Varanasi";
+      if (admin.role === "city_admin") {
         const caProfile = await ctx.db
-          .query('cityAdmins')
-          .withIndex('by_user', (q) => q.eq('userId', admin._id))
+          .query("cityAdmins")
+          .withIndex("by_user", (q) => q.eq("userId", admin._id))
           .unique();
         if (caProfile) {
           city = caProfile.city;
@@ -231,18 +247,23 @@ export const getAllOfficials = query({
       officials.push({
         id: admin._id,
         name: admin.fullName,
-        role: admin.role === 'admin' ? 'Admin' : 'CityAdmin',
-        designation: admin.role === 'admin' ? 'Deputy Commissioner' : 'City Administrator',
-        department: 'Municipal Corporation',
-        city: admin.role === 'admin' ? undefined : city,
+        role: admin.role === "admin" ? "Admin" : "CityAdmin",
+        designation:
+          admin.role === "admin" ? "Deputy Commissioner" : "City Administrator",
+        department: "Municipal Corporation",
+        city: admin.role === "admin" ? undefined : city,
         avatar: fallbackAvatar,
       });
     }
 
     // Fetch Unit Officers
-    let unitOfficers = await ctx.db.query('unitOfficers').collect();
+    let unitOfficers = await ctx.db.query("unitOfficers").collect();
     if (currentUserDept) {
-      unitOfficers = unitOfficers.filter((uo) => uo.department === currentUserDept);
+      unitOfficers = unitOfficers.filter(
+        (uo) =>
+          normalizeDepartment(uo.department) ===
+          normalizeDepartment(currentUserDept),
+      );
     }
 
     for (const uo of unitOfficers) {
@@ -257,9 +278,9 @@ export const getAllOfficials = query({
         officials.push({
           id: user._id,
           name: uo.fullName,
-          role: 'UnitOfficer',
-          designation: 'Unit Officer',
-          department: uo.department || 'Municipal Corporation',
+          role: "UnitOfficer",
+          designation: "Unit Officer",
+          department: uo.department || "Municipal Corporation",
           city: uo.city,
           avatar: avatarUrl,
         });
@@ -267,9 +288,13 @@ export const getAllOfficials = query({
     }
 
     // Fetch Field Officers
-    let fieldOfficers = await ctx.db.query('fieldOfficers').collect();
+    let fieldOfficers = await ctx.db.query("fieldOfficers").collect();
     if (currentUserDept) {
-      fieldOfficers = fieldOfficers.filter((fo) => fo.department === currentUserDept);
+      fieldOfficers = fieldOfficers.filter(
+        (fo) =>
+          normalizeDepartment(fo.department) ===
+          normalizeDepartment(currentUserDept),
+      );
     }
 
     for (const fo of fieldOfficers) {
@@ -284,9 +309,9 @@ export const getAllOfficials = query({
         officials.push({
           id: user._id,
           name: fo.fullName,
-          role: 'FieldOfficer',
-          designation: 'Field Officer',
-          department: fo.department || 'Municipal Corporation',
+          role: "FieldOfficer",
+          designation: "Field Officer",
+          department: fo.department || "Municipal Corporation",
           city: fo.city,
           avatar: avatarUrl,
         });
@@ -299,23 +324,25 @@ export const getAllOfficials = query({
 
 export const sendMessageToUser = mutation({
   args: {
-    fromId: v.id('users'),
+    fromId: v.id("users"),
     fromName: v.string(),
     fromRole: v.string(),
-    toId: v.id('users'),
+    toId: v.id("users"),
     message: v.string(),
-    issueIds: v.optional(v.array(v.id('issues'))),
+    issueIds: v.optional(v.array(v.id("issues"))),
   },
   handler: async (ctx, args) => {
-    const conversations = await ctx.db.query('conversations').collect();
+    const conversations = await ctx.db.query("conversations").collect();
     const existing = conversations.find(
-      (c) => c.participantIds.includes(args.fromId) && c.participantIds.includes(args.toId)
+      (c) =>
+        c.participantIds.includes(args.fromId) &&
+        c.participantIds.includes(args.toId),
     );
 
     const now = Date.now();
 
     if (existing) {
-      await ctx.db.insert('messages', {
+      await ctx.db.insert("messages", {
         conversationId: existing._id,
         fromId: args.fromId,
         toId: args.toId,
@@ -329,7 +356,8 @@ export const sendMessageToUser = mutation({
 
       const unreadCountMap = existing.unreadCountMap || {};
       const updatedUnreadCountMap = { ...unreadCountMap };
-      updatedUnreadCountMap[args.toId] = (updatedUnreadCountMap[args.toId] || 0) + 1;
+      updatedUnreadCountMap[args.toId] =
+        (updatedUnreadCountMap[args.toId] || 0) + 1;
 
       await ctx.db.patch(existing._id, {
         lastMessage: args.message,
@@ -340,7 +368,7 @@ export const sendMessageToUser = mutation({
       return existing._id;
     } else {
       const toUser = await ctx.db.get(args.toId);
-      if (!toUser) throw new Error('Recipient user not found');
+      if (!toUser) throw new Error("Recipient user not found");
 
       let issueRef = undefined;
       if (args.issueIds && args.issueIds.length > 0) {
@@ -354,7 +382,7 @@ export const sendMessageToUser = mutation({
         }
       }
 
-      const convId = await ctx.db.insert('conversations', {
+      const convId = await ctx.db.insert("conversations", {
         participantIds: [args.fromId, args.toId],
         lastMessage: args.message,
         lastMessageTime: now,
@@ -380,7 +408,7 @@ export const sendMessageToUser = mutation({
         unreadCountMap: initialUnreadMap,
       });
 
-      await ctx.db.insert('messages', {
+      await ctx.db.insert("messages", {
         conversationId: convId,
         fromId: args.fromId,
         toId: args.toId,
@@ -399,8 +427,8 @@ export const sendMessageToUser = mutation({
 
 export const getLinkableIssues = query({
   args: {
-    userId: v.id('users'),
-    otherUserId: v.optional(v.id('users')),
+    userId: v.id("users"),
+    otherUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -411,16 +439,16 @@ export const getLinkableIssues = query({
 
     // Check if current user is unit/field officer and get their department & city
     const uoSelf = await ctx.db
-      .query('unitOfficers')
-      .withIndex('by_user', (q) => q.eq('userId', args.userId))
+      .query("unitOfficers")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
     if (uoSelf) {
       targetDept = uoSelf.department;
       targetCity = uoSelf.city;
     } else {
       const foSelf = await ctx.db
-        .query('fieldOfficers')
-        .withIndex('by_user', (q) => q.eq('userId', args.userId))
+        .query("fieldOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
         .unique();
       if (foSelf) {
         targetDept = foSelf.department;
@@ -431,16 +459,16 @@ export const getLinkableIssues = query({
     // If otherUserId is provided, check if other user is unit/field officer
     if (args.otherUserId) {
       const uoOther = await ctx.db
-        .query('unitOfficers')
-        .withIndex('by_user', (q) => q.eq('userId', args.otherUserId))
+        .query("unitOfficers")
+        .withIndex("by_user", (q) => q.eq("userId", args.otherUserId))
         .unique();
       if (uoOther) {
         targetDept = uoOther.department;
         targetCity = uoOther.city;
       } else {
         const foOther = await ctx.db
-          .query('fieldOfficers')
-          .withIndex('by_user', (q) => q.eq('userId', args.otherUserId))
+          .query("fieldOfficers")
+          .withIndex("by_user", (q) => q.eq("userId", args.otherUserId))
           .unique();
         if (foOther) {
           targetDept = foOther.department;
@@ -449,16 +477,17 @@ export const getLinkableIssues = query({
       }
     }
 
-    const allIssues = await ctx.db.query('issues').collect();
+    const allIssues = await ctx.db.query("issues").collect();
 
     // Map priority/severity and filter based on category & city if targetDept/targetCity exist
     let issues = allIssues;
 
     // If not admin/city_admin, restrict to assigned issues
-    if (user.role !== 'admin' && user.role !== 'city_admin') {
+    if (user.role !== "admin" && user.role !== "city_admin") {
       issues = issues.filter(
         (issue) =>
-          issue.assignedUnitOfficer === args.userId || issue.assignedFieldOfficer === args.userId
+          issue.assignedUnitOfficer === args.userId ||
+          issue.assignedFieldOfficer === args.userId,
       );
     }
 
@@ -467,31 +496,52 @@ export const getLinkableIssues = query({
       const cat = category.toLowerCase().trim();
       const dept = department.toLowerCase().trim();
 
-      if (cat === 'road' && (dept.includes('road') || dept.includes('infra'))) return true;
+      if (cat === "road" && (dept.includes("road") || dept.includes("infra")))
+        return true;
       if (
-        cat === 'electricity' &&
-        (dept.includes('electri') || dept.includes('light') || dept.includes('power'))
+        cat === "electricity" &&
+        (dept.includes("electri") ||
+          dept.includes("light") ||
+          dept.includes("power"))
       )
         return true;
-      if (cat === 'water' && dept.includes('water')) return true;
-      if (cat === 'sanitation' && (dept.includes('sanitation') || dept.includes('clean')))
+      if (cat === "water" && dept.includes("water")) return true;
+      if (
+        cat === "sanitation" &&
+        (dept.includes("sanitation") || dept.includes("clean"))
+      )
         return true;
-      if (cat === 'drainage' && (dept.includes('drain') || dept.includes('sewer'))) return true;
-      if (cat === 'solid_waste' && (dept.includes('solid') || dept.includes('waste'))) return true;
-      if (cat === 'public_health' && (dept.includes('health') || dept.includes('medical')))
+      if (
+        cat === "drainage" &&
+        (dept.includes("drain") || dept.includes("sewer"))
+      )
         return true;
-      if (cat === 'other') return true;
+      if (
+        cat === "solid_waste" &&
+        (dept.includes("solid") || dept.includes("waste"))
+      )
+        return true;
+      if (
+        cat === "public_health" &&
+        (dept.includes("health") || dept.includes("medical"))
+      )
+        return true;
+      if (cat === "other") return true;
 
       return cat.includes(dept) || dept.includes(cat);
     };
 
     if (targetDept) {
-      issues = issues.filter((issue) => categoryMatchesDepartment(issue.category, targetDept));
+      issues = issues.filter((issue) =>
+        categoryMatchesDepartment(issue.category, targetDept),
+      );
     }
 
     if (targetCity) {
       issues = issues.filter(
-        (issue) => (issue.city || '').toLowerCase().trim() === targetCity.toLowerCase().trim()
+        (issue) =>
+          (issue.city || "").toLowerCase().trim() ===
+          targetCity.toLowerCase().trim(),
       );
     }
 
