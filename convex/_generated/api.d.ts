@@ -19,6 +19,7 @@ import type * as escalation from "../escalation.js";
 import type * as fieldOfficers from "../fieldOfficers.js";
 import type * as gamification from "../gamification.js";
 import type * as gamificationAutomation from "../gamificationAutomation.js";
+import type * as helpers_cityAdminAuth from "../helpers/cityAdminAuth.js";
 import type * as issueAnalytics from "../issueAnalytics.js";
 import type * as issueDiscussions from "../issueDiscussions.js";
 import type * as issueUpdates from "../issueUpdates.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   fieldOfficers: typeof fieldOfficers;
   gamification: typeof gamification;
   gamificationAutomation: typeof gamificationAutomation;
+  "helpers/cityAdminAuth": typeof helpers_cityAdminAuth;
   issueAnalytics: typeof issueAnalytics;
   issueDiscussions: typeof issueDiscussions;
   issueUpdates: typeof issueUpdates;

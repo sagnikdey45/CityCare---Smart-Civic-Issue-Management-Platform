@@ -465,17 +465,25 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
                         onChange={() => setResolutionType("reject")}
                         className="text-red-500 focus:ring-red-500"
                       />
-                      Reject Issue
+                      Reject Escalation Response
                     </label>
                   )}
                 </div>
               </div>
 
+              {resolutionType === "reject" && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-semibold mb-3">
+                  This action does not reject or close the civic issue. The
+                  issue will keep its current operational status, and the
+                  escalation will remain open for further corrective action.
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
                   {resolutionType === "approve"
                     ? "Resolution Notes *"
-                    : "Rejection Reason *"}
+                    : "Reason for Rejecting the Escalation Response *"}
                 </label>
                 <textarea
                   value={notes}
@@ -483,7 +491,7 @@ function ActionModal({ issue, action, onClose, onActionConfirmed }) {
                   placeholder={
                     resolutionType === "approve"
                       ? "Provide details on how the escalation was resolved..."
-                      : "Provide the reason why this issue/escalation is being rejected..."
+                      : "Explain why the submitted corrective action or escalation response is insufficient and what further action is required."
                   }
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   rows={3}

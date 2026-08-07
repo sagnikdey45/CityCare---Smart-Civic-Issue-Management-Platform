@@ -464,10 +464,16 @@ export const extendIssueSla = mutation({
 export const reassignIssueOfficer = mutation({
   args: {
     issueId: v.id("issues"),
+    officerType: v.optional(
+      v.union(v.literal("unit_officer"), v.literal("field_officer")),
+    ),
+    newOfficerProfileId: v.optional(v.string()),
     newUnitOfficerId: v.optional(v.string()),
     newFieldOfficerId: v.optional(v.string()),
     notes: v.string(),
     adminId: v.string(),
+    confirmCrossCity: v.optional(v.boolean()),
+    confirmDepartmentMismatch: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
@@ -476,7 +482,6 @@ export const reassignIssueOfficer = mutation({
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
-    // Auto-log review if pending
     const currentStatus = issue.escalation?.adminReviewStatus;
     if (currentStatus === "pending" || !currentStatus) {
       await ctx.db.insert("escalationResolutionActions", {
@@ -488,19 +493,63 @@ export const reassignIssueOfficer = mutation({
       });
     }
 
-    const oldUo = issue.assignedUnitOfficer;
-    const oldFo = issue.assignedFieldOfficer;
+    const effectiveType =
+      args.officerType ||
+      (args.newUnitOfficerId
+        ? "unit_officer"
+        : args.newFieldOfficerId
+          ? "field_officer"
+          : null);
 
-    const patches = {};
-    let reassignedUo = false;
-    let reassignedFo = false;
+    if (effectiveType === "unit_officer") {
+      const candidateIdStr = args.newOfficerProfileId || args.newUnitOfficerId;
+      if (!candidateIdStr) throw new Error("Unit Officer selection required");
 
-    // Unit Officer reassignment
-    if (args.newUnitOfficerId && args.newUnitOfficerId !== oldUo) {
-      patches.assignedUnitOfficer = args.newUnitOfficerId;
-      reassignedUo = true;
+      let profile = await ctx.db.get(candidateIdStr).catch(() => null);
+      if (!profile) {
+        profile = await ctx.db
+          .query("unitOfficers")
+          .withIndex("by_user", (q) => q.eq("userId", candidateIdStr))
+          .unique();
+      }
+      if (!profile) throw new Error("Selected Unit Officer profile not found.");
 
-      // Clean up old UO workload
+      const officerUser = await ctx.db.get(profile.userId);
+      if (officerUser && officerUser.accountApproved === false) {
+        throw new Error("Selected Unit Officer account is not approved.");
+      }
+
+      if (
+        profile.city &&
+        issue.city &&
+        profile.city !== issue.city &&
+        !args.confirmCrossCity
+      ) {
+        return {
+          code: "CROSS_CITY_CONFIRMATION_REQUIRED",
+          message: `The selected officer belongs to ${profile.city}, while this issue belongs to ${issue.city}. Cross-city assignment confirmation is required.`,
+          officerCity: profile.city,
+          issueCity: issue.city,
+        };
+      }
+
+      const issueDept = issue.department || issue.category;
+      if (
+        profile.department &&
+        issueDept &&
+        profile.department !== issueDept &&
+        !args.confirmDepartmentMismatch
+      ) {
+        return {
+          code: "DEPARTMENT_MISMATCH_CONFIRMATION_REQUIRED",
+          message: `Issue Department: ${issueDept}. Selected Officer Department: ${profile.department}. Department mismatch confirmation is required.`,
+          officerDept: profile.department,
+          issueDept,
+        };
+      }
+
+      const oldUo = issue.assignedUnitOfficer;
+
       if (oldUo) {
         const oldUoProfile = await ctx.db
           .query("unitOfficers")
@@ -515,27 +564,98 @@ export const reassignIssueOfficer = mutation({
         }
       }
 
-      // Add to new UO workload
-      const newUoProfile = await ctx.db
-        .query("unitOfficers")
-        .withIndex("by_user", (q) => q.eq("userId", args.newUnitOfficerId))
-        .unique();
-      if (newUoProfile) {
-        await ctx.db.patch(newUoProfile._id, {
-          activeIssueIds: [
-            ...(newUoProfile.activeIssueIds || []),
-            args.issueId,
-          ],
-        });
+      await ctx.db.patch(profile._id, {
+        activeIssueIds: Array.from(
+          new Set([...(profile.activeIssueIds || []), args.issueId]),
+        ),
+      });
+
+      await ctx.db.patch(args.issueId, {
+        assignedUnitOfficer: profile.userId,
+        escalation: issue.escalation
+          ? {
+              ...issue.escalation,
+              adminReviewStatus:
+                issue.escalation.adminReviewStatus === "pending" ||
+                !issue.escalation.adminReviewStatus
+                  ? "reviewed"
+                  : issue.escalation.adminReviewStatus,
+            }
+          : undefined,
+      });
+
+      await ctx.db.insert("escalationResolutionActions", {
+        issueId: args.issueId,
+        actionType: "reassign_unit_officer",
+        performedBy: adminDbId,
+        performedAt: now,
+        oldValue: oldUo || "",
+        newValue: profile.userId,
+        notes: args.notes,
+      });
+
+      await ctx.db.insert("issueUpdates", {
+        issueId: args.issueId,
+        status: issue.status,
+        comment: `Unit Officer reassigned by System Admin to ${profile.fullName || officerUser?.fullName}. Notes: ${args.notes}`,
+        updatedBy: adminDbId,
+        role: "admin",
+        attachments: [],
+        scope: "officer_and_citizen",
+        createdAt: now,
+      });
+
+      return { success: true };
+    } else if (effectiveType === "field_officer") {
+      const candidateIdStr = args.newOfficerProfileId || args.newFieldOfficerId;
+      if (!candidateIdStr) throw new Error("Field Officer selection required");
+
+      let profile = await ctx.db.get(candidateIdStr).catch(() => null);
+      if (!profile) {
+        profile = await ctx.db
+          .query("fieldOfficers")
+          .withIndex("by_user", (q) => q.eq("userId", candidateIdStr))
+          .unique();
       }
-    }
+      if (!profile)
+        throw new Error("Selected Field Officer profile not found.");
 
-    // Field Officer reassignment
-    if (args.newFieldOfficerId && args.newFieldOfficerId !== oldFo) {
-      patches.assignedFieldOfficer = args.newFieldOfficerId;
-      reassignedFo = true;
+      const officerUser = await ctx.db.get(profile.userId);
+      if (officerUser && officerUser.accountApproved === false) {
+        throw new Error("Selected Field Officer account is not approved.");
+      }
 
-      // Clean up old FO workload
+      if (
+        profile.city &&
+        issue.city &&
+        profile.city !== issue.city &&
+        !args.confirmCrossCity
+      ) {
+        return {
+          code: "CROSS_CITY_CONFIRMATION_REQUIRED",
+          message: `The selected officer belongs to ${profile.city}, while this issue belongs to ${issue.city}. Cross-city assignment confirmation is required.`,
+          officerCity: profile.city,
+          issueCity: issue.city,
+        };
+      }
+
+      const issueDept = issue.department || issue.category;
+      if (
+        profile.department &&
+        issueDept &&
+        profile.department !== issueDept &&
+        !args.confirmDepartmentMismatch
+      ) {
+        return {
+          code: "DEPARTMENT_MISMATCH_CONFIRMATION_REQUIRED",
+          message: `Issue Department: ${issueDept}. Selected Officer Department: ${profile.department}. Department mismatch confirmation is required.`,
+          officerDept: profile.department,
+          issueDept,
+        };
+      }
+
+      const oldFo = issue.assignedFieldOfficer;
+
       if (oldFo) {
         const oldFoProfile = await ctx.db
           .query("fieldOfficers")
@@ -552,54 +672,42 @@ export const reassignIssueOfficer = mutation({
         }
       }
 
-      // Add to new FO workload
-      const newFoProfile = await ctx.db
-        .query("fieldOfficers")
-        .withIndex("by_user", (q) => q.eq("userId", args.newFieldOfficerId))
-        .unique();
-      if (newFoProfile) {
-        const assigned = [
-          ...(newFoProfile.assignedIssueIds || []),
-          args.issueId,
-        ];
-        await ctx.db.patch(newFoProfile._id, {
-          assignedIssueIds: assigned,
-          currentActiveIssues: assigned.length,
-        });
-      }
-    }
+      const assigned = Array.from(
+        new Set([...(profile.assignedIssueIds || []), args.issueId]),
+      );
+      await ctx.db.patch(profile._id, {
+        assignedIssueIds: assigned,
+        currentActiveIssues: assigned.length,
+      });
 
-    if (Object.keys(patches).length > 0) {
-      patches.escalation = issue.escalation
-        ? {
-            ...issue.escalation,
-            adminReviewStatus:
-              !issue.escalation.adminReviewStatus ||
-              issue.escalation.adminReviewStatus === "pending"
-                ? "reviewed"
-                : issue.escalation.adminReviewStatus,
-          }
-        : undefined;
-
-      await ctx.db.patch(args.issueId, patches);
+      await ctx.db.patch(args.issueId, {
+        assignedFieldOfficer: profile.userId,
+        escalation: issue.escalation
+          ? {
+              ...issue.escalation,
+              adminReviewStatus:
+                issue.escalation.adminReviewStatus === "pending" ||
+                !issue.escalation.adminReviewStatus
+                  ? "reviewed"
+                  : issue.escalation.adminReviewStatus,
+            }
+          : undefined,
+      });
 
       await ctx.db.insert("escalationResolutionActions", {
         issueId: args.issueId,
-        actionType: "reassign_officer",
+        actionType: "reassign_field_officer",
         performedBy: adminDbId,
         performedAt: now,
-        oldValue: JSON.stringify({ uo: oldUo, fo: oldFo }),
-        newValue: JSON.stringify({
-          uo: args.newUnitOfficerId || oldUo,
-          fo: args.newFieldOfficerId || oldFo,
-        }),
+        oldValue: oldFo || "",
+        newValue: profile.userId,
         notes: args.notes,
       });
 
       await ctx.db.insert("issueUpdates", {
         issueId: args.issueId,
         status: issue.status,
-        comment: `Officer reassigned by Admin. Notes: ${args.notes}`,
+        comment: `Field Officer reassigned by System Admin to ${profile.fullName || officerUser?.fullName}. Notes: ${args.notes}`,
         updatedBy: adminDbId,
         role: "admin",
         attachments: [],
@@ -607,43 +715,10 @@ export const reassignIssueOfficer = mutation({
         createdAt: now,
       });
 
-      // Send notifications to new officers
-      if (reassignedUo && args.newUnitOfficerId) {
-        await ctx.db.insert("notifications", {
-          userId: args.newUnitOfficerId,
-          issueId: args.issueId,
-          title: `Reassigned Issue - "${issue.title}"`,
-          message: `You have been reassigned as Unit Officer for verification. Notes: ${args.notes}`,
-          type: "officer_reassigned",
-          read: false,
-          createdAt: now,
-        });
-      }
-      if (reassignedFo && args.newFieldOfficerId) {
-        await ctx.db.insert("notifications", {
-          userId: args.newFieldOfficerId,
-          issueId: args.issueId,
-          title: `Reassigned Resolution - "${issue.title}"`,
-          message: `You have been reassigned as Field Officer for resolution. Notes: ${args.notes}`,
-          type: "officer_reassigned",
-          read: false,
-          createdAt: now,
-        });
-      }
-
-      // Notify citizen
-      await ctx.db.insert("notifications", {
-        userId: issue.reportedBy,
-        issueId: args.issueId,
-        title: `Oversight Officers Updated - "${issue.title}"`,
-        message: `Admin has reassigned officers responsible for resolving your reported issue.`,
-        type: "officer_reassigned",
-        read: false,
-        createdAt: now,
-      });
+      return { success: true };
     }
 
-    return { success: true };
+    throw new Error("Invalid officer type specified for reassignment.");
   },
 });
 
@@ -661,20 +736,11 @@ export const changeIssueCategory = mutation({
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
-    // Auto-log review if pending
-    const currentStatus = issue.escalation?.adminReviewStatus;
-    if (currentStatus === "pending" || !currentStatus) {
-      await ctx.db.insert("escalationResolutionActions", {
-        issueId: args.issueId,
-        actionType: "review_escalation",
-        performedBy: adminDbId,
-        performedAt: now,
-        notes: "Escalation reviewed automatically during resolution.",
-      });
-    }
+    const oldCategory = issue.category;
 
     await ctx.db.patch(args.issueId, {
       category: args.newCategory,
+      department: args.newCategory,
       escalation: issue.escalation
         ? {
             ...issue.escalation,
@@ -692,7 +758,7 @@ export const changeIssueCategory = mutation({
       actionType: "change_category",
       performedBy: adminDbId,
       performedAt: now,
-      oldValue: issue.category,
+      oldValue: oldCategory,
       newValue: args.newCategory,
       notes: args.notes,
     });
@@ -700,7 +766,7 @@ export const changeIssueCategory = mutation({
     await ctx.db.insert("issueUpdates", {
       issueId: args.issueId,
       status: issue.status,
-      comment: `Department category changed from "${issue.category}" to "${args.newCategory}". Notes: ${args.notes}`,
+      comment: `Category changed from "${oldCategory}" to "${args.newCategory}". Notes: ${args.notes}`,
       updatedBy: adminDbId,
       role: "admin",
       attachments: [],
@@ -725,21 +791,14 @@ export const approveEscalation = mutation({
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
-    // Auto-log review if pending
-    const currentStatus = issue.escalation?.adminReviewStatus;
-    if (currentStatus === "pending" || !currentStatus) {
-      await ctx.db.insert("escalationResolutionActions", {
-        issueId: args.issueId,
-        actionType: "review_escalation",
-        performedBy: adminDbId,
-        performedAt: now,
-        notes: "Escalation reviewed automatically during resolution.",
-      });
-    }
+    const targetStatus =
+      issue.status === "escalated"
+        ? issue.escalation?.prevIssueStatus || "in_progress"
+        : issue.status;
 
     await ctx.db.patch(args.issueId, {
+      status: targetStatus,
       escalatedToAdmin: false,
-      status: issue.escalation ? issue.escalation.prevIssueStatus : "verified", // Return back to verified state or active resolution state
       escalation: issue.escalation
         ? {
             ...issue.escalation,
@@ -761,8 +820,8 @@ export const approveEscalation = mutation({
 
     await ctx.db.insert("issueUpdates", {
       issueId: args.issueId,
-      status: "verified",
-      comment: `Escalation approved and resolved. Resolution: ${args.notes}`,
+      status: targetStatus,
+      comment: `Escalation approved and resolved by System Admin. Resolution: ${args.notes}`,
       updatedBy: adminDbId,
       role: "admin",
       attachments: [],
@@ -770,12 +829,11 @@ export const approveEscalation = mutation({
       createdAt: now,
     });
 
-    // Notify Citizen & Officers
-    const parties = [issue.reportedBy];
-    if (issue.assignedUnitOfficer) parties.push(issue.assignedUnitOfficer);
-    if (issue.assignedFieldOfficer) parties.push(issue.assignedFieldOfficer);
-
-    for (const p of parties) {
+    const notifyUsers = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+    ].filter(Boolean);
+    for (const p of notifyUsers) {
       await ctx.db.insert("notifications", {
         userId: p,
         issueId: args.issueId,
@@ -799,56 +857,49 @@ export const rejectEscalation = mutation({
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
-    if (!issue) throw new Error("Issue not found");
+    if (!issue) throw new Error("Issue not found.");
+    if (!issue.escalation) {
+      throw new Error("This issue does not have an active escalation.");
+    }
+
+    const reason = args.reason.trim();
+    if (!reason) {
+      throw new Error(
+        "A reason for rejecting the escalation response is required.",
+      );
+    }
 
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
-    // Auto-log review if pending
-    const currentStatus = issue.escalation?.adminReviewStatus;
-    if (currentStatus === "pending" || !currentStatus) {
-      await ctx.db.insert("escalationResolutionActions", {
-        issueId: args.issueId,
-        actionType: "review_escalation",
-        performedBy: adminDbId,
-        performedAt: now,
-        notes: "Escalation reviewed automatically during resolution.",
-      });
-    }
-
-    // Rejecting the escalation resolves it but sets the issue status to rejected
     await ctx.db.patch(args.issueId, {
-      status: "rejected",
-      rejection: {
-        reason: "Escalation Rejected",
-        comment: args.reason,
-        rejectedBy: adminDbId,
-        rejectedAt: now,
+      escalatedToAdmin: true,
+      escalation: {
+        ...issue.escalation,
+        resolved: false,
+        resolvedAt: undefined,
+        resolutionNote: undefined,
+        adminReviewStatus: "reviewed",
+        responseRejectedAt: now,
+        responseRejectedBy: adminDbId,
+        responseRejectionReason: reason,
       },
-      escalatedToAdmin: false,
-      escalation: issue.escalation
-        ? {
-            ...issue.escalation,
-            resolved: true,
-            resolvedAt: now,
-            resolutionNote: args.reason,
-            adminReviewStatus: "resolved",
-          }
-        : undefined,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
       issueId: args.issueId,
-      actionType: "reject_escalation",
+      actionType: "reject_escalation_response",
       performedBy: adminDbId,
       performedAt: now,
-      notes: args.reason,
+      oldValue: issue.escalation.adminReviewStatus || "pending",
+      newValue: "reviewed",
+      notes: reason,
     });
 
     await ctx.db.insert("issueUpdates", {
       issueId: args.issueId,
-      status: "rejected",
-      comment: `Escalation rejected by admin. Issue rejected. Reason: ${args.reason}`,
+      status: issue.status,
+      comment: `Escalation response rejected by System Admin. Further corrective action is required. Reason: ${reason}`,
       updatedBy: adminDbId,
       role: "admin",
       attachments: [],
@@ -856,24 +907,27 @@ export const rejectEscalation = mutation({
       createdAt: now,
     });
 
-    // Notify Reporter and Assigned Officers
-    const parties = [issue.reportedBy];
-    if (issue.assignedUnitOfficer) parties.push(issue.assignedUnitOfficer);
-    if (issue.assignedFieldOfficer) parties.push(issue.assignedFieldOfficer);
-
-    for (const p of parties) {
+    const notifyUsers = [
+      issue.assignedUnitOfficer,
+      issue.assignedFieldOfficer,
+    ].filter(Boolean);
+    for (const p of notifyUsers) {
       await ctx.db.insert("notifications", {
         userId: p,
         issueId: args.issueId,
-        title: `Escalation Rejected - "${issue.title}"`,
-        message: `The escalation has been rejected and the issue has been marked rejected. Reason: ${args.reason}`,
-        type: "escalation_rejected",
+        title: "Further Escalation Action Required",
+        message: `The submitted response for escalation on issue ${issue.code || issue.ticket_id || issue.title} was not accepted. Further corrective action is required. Reason: ${reason}`,
+        type: "assigned",
         read: false,
         createdAt: now,
       });
     }
 
-    return { success: true };
+    return {
+      success: true,
+      issueStatus: issue.status,
+      escalationStatus: "reviewed",
+    };
   },
 });
 

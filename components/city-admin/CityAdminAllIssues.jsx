@@ -2828,7 +2828,11 @@ export default function CityAdminAllIssues({ cityAdminUserId, onSelectIssue }) {
                               <div className="flex items-center justify-center py-6">
                                 <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
                               </div>
-                            ) : assignmentCandidates.length === 0 ? (
+                            ) : (
+                                assignmentCandidates?.candidates ??
+                                assignmentCandidates ??
+                                []
+                              ).length === 0 ? (
                               <div className="text-center py-4 text-xs text-slate-400">
                                 No active officers in{" "}
                                 {scope?.city || "your city"} matching
@@ -2836,7 +2840,11 @@ export default function CityAdminAllIssues({ cityAdminUserId, onSelectIssue }) {
                               </div>
                             ) : (
                               <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                                {assignmentCandidates.map((cand) => {
+                                {(
+                                  assignmentCandidates?.candidates ??
+                                  assignmentCandidates ??
+                                  []
+                                ).map((cand) => {
                                   const progress =
                                     (cand.currentWorkload /
                                       cand.maximumCapacity) *

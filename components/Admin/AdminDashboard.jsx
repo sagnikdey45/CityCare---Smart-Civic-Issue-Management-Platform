@@ -32,7 +32,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { api } from "@/convex/_generated/api";
 import { AdminIssueModal } from "./AdminIssueModal";
 import { AdminMessageModal } from "./AdminMessageModal";
@@ -1504,14 +1504,6 @@ export function AdminDashboard() {
       ) ?? null)
     : null;
 
-  async function handleSignOut() {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  }
-
   const tabBtn = (tab, icon, label) => (
     <button
       onClick={() => setActiveTab(tab)}
@@ -1589,7 +1581,9 @@ export function AdminDashboard() {
                   {(profile?.full_name || "A").charAt(0).toUpperCase()}
                 </div>
                 <button
-                  onClick={handleSignOut}
+                  onClick={() =>
+                    signOut({ redirect: true, callbackUrl: "/staff/sign-in" })
+                  }
                   className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all"
                   title="Sign Out"
                 >

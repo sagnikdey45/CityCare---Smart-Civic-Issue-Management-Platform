@@ -1,844 +1,787 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import {
-  AlertTriangle,
   Clock,
+  AlertTriangle,
+  CheckCircle,
   Search,
-  Calendar,
-  MapPin,
+  Shield,
   Activity,
-  Zap,
-  Eye,
-  Download,
+  ArrowUpRight,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { CityAdminEscalationResolutionModal } from "./CityAdminEscalationResolutionModal";
+import { ISSUE_CATEGORIES } from "@/lib/issueClassificationConfig";
 
-const CATEGORY_STYLES = {
-  road: { label: "Road", color: "text-orange-500", bg: "bg-orange-500/10" },
-  electricity: {
-    label: "Electricity",
-    color: "text-yellow-500",
-    bg: "bg-yellow-500/10",
-  },
-  water: { label: "Water", color: "text-sky-500", bg: "bg-sky-500/10" },
-  sanitation: {
-    label: "Sanitation",
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10",
-  },
-  drainage: { label: "Drainage", color: "text-teal-500", bg: "bg-teal-500/10" },
-  solid_waste: {
-    label: "Solid Waste",
-    color: "text-lime-500",
-    bg: "bg-lime-500/10",
-  },
-  public_health: {
-    label: "Public Health",
-    color: "text-rose-500",
-    bg: "bg-rose-500/10",
-  },
-  other: { label: "Other", color: "text-slate-500", bg: "bg-slate-500/10" },
-};
+export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
+  const [isMounted, setIsMounted] = useState(false);
 
-const PRIORITY_STYLES = {
-  critical:
-    "bg-red-100 text-red-750 dark:bg-red-950/30 dark:text-red-400 border-red-205",
-  high: "bg-orange-100 text-orange-755 dark:bg-orange-950/30 dark:text-orange-400 border-orange-205",
-  medium:
-    "bg-blue-100 text-blue-755 dark:bg-blue-950/30 dark:text-blue-400 border-blue-205",
-  low: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border-slate-205",
-};
-
-export default function CityAdminSLAMonitoringDashboard({
-  cityAdminUserId,
-  onViewIssue,
-}) {
-  const [searchValue, setSearchValue] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-
-  // Filters
+  // Search & Filter States
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [slaFilter, setSlaFilter] = useState("all");
-  const [escalationFilter, setEscalationFilter] = useState("all");
-  const [assignmentFilter, setAssignmentFilter] = useState("all");
+  const [slaStatusFilter, setSlaStatusFilter] = useState("all");
+  const [escalationStatusFilter, setEscalationStatusFilter] = useState("all");
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState("all");
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
-
   const [sortBy, setSortBy] = useState("deadline");
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(15);
 
-  // Row selection & Bulk actions
-  const [selectedRowIds, setSelectedRowIds] = useState([]);
-  const [bulkActionType, setBulkActionType] = useState("send_reminder");
-  const [bulkReason, setBulkReason] = useState("");
-  const [bulkPriority, setBulkPriority] = useState("low");
-  const [bulkDepartment, setBulkDepartment] = useState("");
-  const [bulkStatusText, setBulkStatusText] = useState("");
-  const [bulkLoading, setBulkLoading] = useState(false);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
-  // Active resolution dialog issue
-  const [selectedIssue, setSelectedIssue] = useState(null);
+  // Modals & Drawers
+  const [activeControlIssueId, setActiveControlIssueId] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
 
-  // Search debounce timer
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchValue);
-      setPage(1);
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [searchValue]);
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
-  // Reactive scoped query for city admin only
-  const queryResult = useQuery(api.slaMonitoring.getScopedSLAMonitoringData, {
+  // Fetch Scoped SLA Monitoring Data
+  const data = useQuery(api.slaMonitoring.getScopedSLAMonitoringData, {
     cityAdminUserId,
-    search: debouncedSearch,
+    search: searchTerm || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
     priority: priorityFilter !== "all" ? priorityFilter : undefined,
-    slaStatus: slaFilter !== "all" ? slaFilter : undefined,
-    escalationStatus: escalationFilter !== "all" ? escalationFilter : undefined,
-    assignmentStatus: assignmentFilter !== "all" ? assignmentFilter : undefined,
+    slaStatus: slaStatusFilter !== "all" ? slaStatusFilter : undefined,
+    escalationStatus:
+      escalationStatusFilter !== "all" ? escalationStatusFilter : undefined,
+    assignmentStatus:
+      assignmentStatusFilter !== "all" ? assignmentStatusFilter : undefined,
     dateRange: dateRangeFilter !== "all" ? dateRangeFilter : undefined,
     sortBy,
-    page,
+    page: currentPage,
     pageSize,
   });
 
-  // Safe mutations
-  const bulkUpdateMut = useMutation(api.cityAdmin.bulkUpdateIssues);
-  const bulkAckMut = useMutation(api.slaMonitoring.bulkAcknowledgeEscalations);
+  const isDataLoading = data === undefined;
+  const cityInfo = data?.cityInfo ??
+    data?.scope ?? { city: "Scope", state: "" };
+  const rawMetrics = data?.metrics ?? data?.summary ?? {};
 
-  const scope = queryResult?.scope || { mode: "city", city: "", state: "" };
-  const summary = queryResult?.summary || {
-    totalIssues: 0,
-    monitoredIssues: 0,
-    breached: 0,
-    atRisk: 0,
-    dueSoon: 0,
-    onTrack: 0,
-    noDeadline: 0,
-    escalated: 0,
-    pendingAdminReview: 0,
-    resolvedEscalations: 0,
-    averageResolutionHours: 0,
-    complianceRate: 100,
+  const metrics = {
+    totalIssues: rawMetrics.totalIssues ?? 0,
+    activeIssues: rawMetrics.activeIssues ?? rawMetrics.monitoredIssues ?? 0,
+    monitoredIssues:
+      rawMetrics.monitoredIssues ?? rawMetrics.monitoredCount ?? 0,
+    complianceRate: rawMetrics.complianceRate ?? 0,
+
+    breachedCount: rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
+    atRiskCount: rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0,
+    dueSoonCount: rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0,
+    onTrackCount: rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0,
+    noDeadlineCount: rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
+
+    escalatedCount: rawMetrics.escalatedCount ?? rawMetrics.escalated ?? 0,
+    pendingReviewCount:
+      rawMetrics.pendingReviewCount ?? rawMetrics.pendingAdminReview ?? 0,
+    reviewedEscalationCount:
+      rawMetrics.reviewedEscalationCount ?? rawMetrics.reviewedEscalations ?? 0,
+    resolvedEscalationCount:
+      rawMetrics.resolvedEscalationCount ?? rawMetrics.resolvedEscalations ?? 0,
+
+    slaStatusDistribution: rawMetrics.slaStatusDistribution ?? {
+      breached: rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
+      at_risk: rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0,
+      due_soon: rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0,
+      on_track: rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0,
+      no_deadline: rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
+    },
   };
-  const issues = queryResult?.issues || [];
-  const analytics = queryResult?.escalationAnalytics || {
-    byCategory: [],
-    byDepartment: [],
-    mostDelayed: [],
-    unresolvedCritical: [],
-  };
-  const pagination = queryResult?.pagination || {
+
+  const issues = data?.issues ?? [];
+  const pagination = data?.pagination ?? {
     page: 1,
-    pageSize: 15,
+    pageSize: 10,
     totalItems: 0,
     totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
   };
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedRowIds(issues.map((i) => i.id));
-    } else {
-      setSelectedRowIds([]);
-    }
+  // Derive latest reactive issue object for drawer
+  const activeControlIssue =
+    issues.find((i) => i.id === activeControlIssueId) || null;
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const handleSelectRow = (id) => {
-    setSelectedRowIds((prev) =>
-      prev.includes(id) ? prev.filter((rid) => rid !== id) : [...prev, id],
-    );
-  };
-
-  const handleBulkAction = async () => {
-    if (selectedRowIds.length === 0) return;
-    if (!bulkReason.trim()) {
-      alert("A justification reason is required for bulk action.");
-      return;
-    }
-
-    setBulkLoading(true);
-    setBulkStatusText("Processing bulk updates...");
-    try {
-      if (bulkActionType === "acknowledge") {
-        setBulkStatusText("Acknowledging escalations...");
-        const res = await bulkAckMut({
-          cityAdminUserId: cityAdminUserId,
-          issueIds: selectedRowIds,
-          note: bulkReason,
-        });
-        alert(
-          `Bulk acknowledgment completed. Success: ${res.successfulIssueIds.length}, Skipped: ${res.skippedIssues.length}`,
-        );
-      } else {
-        setBulkStatusText("Applying bulk updates...");
-        const res = await bulkUpdateMut({
-          cityAdminUserId: cityAdminUserId,
-          issueIds: selectedRowIds,
-          actionType: bulkActionType,
-          priority:
-            bulkActionType === "change_priority" ? bulkPriority : undefined,
-          department:
-            bulkActionType === "assign_department" ? bulkDepartment : undefined,
-          reason: bulkReason,
-        });
-        alert(
-          `Bulk updates completed. Success: ${res.successfulIssueIds.length}, Skipped: ${res.skippedIssues.length}`,
-        );
-      }
-      setSelectedRowIds([]);
-      setBulkReason("");
-    } catch (e) {
-      console.error(e);
-      alert("Bulk action failed: " + e.message);
-    } finally {
-      setBulkLoading(false);
-      setBulkStatusText("");
-    }
-  };
-
-  const handleExportCSV = () => {
-    if (issues.length === 0) return;
-
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent +=
-      "Issue Code,Title,Category,Status,Priority,City,Unit Officer,Field Officer,SLA Deadline,SLA Status,Escalated,Escalation Category,Escalation Priority,Admin Review Status\n";
-
-    issues.forEach((i) => {
-      const row = [
-        i.ticket_id,
-        `"${i.title.replace(/"/g, '""')}"`,
-        i.category,
-        i.status,
-        i.severity,
-        i.city,
-        i.assigned_officer?.name || "None",
-        i.field_officer?.name || "None",
-        i.sla_deadline ? new Date(i.sla_deadline).toISOString() : "None",
-        i.sla_status,
-        i.is_escalated ? "Yes" : "No",
-        i.escalation_category || "None",
-        i.escalation_priority || "None",
-        i.escalation_admin_review_status,
-      ].join(",");
-      csvContent += row + "\n";
+  // Active filter chips
+  const activeChips = [];
+  if (searchTerm)
+    activeChips.push({ key: "search", label: `Search: "${searchTerm}"` });
+  if (statusFilter !== "all")
+    activeChips.push({ key: "status", label: `Status: ${statusFilter}` });
+  if (categoryFilter !== "all")
+    activeChips.push({ key: "category", label: `Category: ${categoryFilter}` });
+  if (priorityFilter !== "all")
+    activeChips.push({ key: "priority", label: `Priority: ${priorityFilter}` });
+  if (slaStatusFilter !== "all")
+    activeChips.push({ key: "slaStatus", label: `SLA: ${slaStatusFilter}` });
+  if (escalationStatusFilter !== "all")
+    activeChips.push({
+      key: "escalationStatus",
+      label: `Escalation: ${escalationStatusFilter}`,
     });
+  if (assignmentStatusFilter !== "all")
+    activeChips.push({
+      key: "assignmentStatus",
+      label: `Assignment: ${assignmentStatusFilter}`,
+    });
+  if (dateRangeFilter !== "all")
+    activeChips.push({ key: "dateRange", label: `Date: ${dateRangeFilter}` });
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `SLA_Monitor_Export_${scope.city || "city"}.csv`,
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const removeChip = (key) => {
+    if (key === "search") setSearchTerm("");
+    if (key === "status") setStatusFilter("all");
+    if (key === "category") setCategoryFilter("all");
+    if (key === "priority") setPriorityFilter("all");
+    if (key === "slaStatus") setSlaStatusFilter("all");
+    if (key === "escalationStatus") setEscalationStatusFilter("all");
+    if (key === "assignmentStatus") setAssignmentStatusFilter("all");
+    if (key === "dateRange") setDateRangeFilter("all");
   };
 
-  const getUrgencyRowClass = (item) => {
-    const isCritical = item.severity === "critical";
-    const isBreached = item.sla_status === "breached";
-    const isAtRisk = item.sla_status === "at_risk";
-    const isDueSoon = item.sla_status === "due_soon";
-    const isEscalated = item.is_escalated;
-
-    if (isCritical && isBreached) return "border-l-[5px] border-l-red-650";
-    if (isBreached) return "border-l-[4px] border-l-rose-500";
-    if (isAtRisk) return "border-l-[4px] border-l-amber-500";
-    if (isDueSoon) return "border-l-[4px] border-l-yellow-400";
-    if (isEscalated) return "border-l-[4px] border-l-purple-500";
-    if (item.sla_status === "on_track")
-      return "border-l-[4px] border-l-emerald-500";
-    return "border-l-[4px] border-l-slate-300";
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setPriorityFilter("all");
+    setSlaStatusFilter("all");
+    setEscalationStatusFilter("all");
+    setAssignmentStatusFilter("all");
+    setDateRangeFilter("all");
   };
 
-  // Safe SLA distribution calculation
-  const totalMonitored =
-    summary.breached + summary.dueSoon + summary.atRisk + summary.onTrack;
-  const safePercentage = (count) =>
-    totalMonitored > 0
-      ? Number(((count / totalMonitored) * 100).toFixed(1))
-      : 0;
-
-  const onTrackPercent = safePercentage(summary.onTrack);
-  const dueSoonPercent = safePercentage(summary.dueSoon);
-  const atRiskPercent = safePercentage(summary.atRisk);
-  const breachedPercent = safePercentage(summary.breached);
-
-  if (queryResult === undefined) {
-    // Skeletons
-    return (
-      <div className="space-y-6 p-6 animate-pulse">
-        <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-3xl" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-24 bg-slate-100 dark:bg-slate-800 rounded-2xl"
-            />
-          ))}
-        </div>
-        <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-3xl" />
-      </div>
-    );
-  }
+  if (!isMounted) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Advanced Page Header */}
-      <div className="bg-gradient-to-r from-cyan-600 to-blue-700 dark:from-slate-900/60 dark:to-slate-800/40 text-white rounded-3xl p-6 shadow-sm relative overflow-hidden border border-cyan-500/25">
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="space-y-1">
-            <h2 className="text-xl font-black tracking-tight uppercase flex items-center gap-2">
-              <Clock size={22} className="animate-spin-slow" />
-              SLA Operations & Escalation Control
-            </h2>
-            <p className="text-xs text-slate-100 dark:text-slate-350 leading-relaxed font-semibold">
-              Monitor deadlines, identify risk, and coordinate administrative
-              intervention across {scope.city || "your city"}.
-            </p>
-            <p className="text-[10px] bg-white/20 dark:bg-slate-850 px-2 py-0.5 rounded font-black tracking-wider uppercase text-teal-200 mt-1 inline-block">
-              Administrative Scope: {scope.city}, {scope.state}
+    <div className="space-y-8 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto min-h-screen text-slate-900 dark:text-slate-100 font-sans text-xs">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-[250] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700 animate-slideUp font-bold text-xs">
+          <CheckCircle2 size={16} className="text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-cyan-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-800">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-300 rounded-full font-mono text-[10px] font-black uppercase tracking-wider border border-cyan-500/30">
+                {cityInfo.city}, {cityInfo.state} (City Scope)
+              </span>
+              <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-[10px] font-black uppercase tracking-wider border border-purple-500/30">
+                SLA Operational Dashboard
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              City SLA & Escalation Governance Hub
+            </h1>
+            <p className="text-slate-300 text-xs mt-1 font-medium max-w-2xl leading-relaxed">
+              Real-time SLA monitoring, officer workload balancing, and
+              escalation resolution control strictly enforced for municipal
+              issues in {cityInfo.city}.
             </p>
           </div>
-          <div className="flex gap-2">
+
+          <div className="flex items-center gap-3">
             <button
-              onClick={handleExportCSV}
-              className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors border border-white/20"
+              type="button"
+              onClick={() => showToast("SLA data refreshed.")}
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl font-extrabold text-xs transition-all flex items-center gap-2 border border-white/20 text-white cursor-pointer"
             >
-              <Download size={14} />
-              Export CSV
+              <RefreshCw size={14} />
+              <span>Refresh</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: "SLA Compliance",
-            value: `${summary.complianceRate}%`,
-            subText: "Resolved on-time target",
-            color: "text-emerald-500",
-          },
-          {
-            label: "Breached SLA",
-            value: summary.breached,
-            subText: "Immediate intervention required",
-            color: "text-red-500",
-          },
-          {
-            label: "At Risk",
-            value: summary.atRisk,
-            subText: "Deadline under 24 hours",
-            color: "text-amber-500",
-          },
-          {
-            label: "Escalated Issues",
-            value: summary.escalated,
-            subText: "Under active review",
-            color: "text-purple-500",
-          },
-        ].map((k, idx) => (
-          <div
-            key={idx}
-            className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-150 dark:border-slate-700/60 shadow-sm space-y-1"
-          >
-            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">
-              {k.label}
-            </span>
-            <span
-              className={`text-2xl font-black block tracking-tight ${k.color}`}
-            >
-              {k.value}
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium block">
-              {k.subText}
+      {/* Summary KPI Cards Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        {/* Compliance Rate */}
+        <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-3xl text-white shadow-md flex flex-col justify-between">
+          <span className="text-[10px] font-black uppercase text-cyan-100 tracking-wider">
+            SLA Compliance
+          </span>
+          <div className="my-2">
+            <span className="text-2xl sm:text-3xl font-black">
+              {isDataLoading
+                ? "—"
+                : metrics.monitoredIssues > 0
+                  ? `${metrics.complianceRate}%`
+                  : "N/A"}
             </span>
           </div>
-        ))}
+          <span className="text-[10px] font-medium text-cyan-100">
+            {isDataLoading
+              ? "Loading..."
+              : `${metrics.monitoredIssues} Active Monitored`}
+          </span>
+        </div>
+
+        {/* Breached SLA */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-rose-500">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              SLA Breached
+            </span>
+            <AlertTriangle size={16} />
+          </div>
+          <span className="text-2xl font-black text-rose-600 dark:text-rose-400 my-1">
+            {isDataLoading ? "—" : metrics.breachedCount}
+          </span>
+          <span className="text-[10px] text-slate-400 font-semibold">
+            Overdue Target
+          </span>
+        </div>
+
+        {/* At Risk SLA */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-amber-500">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              At Risk (24–48h)
+            </span>
+            <Clock size={16} />
+          </div>
+          <span className="text-2xl font-black text-amber-600 dark:text-amber-400 my-1">
+            {isDataLoading ? "—" : metrics.atRiskCount}
+          </span>
+          <span className="text-[10px] text-slate-400 font-semibold">
+            Expiring Soon
+          </span>
+        </div>
+
+        {/* Due Soon */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-yellow-500">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Due Soon (≤24h)
+            </span>
+            <Clock size={16} />
+          </div>
+          <span className="text-2xl font-black text-yellow-600 dark:text-yellow-400 my-1">
+            {isDataLoading ? "—" : metrics.dueSoonCount}
+          </span>
+          <span className="text-[10px] text-slate-400 font-semibold">
+            Immediate Action
+          </span>
+        </div>
+
+        {/* Active Escalations */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-purple-500">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Escalated
+            </span>
+            <ArrowUpRight size={16} />
+          </div>
+          <span className="text-2xl font-black text-purple-600 dark:text-purple-400 my-1">
+            {isDataLoading ? "—" : metrics.escalatedCount}
+          </span>
+          <span className="text-[10px] text-purple-500 font-bold">
+            {isDataLoading
+              ? "Loading..."
+              : `${metrics.pendingReviewCount} Pending Review`}
+          </span>
+        </div>
+
+        {/* On Track */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-emerald-500">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              On Track
+            </span>
+            <CheckCircle size={16} />
+          </div>
+          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 my-1">
+            {isDataLoading ? "—" : metrics.onTrackCount}
+          </span>
+          <span className="text-[10px] text-slate-400 font-semibold">
+            Healthy Resolution
+          </span>
+        </div>
       </div>
 
-      {/* SLA Health Distribution Strip */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/60 shadow-sm space-y-3">
-        <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-555 tracking-wider">
-          <span>SLA Health Distribution Bar</span>
-          <span>{totalMonitored} Monitored Targets</span>
-        </div>
-        <div className="flex h-3.5 rounded-full overflow-hidden w-full bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80">
-          <div
-            style={{ width: `${onTrackPercent}%` }}
-            className="bg-emerald-500 transition-all"
-            title={`On Track: ${onTrackPercent}%`}
-          />
-          <div
-            style={{ width: `${dueSoonPercent}%` }}
-            className="bg-yellow-400 transition-all"
-            title={`Due Soon: ${dueSoonPercent}%`}
-          />
-          <div
-            style={{ width: `${atRiskPercent}%` }}
-            className="bg-amber-500 transition-all"
-            title={`At Risk: ${atRiskPercent}%`}
-          />
-          <div
-            style={{ width: `${breachedPercent}%` }}
-            className="bg-red-500 transition-all"
-            title={`Breached: ${breachedPercent}%`}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] font-bold text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-emerald-500 rounded" /> On Track (
-            {onTrackPercent}%)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-yellow-400 rounded" /> Due Soon (
-            {dueSoonPercent}%)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-amber-500 rounded" /> At Risk (
-            {atRiskPercent}%)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-red-500 rounded" /> Breached (
-            {breachedPercent}%)
-          </span>
-        </div>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/60 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="relative">
+      {/* Filter and Control Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-5 space-y-4 shadow-sm">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               size={16}
             />
             <input
               type="text"
-              placeholder="Search code, title, address..."
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+              placeholder="Search by ticket code, title, citizen, or officer name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-extrabold text-[10px] uppercase">
+              Filter Options
+            </span>
+          </div>
+        </div>
+
+        {/* Dropdowns Filter Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {/* Status */}
           <select
-            value={slaFilter}
-            onChange={(e) => setSlaFilter(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer"
           >
-            <option value="all">All SLA Health States</option>
-            <option value="on_track">On Track</option>
-            <option value="due_soon">Due Soon</option>
-            <option value="at_risk">At Risk</option>
-            <option value="breached">Breached</option>
-            <option value="no_deadline">No Deadline</option>
+            <option value="all">All Operational Statuses</option>
+            <option value="reported">Reported</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="pending_uo_verification">
+              Pending Verification
+            </option>
+            <option value="escalated">Escalated</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
           </select>
 
-          <select
-            value={escalationFilter}
-            onChange={(e) => setEscalationFilter(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <option value="all">All Escalations</option>
-            <option value="escalated">Active Escalations</option>
-            <option value="pending">Pending Review</option>
-            <option value="resolved">Resolved Escalations</option>
-          </select>
-
+          {/* Category */}
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500 capitalize"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer capitalize"
           >
             <option value="all">All Categories</option>
-            {Object.keys(CATEGORY_STYLES).map((cat) => (
-              <option key={cat} value={cat}>
-                {CATEGORY_STYLES[cat].label}
+            {ISSUE_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
               </option>
             ))}
           </select>
+
+          {/* SLA Health */}
+          <select
+            value={slaStatusFilter}
+            onChange={(e) => setSlaStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer"
+          >
+            <option value="all">All SLA States</option>
+            <option value="breached">Breached</option>
+            <option value="at_risk">At Risk (&lt;48h)</option>
+            <option value="due_soon">Due Soon (&lt;24h)</option>
+            <option value="on_track">On Track</option>
+            <option value="no_deadline">No Deadline</option>
+          </select>
+
+          {/* Escalation Status */}
+          <select
+            value={escalationStatusFilter}
+            onChange={(e) => setEscalationStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer"
+          >
+            <option value="all">All Escalation States</option>
+            <option value="pending">Pending Review</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="action_required">Corrective Action Required</option>
+            <option value="resolved">Resolved</option>
+          </select>
+
+          {/* Assignment Status */}
+          <select
+            value={assignmentStatusFilter}
+            onChange={(e) => setAssignmentStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer"
+          >
+            <option value="all">All Assignment States</option>
+            <option value="fully_assigned">Fully Assigned (UO & FO)</option>
+            <option value="partially_assigned">Partially Assigned</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
+
+          {/* Sort By */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold cursor-pointer"
+          >
+            <option value="deadline">SLA Deadline (Earliest)</option>
+            <option value="overdue">Most Overdue</option>
+            <option value="priority_high">Priority (Highest First)</option>
+            <option value="priority_low">Priority (Lowest First)</option>
+            <option value="escalated_recent">
+              Escalated Date (Recent First)
+            </option>
+            <option value="updated">Recently Updated</option>
+          </select>
         </div>
 
-        {/* Bulk Action Controls */}
-        {selectedRowIds.length > 0 && (
-          <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] text-slate-500 font-extrabold uppercase">
-                {selectedRowIds.length} Issues Selected
+        {/* Active Filter Chips */}
+        {activeChips.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <span className="text-[10px] font-black uppercase text-slate-400">
+              Active Filters:
+            </span>
+            {activeChips.map((chip) => (
+              <span
+                key={chip.key}
+                className="px-2.5 py-1 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs font-bold flex items-center gap-1.5 border border-cyan-500/20"
+              >
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  onClick={() => removeChip(chip.key)}
+                  className="hover:text-red-500 cursor-pointer"
+                >
+                  ×
+                </button>
               </span>
-              <select
-                value={bulkActionType}
-                onChange={(e) => setBulkActionType(e.target.value)}
-                className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer focus:outline-none"
-              >
-                <option value="send_reminder">Send Workload Reminder</option>
-                <option value="acknowledge">Acknowledge Escalations</option>
-                <option value="change_priority">Update Issue Priority</option>
-                <option value="assign_department">
-                  Reassign Department Queue
-                </option>
-              </select>
-
-              {bulkActionType === "change_priority" && (
-                <select
-                  value={bulkPriority}
-                  onChange={(e) => setBulkPriority(e.target.value)}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-150 cursor-pointer focus:outline-none"
-                >
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="critical">Critical Priority</option>
-                </select>
-              )}
-
-              {bulkActionType === "assign_department" && (
-                <select
-                  value={bulkDepartment}
-                  onChange={(e) => setBulkDepartment(e.target.value)}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-150 cursor-pointer focus:outline-none"
-                >
-                  <option value="">Choose Department...</option>
-                  <option value="road">Roads & Traffic</option>
-                  <option value="electricity">
-                    Electricity & Streetlights
-                  </option>
-                  <option value="water">Water Supply & Sewage</option>
-                  <option value="sanitation">
-                    Sanitation & Waste Management
-                  </option>
-                </select>
-              )}
-            </div>
-
-            <div className="flex w-full md:w-auto gap-2">
-              <input
-                type="text"
-                placeholder="Bulk reason required..."
-                value={bulkReason}
-                onChange={(e) => setBulkReason(e.target.value)}
-                className="flex-1 md:w-44 px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-150"
-              />
-              <button
-                onClick={handleBulkAction}
-                disabled={bulkLoading}
-                className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors flex items-center gap-1"
-              >
-                {bulkLoading ? "Applying..." : "Apply Bulk"}
-              </button>
-            </div>
+            ))}
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-[10px] font-black text-red-500 uppercase hover:underline ml-2 cursor-pointer"
+            >
+              Clear All
+            </button>
           </div>
         )}
       </div>
 
-      {/* Issues Queue Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-150 dark:border-slate-700/60 shadow-sm overflow-hidden text-xs font-semibold text-slate-800 dark:text-slate-200">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-150 dark:border-slate-800/80 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                <th className="py-4 px-5 w-12 text-center">
-                  <input
-                    type="checkbox"
-                    onChange={handleSelectAll}
-                    checked={
-                      issues.length > 0 &&
-                      selectedRowIds.length === issues.length
-                    }
-                    className="rounded border-slate-300 dark:border-slate-700 text-teal-600 focus:ring-teal-500"
-                  />
-                </th>
-                <th className="py-4 px-4">Issue Details</th>
-                <th className="py-4 px-4 text-center">SLA Health</th>
-                <th className="py-4 px-4">Deadline Target</th>
-                <th className="py-4 px-4">Escalation Category</th>
-                <th className="py-4 px-4 text-center">Priority</th>
-                <th className="py-4 px-4">Assigned Officers</th>
-                <th className="py-4 px-4 text-right pr-6">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-150 dark:divide-slate-800/40">
-              {issues.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="py-8 text-center text-slate-400 font-bold"
+      {/* Main SLA Issues Table / Card View */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
+        {data === undefined ? (
+          <div className="p-12 text-center text-slate-400 space-y-3">
+            <RefreshCw
+              className="animate-spin mx-auto text-cyan-500"
+              size={28}
+            />
+            <p className="font-bold text-xs">
+              Loading City SLA monitoring records...
+            </p>
+          </div>
+        ) : issues.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <FileText
+              className="mx-auto text-slate-300 dark:text-slate-700"
+              size={36}
+            />
+            <h3 className="font-black text-slate-700 dark:text-slate-300 text-sm">
+              No Issues Matching Filters
+            </h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto font-medium">
+              There are no municipal issues matching the selected SLA status,
+              category, or search criteria.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    <th className="py-4 px-4 min-w-[320px]">Issue Details</th>
+                    <th className="py-4 px-4">Classification</th>
+                    <th className="py-4 px-4">SLA Health</th>
+                    <th className="py-4 px-4">Escalation Status</th>
+                    <th className="py-4 px-4">Priority & Status</th>
+                    <th className="py-4 px-4">Assigned Officers</th>
+                    <th className="py-4 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                  {issues.map((issue) => {
+                    const isBreached = issue.sla?.status === "breached";
+                    const isAtRisk = issue.sla?.status === "at_risk";
+                    const isDueSoon = issue.sla?.status === "due_soon";
+                    const isEscalated = issue.escalation?.isEscalated;
+                    const isEscalationResolved = issue.escalation?.resolved;
+                    const hasActiveEscalation =
+                      isEscalated && !isEscalationResolved;
+                    const isCritical = issue.priority === "critical";
+
+                    const borderAccent =
+                      isCritical && isBreached
+                        ? "border-l-4 border-l-red-600"
+                        : isBreached
+                          ? "border-l-4 border-l-rose-500"
+                          : isAtRisk
+                            ? "border-l-4 border-l-amber-500"
+                            : isDueSoon
+                              ? "border-l-4 border-l-yellow-500"
+                              : hasActiveEscalation
+                                ? "border-l-4 border-l-purple-500"
+                                : "border-l-4 border-l-slate-200 dark:border-l-slate-800";
+
+                    return (
+                      <tr
+                        key={issue.id}
+                        className={`align-top hover:bg-slate-50/80 dark:hover:bg-slate-850/60 transition-colors ${borderAccent}`}
+                      >
+                        <td className="py-4 px-4 align-top">
+                          <div className="space-y-1.5 border border-slate-200/80 dark:border-slate-800 p-3 rounded-2xl bg-white dark:bg-slate-900 shadow-2xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-cyan-600 dark:text-cyan-400 text-xs bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800 px-2 py-0.5 rounded-lg">
+                                {issue.code || issue.ticket_id}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                Reported:{" "}
+                                {new Date(issue.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-snug">
+                              {issue.title}
+                            </h4>
+
+                            <p className="text-slate-600 dark:text-slate-400 text-xs font-normal leading-relaxed whitespace-pre-wrap">
+                              {issue.description}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-4 align-top space-y-1">
+                          <span className="font-extrabold uppercase text-slate-800 dark:text-slate-200 block">
+                            {issue.category}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold block capitalize">
+                            Dept: {issue.department || issue.category}
+                          </span>
+                        </td>
+
+                        <td className="py-4 px-4 align-top space-y-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase inline-block ${
+                              isBreached
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                : isAtRisk
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                  : isDueSoon
+                                    ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20"
+                                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            }`}
+                          >
+                            {issue.sla?.status || "no_deadline"}
+                          </span>
+
+                          <span className="text-[11px] font-bold block text-slate-700 dark:text-slate-300">
+                            {issue.sla?.deadline
+                              ? new Date(issue.sla.deadline).toLocaleString()
+                              : "Unset"}
+                          </span>
+                        </td>
+
+                        {/* Escalation Column */}
+                        <td className="py-4 px-4 align-top space-y-1">
+                          {isEscalationResolved ? (
+                            <div className="space-y-1">
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 inline-block">
+                                Resolved Escalation
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block capitalize">
+                                Category:{" "}
+                                {issue.escalation?.category || issue.category}
+                              </span>
+                            </div>
+                          ) : isEscalated ? (
+                            <div className="space-y-1">
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 inline-block">
+                                Active Escalation
+                              </span>
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold block capitalize">
+                                Status:{" "}
+                                {issue.escalation?.status || "Pending Review"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">
+                              Normal
+                            </span>
+                          )}
+
+                          {issue.escalation?.resolutionActions &&
+                            issue.escalation.resolutionActions.length > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 pt-1 block">
+                                <Activity className="h-3 w-3 text-cyan-500" />
+                                {issue.escalation.resolutionActions.length}{" "}
+                                events
+                              </span>
+                            )}
+                        </td>
+
+                        <td className="py-4 px-4 align-top space-y-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase inline-block ${
+                              issue.priority === "critical"
+                                ? "bg-red-500/10 text-red-600 border border-red-500/20"
+                                : issue.priority === "high"
+                                  ? "bg-orange-500/10 text-orange-600 border border-orange-500/20"
+                                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            }`}
+                          >
+                            {issue.priority || "medium"}
+                          </span>
+                          <span className="text-[11px] font-bold block text-slate-600 dark:text-slate-400 capitalize">
+                            {issue.status}
+                          </span>
+                        </td>
+
+                        <td className="py-4 px-4 align-top space-y-1">
+                          <div className="text-[11px]">
+                            <span className="text-slate-400 text-[10px] block uppercase font-bold">
+                              Unit Officer
+                            </span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {issue.assignedUnitOfficer?.name || "Unassigned"}
+                            </span>
+                          </div>
+                          <div className="text-[11px] pt-1">
+                            <span className="text-slate-400 text-[10px] block uppercase font-bold">
+                              Field Officer
+                            </span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {issue.assignedFieldOfficer?.name || "Unassigned"}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="py-4 px-4 align-top text-right">
+                          <button
+                            type="button"
+                            onClick={() => setActiveControlIssueId(issue.id)}
+                            className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white font-extrabold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 ml-auto cursor-pointer"
+                          >
+                            <Shield size={14} />
+                            <span>
+                              {hasActiveEscalation
+                                ? "Resolve Escalation"
+                                : "Open SLA Controls"}
+                            </span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="lg:hidden p-4 space-y-4">
+              {issues.map((issue) => {
+                const isEscalated = issue.escalation?.isEscalated;
+                const isEscalationResolved = issue.escalation?.resolved;
+                const hasActiveEscalation =
+                  isEscalated && !isEscalationResolved;
+
+                return (
+                  <div
+                    key={issue.id}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 space-y-3 shadow-sm"
                   >
-                    No SLA-monitored issues match the filters.
-                  </td>
-                </tr>
-              ) : (
-                issues.map((i) => {
-                  const categoryStyle =
-                    CATEGORY_STYLES[i.category.toLowerCase()] ||
-                    CATEGORY_STYLES.other;
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-black text-cyan-600 dark:text-cyan-400 text-xs bg-cyan-50 dark:bg-cyan-950 px-2 py-0.5 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                        {issue.code || issue.ticket_id}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          issue.sla?.status === "breached"
+                            ? "bg-rose-500/10 text-rose-600 border border-rose-500/20"
+                            : "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                        }`}
+                      >
+                        SLA: {issue.sla?.status || "no_deadline"}
+                      </span>
+                    </div>
 
-                  return (
-                    <tr
-                      key={i.id}
-                      className={`hover:bg-slate-50/40 dark:hover:bg-slate-900/30 transition-colors group ${getUrgencyRowClass(i)}`}
+                    <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">
+                      {issue.title}
+                    </h3>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap font-normal leading-relaxed">
+                      {issue.description}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveControlIssueId(issue.id)}
+                      className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white font-extrabold text-xs rounded-xl transition-all text-center flex items-center justify-center gap-1.5 shadow cursor-pointer"
                     >
-                      <td className="py-4 px-5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedRowIds.includes(i.id)}
-                          onChange={() => handleSelectRow(i.id)}
-                          className="rounded border-slate-300 dark:border-slate-700 text-teal-600 focus:ring-teal-500"
-                        />
-                      </td>
+                      <Shield size={14} />
+                      <span>
+                        {hasActiveEscalation
+                          ? "Resolve Escalation"
+                          : "Open SLA Controls"}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
-                      <td className="py-4 px-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-cyan-600 dark:text-cyan-400 font-extrabold">
-                              {i.ticket_id}
-                            </span>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${categoryStyle.bg} ${categoryStyle.color}`}
-                            >
-                              {i.category}
-                            </span>
-                          </div>
-                          <p className="text-slate-905 dark:text-white font-extrabold line-clamp-1 max-w-[200px]">
-                            {i.title}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-medium truncate max-w-[200px]">
-                            {i.location}
-                          </p>
-                        </div>
-                      </td>
-
-                      <td className="py-4 px-4 text-center">
-                        {i.sla_status === "breached" ? (
-                          <span className="inline-flex px-2 py-0.5 rounded bg-red-50 text-red-655 font-black uppercase text-[9px] tracking-wide">
-                            Breached{" "}
-                            {i.overdue_hours ? `${i.overdue_hours}h ago` : ""}
-                          </span>
-                        ) : i.sla_status === "due_soon" ? (
-                          <span className="inline-flex px-2 py-0.5 rounded bg-yellow-50 text-yellow-655 font-black uppercase text-[9px] tracking-wide">
-                            Due{" "}
-                            {i.hours_remaining
-                              ? `in ${i.hours_remaining}h`
-                              : "soon"}
-                          </span>
-                        ) : i.sla_status === "at_risk" ? (
-                          <span className="inline-flex px-2 py-0.5 rounded bg-amber-50 text-amber-655 font-black uppercase text-[9px] tracking-wide">
-                            At Risk
-                          </span>
-                        ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 font-black uppercase text-[9px] tracking-wide">
-                            On Track
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-4 px-4">
-                        <div className="space-y-0.5">
-                          <p className="font-extrabold">
-                            {i.sla_deadline
-                              ? new Date(i.sla_deadline).toLocaleDateString()
-                              : "—"}
-                          </p>
-                          <p className="text-[9px] text-slate-400 font-medium">
-                            {i.sla_deadline
-                              ? new Date(i.sla_deadline).toLocaleTimeString(
-                                  [],
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )
-                              : "No target deadline"}
-                          </p>
-                        </div>
-                      </td>
-
-                      <td className="py-4 px-4">
-                        {i.is_escalated ? (
-                          <div className="space-y-0.5">
-                            <span className="text-purple-600 dark:text-purple-400 font-extrabold capitalize">
-                              {i.escalation_category?.replace(/_/g, " ")}
-                            </span>
-                            <span className="block text-[9px] text-slate-400 font-medium truncate max-w-[150px]">
-                              "{i.escalation_reason}"
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 font-medium">
-                            No active escalation
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-4 px-4 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${PRIORITY_STYLES[i.severity] || PRIORITY_STYLES.medium}`}
-                        >
-                          {i.severity}
-                        </span>
-                      </td>
-
-                      <td className="py-4 px-4">
-                        <div className="space-y-1">
-                          {i.assigned_officer ? (
-                            <p className="font-extrabold leading-none text-slate-800 dark:text-slate-200">
-                              UO: {i.assigned_officer.name}
-                            </p>
-                          ) : (
-                            <p className="text-[10px] text-red-500 font-bold leading-none">
-                              UO: Unassigned
-                            </p>
-                          )}
-                          {i.field_officer ? (
-                            <p className="font-extrabold leading-none text-slate-800 dark:text-slate-200">
-                              FO: {i.field_officer.name}
-                            </p>
-                          ) : (
-                            <p className="text-[10px] text-red-500 font-bold leading-none">
-                              FO: Unassigned
-                            </p>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="py-4 px-4 text-right pr-6">
-                        <button
-                          onClick={() => setSelectedIssue(i)}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
-                        >
-                          <Eye size={13} />
-                          Action
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+            {/* Pagination Controls */}
+            {pagination.totalPages > 1 && (
+              <div className="bg-slate-50 dark:bg-slate-950/80 px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">
+                  Page {pagination.page} of {pagination.totalPages} (
+                  {pagination.totalItems} Total Issues)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!pagination.hasPreviousPage}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 font-bold disabled:opacity-40"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pagination.hasNextPage}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 font-bold disabled:opacity-40"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Pagination wrapper */}
-      {pagination.totalPages > 1 && (
-        <div className="flex justify-between items-center text-xs font-semibold text-slate-550 dark:text-slate-400">
-          <span>
-            Page {page} of {pagination.totalPages}
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 disabled:opacity-40 rounded-lg font-bold"
-            >
-              Prev
-            </button>
-            <button
-              onClick={() =>
-                setPage((p) => Math.min(pagination.totalPages, p + 1))
-              }
-              disabled={page === pagination.totalPages}
-              className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 disabled:opacity-40 rounded-lg font-bold"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Escalation Analytics Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Most Delayed Issues Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/60 shadow-sm space-y-4">
-          <h3 className="text-xs font-black uppercase text-slate-450 tracking-wider flex items-center gap-1.5">
-            <AlertTriangle className="text-red-500" size={15} />
-            Most Delayed SLA Breaches
-          </h3>
-          <div className="space-y-3">
-            {analytics.mostDelayed.length === 0 ? (
-              <p className="text-slate-400 font-bold py-4 text-center">
-                No delayed SLA issues reported.
-              </p>
-            ) : (
-              analytics.mostDelayed.map((i) => (
-                <div
-                  key={i.id}
-                  onClick={() => setSelectedIssue(i)}
-                  className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl flex justify-between items-center cursor-pointer hover:border-slate-350 dark:hover:border-slate-700 transition-all hover:scale-[1.01]"
-                >
-                  <div className="space-y-1">
-                    <p className="font-extrabold text-slate-900 dark:text-white">
-                      {i.title}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold">
-                      {i.ticket_id} &bull; {i.category}
-                    </p>
-                  </div>
-                  <span className="text-xs text-red-500 font-black">
-                    +{i.overdue_hours}h delay
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Escalation Category counts */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/60 shadow-sm space-y-4">
-          <h3 className="text-xs font-black uppercase text-slate-450 tracking-wider flex items-center gap-1.5">
-            <Activity className="text-cyan-500" size={15} />
-            Escalation Breakdown by category
-          </h3>
-          <div className="space-y-3">
-            {analytics.byCategory.length === 0 ? (
-              <p className="text-slate-400 font-bold py-4 text-center">
-                No active escalations category logs.
-              </p>
-            ) : (
-              analytics.byCategory.map((c) => (
-                <div key={c.category} className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-705 dark:text-slate-350 capitalize">
-                      {c.category.replace(/_/g, " ")}
-                    </span>
-                    <span className="font-black text-slate-900 dark:text-white">
-                      {c.count}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-900 h-2 rounded-full overflow-hidden">
-                    <div
-                      style={{
-                        width: `${(c.count / summary.escalated) * 100}%`,
-                      }}
-                      className="bg-cyan-500 h-full rounded-full"
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Escalation Control Modal */}
-      {selectedIssue && (
+      {/* Control Panel Drawer / Modal (re-renders reactively when activeControlIssue updates) */}
+      {activeControlIssue && (
         <CityAdminEscalationResolutionModal
-          issue={selectedIssue}
+          issue={activeControlIssue}
           cityAdminUserId={cityAdminUserId}
-          onClose={() => setSelectedIssue(null)}
+          onClose={() => setActiveControlIssueId(null)}
           onResolved={() => {
-            // Refreshes reactively
+            showToast("Administrative action processed.");
           }}
         />
       )}
     </div>
   );
 }
+
+export default CityAdminSLAMonitoringDashboard;

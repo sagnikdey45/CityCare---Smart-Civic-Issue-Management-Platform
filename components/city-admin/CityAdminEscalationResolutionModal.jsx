@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Clock,
@@ -8,15 +9,161 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Calendar,
-  Sparkles,
   Shield,
   FileText,
   Tag,
   CheckCircle2,
+  Send,
+  Activity,
+  UserCheck,
+  Plus,
+  Info,
+  Loader2,
+  ArrowUpRight,
+  ChevronRight,
+  MessageSquare,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import {
+  ISSUE_CATEGORIES,
+  ISSUE_SUBCATEGORIES,
+} from "@/lib/issueClassificationConfig";
+
+// --- Lookups and Normalisation Helpers ---
+
+function normalizeDepartment(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+}
+
+function formatDepartmentLabel(value) {
+  return String(value || "Not Assigned")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+const ESCALATION_CATEGORY_LABELS = {
+  sla_breach: "SLA Breach",
+  resource_shortage: "Resource Shortage",
+  officer_non_responsiveness: "Officer Non-Responsiveness",
+  technical_complexity: "Technical Complexity",
+  technical_dependency: "Technical Dependency",
+  third_party_dependency: "Third-Party Dependency",
+  public_safety_risk: "Public Safety Risk",
+  environmental_risk: "Environmental Risk",
+  citizen_escalation: "Citizen Escalation",
+  repeat_failure: "Repeat Failure",
+  cross_department_dependency: "Cross-Department Dependency",
+  budget_approval_required: "Budget Approval Required",
+  legal_or_regulatory: "Legal or Regulatory",
+  emergency_response: "Emergency Response",
+  administrative_approval_pending: "Administrative Approval Pending",
+  other: "Other",
+};
+
+function formatEscalationCategory(value) {
+  if (!value) return "Other";
+  return (
+    ESCALATION_CATEGORY_LABELS[value] ||
+    String(value)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+const ESCALATION_ACTION_LABELS = {
+  escalate: "Issue Escalated",
+  issue_escalated: "Issue Escalated",
+  review_escalation: "Escalation Acknowledged",
+  extend_sla: "SLA Deadline Extended",
+  reassign_unit_officer: "Unit Officer Reassigned",
+  reassign_field_officer: "Field Officer Reassigned",
+  reassign_officer: "Officer Assignment Updated",
+  change_classification: "Issue Classification Changed",
+  change_category: "Issue Category Changed",
+  update_priority: "Issue Priority Updated",
+  request_corrective_action: "Corrective Action Requested",
+  reject_escalation_response: "Escalation Response Rejected",
+  approve_escalation: "Escalation Resolution Approved",
+  send_message: "Administrative Message Sent",
+};
+
+function formatTimelineAction(value) {
+  if (!value) return "Action Performed";
+  return (
+    ESCALATION_ACTION_LABELS[value] ||
+    String(value)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+const ESCALATION_STATUS_STYLES = {
+  pending: {
+    label: "Pending Review",
+    className:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
+  },
+  reviewed: {
+    label: "Under Review",
+    className:
+      "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300",
+  },
+  corrective_action_required: {
+    label: "Corrective Action Required",
+    className:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300",
+  },
+  resolved: {
+    label: "Resolved",
+    className:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
+  },
+};
+
+function formatDateTime(value) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatHistoryValue(value) {
+  if (!value) return "N/A";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function EscalationField({ label, value }) {
+  return (
+    <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+      <p className="text-[9.5px] font-black uppercase text-slate-400 tracking-wider">
+        {label}
+      </p>
+      <p className="text-xs font-bold text-slate-900 dark:text-slate-100 capitalize mt-0.5 break-words">
+        {value || "N/A"}
+      </p>
+    </div>
+  );
+}
 
 export function CityAdminEscalationResolutionModal({
   issue,
@@ -24,734 +171,2155 @@ export function CityAdminEscalationResolutionModal({
   onClose,
   onResolved,
 }) {
+  const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorBanner, setErrorBanner] = useState("");
+
+  // Stable Issue ID
+  const issueId = issue?.id || issue?._id;
+
+  // Derive Normalized Issue Department
+  const issueDepartment = normalizeDepartment(
+    issue?.department || issue?.category,
+  );
+
+  // Identify Currently Assigned Officer Profile IDs
+  const currentUnitOfficerProfileId =
+    issue?.assignedUnitOfficer?.profileId ||
+    issue?.assigned_officer?.profileId ||
+    null;
+
+  const currentFieldOfficerProfileId =
+    issue?.assignedFieldOfficer?.profileId ||
+    issue?.field_officer?.profileId ||
+    null;
+
+  const currentUnitOfficer =
+    issue?.assignedUnitOfficer || issue?.assigned_officer || null;
+
+  const currentFieldOfficer =
+    issue?.assignedFieldOfficer || issue?.field_officer || null;
+
+  // In-modal feedback states
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [successToast, setSuccessToast] = useState("");
 
-  const currentActions =
-    issue.escalation_resolution_actions?.filter(
-      (a) => a.performed_at >= (issue.escalated_at || 0),
-    ) || [];
-  const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation",
-  );
-  const hasResolutionAction = resolutionActions.length > 0;
+  // Incompatibility & Department Mismatch Confirmation States
+  const [uoIncompatibilityPrompt, setUoIncompatibilityPrompt] = useState(null);
+  const [classIncompatibilityPrompt, setClassIncompatibilityPrompt] =
+    useState(null);
+  const [officerDepartmentWarning, setOfficerDepartmentWarning] =
+    useState(null);
 
-  const isSlaBreached =
-    issue.sla_status === "breached" ||
-    (issue.sla_deadline && new Date(issue.sla_deadline).getTime() < Date.now());
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
-  const isSlaAtRisk = issue.sla_status === "at_risk";
-  const escalationResolved = !!issue.escalation_resolved;
+  // --- Normalise Escalation State ---
+  const escalationData = issue?.escalation || {};
 
-  const shouldAllowFreshSlaActions =
-    isSlaBreached || isSlaAtRisk || (escalationResolved && isSlaBreached);
+  const isEscalated =
+    escalationData.isEscalated === true ||
+    issue?.is_escalated === true ||
+    issue?.escalatedToAdmin === true ||
+    issue?.status === "escalated";
+
+  const escalationReviewStatus =
+    escalationData.status ||
+    escalationData.adminReviewStatus ||
+    issue?.escalation_admin_review_status ||
+    "pending";
+
+  const isEscalationResolved =
+    escalationData.resolved === true ||
+    issue?.escalation_resolved === true ||
+    escalationReviewStatus === "resolved";
+
+  const hasActiveUnresolvedEscalation = isEscalated && !isEscalationResolved;
+
+  const responseRejectedAt =
+    escalationData.responseRejectedAt || issue?.escalation_response_rejected_at;
+
+  const responseRejectionReason =
+    escalationData.responseRejectionReason ||
+    issue?.escalation_response_rejection_reason;
+
+  const requiresCorrectiveAction =
+    Boolean(responseRejectedAt) && !isEscalationResolved;
+
+  const escalationDisplayStatus = isEscalationResolved
+    ? "resolved"
+    : requiresCorrectiveAction
+      ? "corrective_action_required"
+      : escalationReviewStatus;
+
+  const hasEscalationData =
+    isEscalated ||
+    isEscalationResolved ||
+    Boolean(issue?.escalation_reason || escalationData.reason);
+
+  // --- Action Visibility & Selection Logic ---
+  const escalationResolutionActions = [
+    { id: "approve", label: "Approve Resolution", icon: CheckCircle },
+    { id: "reject_response", label: "Reject Response", icon: XCircle },
+  ];
+
+  const operationalActions = [
+    { id: "extend_sla", label: "Extend SLA", icon: Clock },
+    {
+      id: "reassign_unit_officer",
+      label: "Reassign Unit Officer",
+      icon: UserCheck,
+    },
+    {
+      id: "reassign_field_officer",
+      label: "Reassign Field Officer",
+      icon: Users,
+    },
+    { id: "change_classification", label: "Classification", icon: Tag },
+    { id: "update_priority", label: "Update Priority", icon: AlertTriangle },
+    { id: "send_message", label: "Send Message", icon: Send },
+    { id: "request_action", label: "Request Action", icon: Activity },
+  ];
+
+  const availableActions = hasActiveUnresolvedEscalation
+    ? escalationResolutionActions
+    : operationalActions;
 
   const [actionType, setActionType] = useState(
-    shouldAllowFreshSlaActions
-      ? "extend_sla"
-      : hasResolutionAction
-        ? "approve"
-        : "extend_sla",
+    hasActiveUnresolvedEscalation ? "approve" : "extend_sla",
   );
 
-  useEffect(() => {
-    if (shouldAllowFreshSlaActions) {
-      setActionType("extend_sla");
-    } else if (hasResolutionAction) {
-      setActionType("approve");
-    } else {
-      setActionType("extend_sla");
-    }
-  }, [issue.id, issue._id, shouldAllowFreshSlaActions, hasResolutionAction]);
+  // Replacement selection state (initialised empty, NOT auto-selecting current officer)
+  const [selectedUnitOfficerId, setSelectedUnitOfficerId] = useState("");
+  const [selectedFieldOfficerId, setSelectedFieldOfficerId] = useState("");
 
+  // Reset selected action & replacement choices when switching tabs or issue
+  useEffect(() => {
+    setActionType(hasActiveUnresolvedEscalation ? "approve" : "extend_sla");
+    setSelectedUnitOfficerId("");
+    setSelectedFieldOfficerId("");
+    setModalError("");
+    setFieldErrors({});
+    setOfficerDepartmentWarning(null);
+  }, [issueId, hasActiveUnresolvedEscalation]);
+
+  useEffect(() => {
+    if (actionType === "reassign_unit_officer") {
+      setSelectedUnitOfficerId("");
+      setSelectedFieldOfficerId("");
+    }
+    if (actionType === "reassign_field_officer") {
+      setSelectedFieldOfficerId("");
+      setSelectedUnitOfficerId("");
+    }
+    setModalError("");
+    setFieldErrors({});
+    setOfficerDepartmentWarning(null);
+  }, [actionType]);
+
+  // Scoped Queries for Candidates
+  const isUnitReassignment = actionType === "reassign_unit_officer";
+  const isFieldReassignment = actionType === "reassign_field_officer";
+
+  const unitOfficerQuery = useQuery(
+    api.cityAdmin.getAssignmentCandidates,
+    issueId && cityAdminUserId && isUnitReassignment
+      ? { cityAdminUserId, issueId, officerType: "unit_officer" }
+      : "skip",
+  );
+
+  const fieldOfficerQuery = useQuery(
+    api.cityAdmin.getAssignmentCandidates,
+    issueId && cityAdminUserId && isFieldReassignment
+      ? { cityAdminUserId, issueId, officerType: "field_officer" }
+      : "skip",
+  );
+
+  const unitOfficers = unitOfficerQuery?.candidates ?? unitOfficerQuery ?? [];
+  const fieldOfficers =
+    fieldOfficerQuery?.candidates ?? fieldOfficerQuery ?? [];
+
+  const isUnitOfficerLoading =
+    isUnitReassignment && unitOfficerQuery === undefined;
+  const isFieldOfficerLoading =
+    isFieldReassignment && fieldOfficerQuery === undefined;
+
+  // Form State
   const [newSlaDeadline, setNewSlaDeadline] = useState("");
-  const [selectedWardOfficer, setSelectedWardOfficer] = useState("");
-  const [selectedFieldOfficer, setSelectedFieldOfficer] = useState("");
-  const [newCategory, setNewCategory] = useState(issue.category);
-  const [resolutionNotes, setResolutionNotes] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
-  const [officerMismatchWarning, setOfficerMismatchWarning] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(
+    issue?.category || "other",
+  );
+  const [selectedSubcategories, setSelectedSubcategories] = useState(
+    Array.isArray(issue?.subcategory) ? issue.subcategory : [],
+  );
+  const [customSubcategoryInput, setCustomSubcategoryInput] = useState("");
+  const [selectedPriority, setSelectedPriority] = useState(
+    issue?.priority || "medium",
+  );
+  const [messageRecipient, setMessageRecipient] = useState("both");
+  const [messageText, setMessageText] = useState("");
+  const [reason, setReason] = useState("");
 
-  // Scoped assignable officers query
-  const assignable = useQuery(api.slaMonitoring.getScopedAssignableOfficers, {
-    cityAdminUserId,
-    issueId: issue.id || issue._id,
-  });
-
-  const wardOfficers = assignable?.unitOfficers || [];
-  const fieldOfficers = assignable?.fieldOfficers || [];
-
-  // Scoped mutations
-  const extendSla = useMutation(api.slaMonitoring.extendIssueSla);
-  const reassignOfficer = useMutation(api.slaMonitoring.reassignIssueOfficer);
-  const changeCategory = useMutation(api.slaMonitoring.changeIssueCategory);
-  const approveEscalation = useMutation(api.slaMonitoring.approveEscalation);
-  const rejectEscalation = useMutation(api.slaMonitoring.rejectEscalation);
-  const dismissEscalation = useMutation(api.slaMonitoring.dismissEscalation);
-  const reviewEscalation = useMutation(api.slaMonitoring.reviewEscalation);
-
+  // Default SLA Deadline
   useEffect(() => {
-    if (assignable && issue) {
-      const currentUoProfile = wardOfficers.find(
-        (o) =>
-          String(o.userId) ===
-          String(issue.assigned_officer?.userId || issue.assignedUnitOfficer),
-      );
-      const currentFoProfile = fieldOfficers.find(
-        (o) =>
-          String(o.userId) ===
-          String(issue.field_officer?.userId || issue.assignedFieldOfficer),
-      );
-
-      if (currentUoProfile) setSelectedWardOfficer(currentUoProfile.profileId);
-      if (currentFoProfile) setSelectedFieldOfficer(currentFoProfile.profileId);
-    }
-  }, [assignable, issue]);
-
-  useEffect(() => {
-    if (issue.sla_deadline) {
-      const deadline = new Date(issue.sla_deadline);
-      const formatted = deadline.toISOString().slice(0, 16);
-      setNewSlaDeadline(formatted);
+    if (issue?.sla?.deadline || issue?.sla_deadline) {
+      const deadline = new Date(issue.sla?.deadline || issue.sla_deadline);
+      setNewSlaDeadline(deadline.toISOString().slice(0, 16));
     }
   }, [issue]);
 
-  const handleUoChange = (newVal) => {
-    setSelectedWardOfficer(newVal);
-    if (newVal) {
-      const selectedUo = wardOfficers.find(
-        (o) => String(o.profileId) === String(newVal),
-      );
-      const currentFo = fieldOfficers.find(
-        (o) => String(o.profileId) === String(selectedFieldOfficer),
-      );
+  // Mutations
+  const assignUnitOfficerMut = useMutation(
+    api.cityAdmin.assignOrReassignUnitOfficer,
+  );
+  const assignFieldOfficerMut = useMutation(
+    api.cityAdmin.assignOrReassignFieldOfficer,
+  );
+  const changeClassificationMut = useMutation(
+    api.cityAdmin.changeIssueClassification,
+  );
+  const updatePriorityMut = useMutation(api.cityAdmin.updateIssuePriority);
+  const updateSlaDeadlineMut = useMutation(api.cityAdmin.updateSlaDeadline);
+  const sendIssueMessageMut = useMutation(api.cityAdmin.sendIssueMessage);
 
-      if (
-        selectedUo &&
-        currentFo &&
-        selectedUo.department !== currentFo.department
-      ) {
-        setOfficerMismatchWarning(true);
-      } else {
-        setOfficerMismatchWarning(false);
-      }
+  const reviewEscalationMut = useMutation(api.slaMonitoring.reviewEscalation);
+  const approveEscalationMut = useMutation(api.slaMonitoring.approveEscalation);
+  const rejectEscalationResponseMut = useMutation(
+    api.slaMonitoring.rejectEscalationResponse,
+  );
+  const requestCorrectiveActionMut = useMutation(
+    api.slaMonitoring.requestCorrectiveAction,
+  );
+
+  const derivedDepartment = selectedCategory;
+
+  const handleToggleSubcategory = (sub) => {
+    if (selectedSubcategories.includes(sub)) {
+      setSelectedSubcategories(selectedSubcategories.filter((s) => s !== sub));
     } else {
-      setOfficerMismatchWarning(false);
+      setSelectedSubcategories([...selectedSubcategories, sub]);
     }
   };
 
-  const handleFoChange = (newVal) => {
-    setSelectedFieldOfficer(newVal);
-    if (newVal) {
-      const selectedFo = fieldOfficers.find(
-        (o) => String(o.profileId) === String(newVal),
-      );
-      const currentUo = wardOfficers.find(
-        (o) => String(o.profileId) === String(selectedWardOfficer),
-      );
-
-      if (
-        selectedFo &&
-        currentUo &&
-        selectedFo.department !== currentUo.department
-      ) {
-        setOfficerMismatchWarning(true);
-      } else {
-        setOfficerMismatchWarning(false);
-      }
-    } else {
-      setOfficerMismatchWarning(false);
+  const handleAddCustomSubcategory = () => {
+    const trimmed = customSubcategoryInput.trim();
+    if (trimmed && !selectedSubcategories.includes(trimmed)) {
+      setSelectedSubcategories([...selectedSubcategories, trimmed]);
+      setCustomSubcategoryInput("");
     }
   };
 
-  const handleAcknowledgeEscalation = async () => {
-    setLoading(true);
-    setErrorBanner("");
-    try {
-      await reviewEscalation({
-        cityAdminUserId,
-        issueId: issue.id || issue._id,
+  // Defensive Candidate Sorting (Current Assignment at top, then Suitable with capacity, then others)
+  const sortedUnitOfficers = useMemo(() => {
+    return [...unitOfficers].sort((a, b) => {
+      const aCurrent =
+        String(a.profileId) === String(currentUnitOfficerProfileId);
+      const bCurrent =
+        String(b.profileId) === String(currentUnitOfficerProfileId);
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+
+      const aMatch = normalizeDepartment(a.department) === issueDepartment;
+      const bMatch = normalizeDepartment(b.department) === issueDepartment;
+      if (aMatch !== bMatch) return aMatch ? -1 : 1;
+
+      const aAvailable = Number(a.availableCapacity ?? 0) > 0;
+      const bAvailable = Number(b.availableCapacity ?? 0) > 0;
+      if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+
+      if (Boolean(a.isRecommended) !== Boolean(b.isRecommended)) {
+        return a.isRecommended ? -1 : 1;
+      }
+
+      return Number(a.currentWorkload ?? 0) - Number(b.currentWorkload ?? 0);
+    });
+  }, [unitOfficers, currentUnitOfficerProfileId, issueDepartment]);
+
+  const sortedFieldOfficers = useMemo(() => {
+    return [...fieldOfficers].sort((a, b) => {
+      const aCurrent =
+        String(a.profileId) === String(currentFieldOfficerProfileId);
+      const bCurrent =
+        String(b.profileId) === String(currentFieldOfficerProfileId);
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+
+      const aMatch = normalizeDepartment(a.department) === issueDepartment;
+      const bMatch = normalizeDepartment(b.department) === issueDepartment;
+      if (aMatch !== bMatch) return aMatch ? -1 : 1;
+
+      const aAvailable = Number(a.availableCapacity ?? 0) > 0;
+      const bAvailable = Number(b.availableCapacity ?? 0) > 0;
+      if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+
+      if (Boolean(a.isRecommended) !== Boolean(b.isRecommended)) {
+        return a.isRecommended ? -1 : 1;
+      }
+
+      return Number(a.currentWorkload ?? 0) - Number(b.currentWorkload ?? 0);
+    });
+  }, [fieldOfficers, currentFieldOfficerProfileId, issueDepartment]);
+
+  // Normalised Timeline
+  const escalationTimeline =
+    issue?.escalation?.resolutionActions ||
+    issue?.escalation_resolution_actions ||
+    issue?.escalationResolutionActions ||
+    [];
+
+  const normalisedTimeline = useMemo(() => {
+    const list = escalationTimeline
+      .map((event) => ({
+        id:
+          event.id ||
+          event._id ||
+          `${event.type || event.actionType}-${event.performedAt || event.performed_at}`,
+        type: event.type || event.actionType,
+        performedAt: event.performedAt || event.performed_at,
+        performedBy:
+          event.performedByName || event.performed_by || "Administrator",
+        performedByRole: event.performedByRole || event.role || "admin",
+        notes: event.notes || event.reason || event.comment,
+        oldValue: event.oldValue || event.old_value,
+        newValue: event.newValue || event.new_value,
+      }))
+      .filter((e) => e.type && e.performedAt);
+
+    const escalationCreatedAt =
+      escalationData.escalatedAt || issue?.escalated_at;
+    const hasEscalationEvent = list.some(
+      (e) => e.type === "escalate" || e.type === "issue_escalated",
+    );
+
+    if (escalationCreatedAt && !hasEscalationEvent) {
+      list.unshift({
+        id: `escalated-${escalationCreatedAt}`,
+        type: "escalate",
+        performedAt: escalationCreatedAt,
+        performedBy:
+          escalationData.escalatedByName || issue?.escalated_by || "Officer",
+        notes:
+          escalationData.reason ||
+          issue?.escalation_reason ||
+          "Issue escalated to admin oversight.",
       });
-      setSuccessToast("Escalation successfully marked as reviewed.");
-      onResolved();
-    } catch (e) {
-      console.error(e);
-      setErrorBanner("Acknowledgement failed: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResolveEscalation = async () => {
-    setErrorBanner("");
-    if (!resolutionNotes.trim()) {
-      setErrorBanner("Resolution notes are required.");
-      return;
     }
 
-    setLoading(true);
-    try {
-      if (actionType === "extend_sla") {
-        if (!newSlaDeadline) {
-          setErrorBanner("Please select a new SLA deadline");
-          setLoading(false);
-          return;
-        }
-        await extendSla({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          newDeadline: new Date(newSlaDeadline).getTime(),
-          notes: resolutionNotes,
-        });
-      } else if (actionType === "reassign_ward") {
-        if (!selectedWardOfficer) {
-          setErrorBanner("Please select a Unit Officer");
-          setLoading(false);
-          return;
-        }
-        await reassignOfficer({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          newUnitOfficerId: selectedWardOfficer,
-          notes: resolutionNotes,
-        });
-      } else if (actionType === "reassign_field") {
-        if (!selectedFieldOfficer) {
-          setErrorBanner("Please select a Field Officer");
-          setLoading(false);
-          return;
-        }
-        await reassignOfficer({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          newFieldOfficerId: selectedFieldOfficer,
-          notes: resolutionNotes,
-        });
-      } else if (actionType === "change_category") {
-        if (newCategory === issue.category) {
-          setErrorBanner("Please select a different category");
-          setLoading(false);
-          return;
-        }
-        await changeCategory({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          newCategory: newCategory,
-          notes: resolutionNotes,
-        });
-      } else if (actionType === "reject") {
-        if (!rejectionReason.trim()) {
-          setErrorBanner("Please provide a rejection reason");
-          setLoading(false);
-          return;
-        }
-        await rejectEscalation({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          reason: rejectionReason || resolutionNotes,
-        });
-      } else if (actionType === "dismiss") {
-        if (!rejectionReason.trim()) {
-          setErrorBanner("Please provide a dismissal reason");
-          setLoading(false);
-          return;
-        }
-        await dismissEscalation({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          reason: rejectionReason || resolutionNotes,
-        });
-      } else if (actionType === "approve") {
-        await approveEscalation({
-          cityAdminUserId,
-          issueId: issue.id || issue._id,
-          notes: resolutionNotes,
-        });
-      }
-
-      setSuccessToast("Action processed successfully.");
-      setTimeout(() => {
-        onResolved();
-        onClose();
-      }, 1000);
-    } catch (error) {
-      console.error("Error resolving escalation:", error);
-      setErrorBanner("Failed to process action: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return list.sort((a, b) => a.performedAt - b.performedAt);
+  }, [escalationTimeline, issue, escalationData]);
 
   const getActionConfig = () => {
     switch (actionType) {
       case "extend_sla":
         return {
-          icon: Clock,
-          color: "blue",
-          gradient:
-            "from-cyan-500 to-blue-600 dark:from-cyan-900/60 dark:to-blue-900/40",
-          bgGradient:
-            "from-cyan-50/50 to-blue-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-cyan-200 dark:border-cyan-900/40",
           title: "Extend SLA Deadline",
-          description: "Grant additional time to resolve this issue",
+          description:
+            "Grant additional time to resolve this issue and log extension history.",
+          color: "text-cyan-500",
         };
-      case "reassign_ward":
+      case "reassign_unit_officer":
         return {
-          icon: Shield,
-          color: "purple",
-          gradient:
-            "from-purple-500 to-pink-500 dark:from-purple-900/60 dark:to-pink-900/40",
-          bgGradient:
-            "from-purple-50/50 to-pink-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-purple-200 dark:border-purple-900/40",
           title: "Reassign Unit Officer",
-          description: "Transfer oversight to a different unit officer",
+          description:
+            "Transfer unit oversight to a compatible Unit Officer in this city.",
+          color: "text-purple-500",
         };
-      case "reassign_field":
+      case "reassign_field_officer":
         return {
-          icon: Users,
-          color: "indigo",
-          gradient:
-            "from-indigo-500 to-purple-500 dark:from-indigo-900/60 dark:to-purple-900/40",
-          bgGradient:
-            "from-indigo-50/50 to-purple-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-indigo-200 dark:border-indigo-900/40",
           title: "Reassign Field Officer",
-          description: "Assign a different field officer to handle this",
+          description:
+            "Assign a compatible Field Officer for ground execution.",
+          color: "text-indigo-500",
         };
-      case "change_category":
+      case "change_classification":
         return {
-          icon: Tag,
-          color: "amber",
-          gradient:
-            "from-amber-500 to-orange-500 dark:from-amber-900/60 dark:to-orange-900/40",
-          bgGradient:
-            "from-amber-50/50 to-orange-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-amber-200 dark:border-amber-900/40",
-          title: "Change Category",
-          description: "Reclassify issue to correct department",
+          title: "Change Classification & Department",
+          description:
+            "Update issue category, subcategories, and derived department.",
+          color: "text-amber-500",
+        };
+      case "update_priority":
+        return {
+          title: "Update Operational Priority",
+          description: "Adjust priority level to change queue urgency.",
+          color: "text-rose-500",
+        };
+      case "send_message":
+        return {
+          title: "Send Message to Assigned Officers",
+          description:
+            "Send direct instructions or clarifications to officers.",
+          color: "text-blue-500",
         };
       case "approve":
         return {
-          icon: CheckCircle,
-          color: "green",
-          gradient:
-            "from-emerald-500 to-teal-500 dark:from-emerald-900/60 dark:to-teal-900/40",
-          bgGradient:
-            "from-emerald-50/50 to-teal-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-emerald-200 dark:border-emerald-900/40",
-          title: "Approve Resolution",
+          title: "Approve Escalation Resolution",
           description:
-            "Accept current approach and resolve administrative escalation",
+            "Resolves administrative escalation while maintaining civic issue status.",
+          color: "text-emerald-500",
         };
-      case "reject":
+      case "request_action":
         return {
-          icon: XCircle,
-          color: "red",
-          gradient:
-            "from-red-500 to-rose-500 dark:from-red-900/60 dark:to-rose-900/40",
-          bgGradient:
-            "from-red-50/50 to-rose-50/50 dark:from-slate-900/60 dark:to-slate-800/40",
-          borderColor: "border-rose-200 dark:border-rose-900/40",
-          title: "Reject Civic Issue",
-          description: "Reject issue and close permanently",
+          title: "Request Corrective Action",
+          description:
+            "Send corrective instructions to the currently assigned Unit Officer and Field Officer.",
+          color: "text-amber-500",
         };
-      case "dismiss":
+      case "reject_response":
         return {
-          icon: XCircle,
-          color: "slate",
-          gradient:
-            "from-slate-500 to-zinc-600 dark:from-slate-800 dark:to-zinc-800",
-          bgGradient:
-            "from-slate-50 to-zinc-50 dark:from-slate-900/60 dark:to-slate-850",
-          borderColor: "border-slate-200 dark:border-slate-800",
-          title: "Dismiss Escalation",
-          description: "Close escalation request while preserving issue state",
+          title: "Reject Escalation Response",
+          description:
+            "Mark the submitted escalation response as insufficient and require further corrective action.",
+          color: "text-rose-500",
         };
       default:
         return {
-          icon: Clock,
-          color: "blue",
-          gradient: "from-blue-500 to-cyan-500",
-          bgGradient: "from-blue-50 to-cyan-50",
-          borderColor: "border-blue-500",
-          title: "Extend SLA Deadline",
-          description: "Grant additional time to resolve this issue",
+          title: "Administrative Action",
+          description: "Perform administrative action on issue.",
+          color: "text-cyan-500",
         };
     }
   };
 
-  const config = getActionConfig();
-  const ActionIcon = config.icon;
+  const handleAcknowledgeEscalation = async () => {
+    setLoading(true);
+    setModalError("");
+    try {
+      await reviewEscalationMut({ cityAdminUserId, issueId });
+      setSuccessToast("Escalation formally acknowledged and reviewed.");
+      onResolved?.();
+    } catch (err) {
+      console.error(err);
+      setModalError("Acknowledgement failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExecuteAction = async () => {
+    setModalError("");
+    setFieldErrors({});
+
+    // Safety check for allowed action
+    const allowedActionIds = availableActions.map((a) => a.id);
+    if (!allowedActionIds.includes(actionType)) {
+      setModalError(
+        "This action is not available for the current issue state.",
+      );
+      return;
+    }
+
+    if (actionType === "extend_sla") {
+      if (!newSlaDeadline) {
+        setFieldErrors({
+          newSlaDeadline: "A valid new SLA deadline is required.",
+        });
+        setModalError("Please specify a valid new SLA deadline.");
+        return;
+      }
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Justification reason is required." });
+        setModalError("A reason is required to extend the SLA deadline.");
+        return;
+      }
+    } else if (actionType === "reassign_unit_officer") {
+      if (!selectedUnitOfficerId) {
+        setFieldErrors({
+          selectedUnitOfficerId: "Select a replacement Unit Officer candidate.",
+        });
+        setModalError("Please select a replacement Unit Officer candidate.");
+        return;
+      }
+      if (
+        String(selectedUnitOfficerId) === String(currentUnitOfficerProfileId)
+      ) {
+        setFieldErrors({
+          selectedUnitOfficerId:
+            "Select a different Unit Officer. This officer is already assigned.",
+        });
+        setModalError(
+          "Select a different Unit Officer. This officer is already assigned.",
+        );
+        return;
+      }
+
+      // Check Department Mismatch Warning
+      const candidate = unitOfficers.find(
+        (u) => String(u.profileId) === String(selectedUnitOfficerId),
+      );
+      if (
+        candidate &&
+        normalizeDepartment(candidate.department) !== issueDepartment &&
+        !officerDepartmentWarning
+      ) {
+        setOfficerDepartmentWarning({
+          officerType: "unit_officer",
+          officerName: candidate.name || candidate.fullName,
+          officerDepartment: candidate.department,
+          selectedId: selectedUnitOfficerId,
+        });
+        return;
+      }
+
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Justification reason is required." });
+        setModalError("A reason is required to reassign the Unit Officer.");
+        return;
+      }
+    } else if (actionType === "reassign_field_officer") {
+      if (!selectedFieldOfficerId) {
+        setFieldErrors({
+          selectedFieldOfficerId:
+            "Select a replacement Field Officer candidate.",
+        });
+        setModalError("Please select a replacement Field Officer candidate.");
+        return;
+      }
+      if (
+        String(selectedFieldOfficerId) === String(currentFieldOfficerProfileId)
+      ) {
+        setFieldErrors({
+          selectedFieldOfficerId:
+            "Select a different Field Officer. This officer is already assigned.",
+        });
+        setModalError(
+          "Select a different Field Officer. This officer is already assigned.",
+        );
+        return;
+      }
+
+      // Check Department Mismatch Warning
+      const candidate = fieldOfficers.find(
+        (f) => String(f.profileId) === String(selectedFieldOfficerId),
+      );
+      if (
+        candidate &&
+        normalizeDepartment(candidate.department) !== issueDepartment &&
+        !officerDepartmentWarning
+      ) {
+        setOfficerDepartmentWarning({
+          officerType: "field_officer",
+          officerName: candidate.name || candidate.fullName,
+          officerDepartment: candidate.department,
+          selectedId: selectedFieldOfficerId,
+        });
+        return;
+      }
+
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Justification reason is required." });
+        setModalError("A reason is required to reassign the Field Officer.");
+        return;
+      }
+    } else if (actionType === "change_classification") {
+      if (selectedSubcategories.length === 0) {
+        setFieldErrors({ subcategory: "Select at least one subcategory." });
+        setModalError("Select at least one subcategory.");
+        return;
+      }
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Justification reason is required." });
+        setModalError("A reason is required to change classification.");
+        return;
+      }
+    } else if (actionType === "update_priority") {
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Justification reason is required." });
+        setModalError("A reason is required to update priority.");
+        return;
+      }
+    } else if (actionType === "send_message") {
+      if (!messageText.trim()) {
+        setFieldErrors({ messageText: "Message text cannot be empty." });
+        setModalError("Please enter a message to send to assigned officers.");
+        return;
+      }
+    } else if (actionType === "approve") {
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Resolution notes are required." });
+        setModalError(
+          "Resolution notes are required to approve escalation resolution.",
+        );
+        return;
+      }
+    } else if (actionType === "reject_response") {
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Rejection reason is required." });
+        setModalError(
+          "Please state why the officer's escalation response was insufficient.",
+        );
+        return;
+      }
+    } else if (actionType === "request_action") {
+      const hasAssignedOfficers = Boolean(
+        issue?.assignedUnitOfficer ||
+          issue?.assignedFieldOfficer ||
+          issue?.assigned_officer ||
+          issue?.field_officer,
+      );
+      if (!hasAssignedOfficers) {
+        setModalError(
+          "No Unit Officer or Field Officer is currently assigned. Assign an officer before sending corrective instructions.",
+        );
+        return;
+      }
+      if (!reason.trim()) {
+        setFieldErrors({ reason: "Corrective instructions are required." });
+        setModalError(
+          "Enter the corrective instructions that should be sent to the assigned officers.",
+        );
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      if (actionType === "extend_sla") {
+        await updateSlaDeadlineMut({
+          cityAdminUserId,
+          issueId,
+          oldDeadline: issue.sla?.deadline || issue.sla_deadline,
+          newDeadline: new Date(newSlaDeadline).getTime(),
+          reason,
+        });
+        setSuccessToast("SLA deadline updated successfully.");
+      } else if (actionType === "reassign_unit_officer") {
+        const res = await assignUnitOfficerMut({
+          cityAdminUserId,
+          issueId,
+          newUnitOfficerId: selectedUnitOfficerId,
+          reason,
+        });
+        if (res?.code === "INCOMPATIBLE_FIELD_OFFICER") {
+          setUoIncompatibilityPrompt({
+            message:
+              res.message ||
+              "The current Field Officer reports to a different Unit Officer.",
+            selectedUnitOfficerId,
+            reason,
+          });
+          setLoading(false);
+          return;
+        }
+        setSuccessToast("Unit Officer reassigned successfully.");
+      } else if (actionType === "reassign_field_officer") {
+        await assignFieldOfficerMut({
+          cityAdminUserId,
+          issueId,
+          newFieldOfficerId: selectedFieldOfficerId,
+          reason,
+        });
+        setSuccessToast("Field Officer reassigned successfully.");
+      } else if (actionType === "change_classification") {
+        const res = await changeClassificationMut({
+          cityAdminUserId,
+          issueId,
+          category: selectedCategory,
+          subcategory: selectedSubcategories,
+          reason,
+        });
+        if (res?.code === "INCOMPATIBLE_OFFICERS") {
+          setClassIncompatibilityPrompt({
+            message:
+              res.message ||
+              "Changing classification makes current officer assignments incompatible.",
+            selectedCategory,
+            selectedSubcategories,
+            reason,
+          });
+          setLoading(false);
+          return;
+        }
+        setSuccessToast("Issue classification updated successfully.");
+      } else if (actionType === "update_priority") {
+        await updatePriorityMut({
+          cityAdminUserId,
+          issueId,
+          priority: selectedPriority,
+          reason,
+        });
+        setSuccessToast("Issue priority updated successfully.");
+      } else if (actionType === "send_message") {
+        await sendIssueMessageMut({
+          cityAdminUserId,
+          issueId,
+          recipientRole: messageRecipient,
+          message: messageText,
+        });
+        setSuccessToast("Message sent to assigned officers.");
+      } else if (actionType === "approve") {
+        await approveEscalationMut({
+          cityAdminUserId,
+          issueId,
+          notes: reason,
+        });
+        setSuccessToast("Administrative escalation resolved.");
+      } else if (actionType === "reject_response") {
+        await rejectEscalationResponseMut({
+          cityAdminUserId,
+          issueId,
+          reason,
+        });
+        setSuccessToast(
+          "Officer escalation response rejected. Corrective action requested.",
+        );
+      } else if (actionType === "request_action") {
+        const result = await requestCorrectiveActionMut({
+          cityAdminUserId,
+          issueId,
+          actionRequest: reason.trim(),
+        });
+        const count = result?.notifiedOfficerCount || 1;
+        setSuccessToast(
+          `Corrective instructions sent to ${count} assigned officer${count === 1 ? "" : "s"}.`,
+        );
+      }
+
+      onResolved?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setModalError("Action failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmUoIncompatibilityOverride = async () => {
+    if (!uoIncompatibilityPrompt) return;
+    setLoading(true);
+    setModalError("");
+    try {
+      await assignUnitOfficerMut({
+        cityAdminUserId,
+        issueId,
+        newUnitOfficerId: uoIncompatibilityPrompt.selectedUnitOfficerId,
+        reason: uoIncompatibilityPrompt.reason,
+        clearIncompatibleFieldOfficer: true,
+      });
+      setUoIncompatibilityPrompt(null);
+      setSuccessToast(
+        "Unit Officer assigned and incompatible Field Officer cleared.",
+      );
+      onResolved?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setModalError("Failed to proceed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmClassificationOverride = async () => {
+    if (!classIncompatibilityPrompt) return;
+    setLoading(true);
+    setModalError("");
+    try {
+      await changeClassificationMut({
+        cityAdminUserId,
+        issueId,
+        category: classIncompatibilityPrompt.selectedCategory,
+        subcategory: classIncompatibilityPrompt.selectedSubcategories,
+        reason: classIncompatibilityPrompt.reason,
+        clearIncompatibleOfficers: true,
+      });
+      setClassIncompatibilityPrompt(null);
+      setSuccessToast(
+        "Classification changed and incompatible officer assignments cleared.",
+      );
+      onResolved?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setModalError("Failed to proceed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isMounted) return null;
 
   const isPendingReview =
-    issue.is_escalated &&
-    (issue.escalation_admin_review_status === "pending" ||
-      !issue.escalation_admin_review_status);
+    hasActiveUnresolvedEscalation &&
+    (escalationReviewStatus === "pending" ||
+      issue?.escalation_admin_review_status === "pending");
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex justify-end z-50 animate-fadeIn">
-      {/* Background click to close */}
+  const config = getActionConfig();
+
+  const modalJSX = (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex justify-end z-[200] animate-fadeIn">
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
 
-      {/* Drawer content body */}
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 h-full flex flex-col shadow-2xl border-l border-slate-200 dark:border-slate-800 animate-slideOver overflow-hidden text-xs font-semibold text-slate-800 dark:text-slate-200">
-        {/* Header */}
-        <div className="bg-slate-50 dark:bg-slate-950 px-6 py-5 border-b border-slate-200 dark:border-slate-800/80 flex justify-between items-center">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 h-dvh flex flex-col shadow-2xl border-l border-slate-200 dark:border-slate-800 animate-slideOver overflow-hidden text-xs font-semibold text-slate-800 dark:text-slate-200">
+        {/* Modal Header */}
+        <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center border-b border-slate-800 flex-shrink-0">
           <div>
-            <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white uppercase">
-              City Admin SLA & Escalation Control
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-black text-cyan-400 text-sm">
+                {issue?.code || issue?.ticket_id}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-800 text-slate-300 border border-slate-700">
+                {issue?.city}, {issue?.state}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-cyan-950 text-cyan-400 border border-cyan-800">
+                Priority: {issue?.priority || issue?.severity}
+              </span>
+            </div>
+            <h2 className="text-base font-black tracking-tight mt-1 text-white truncate max-w-xl">
+              {issue?.title}
             </h2>
-            <p className="text-[10px] text-teal-650 dark:text-teal-400 font-extrabold uppercase mt-0.5">
-              Administrative Scope: {issue.city}, {issue.state}
-            </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white"
+            className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Scrollable content area */}
+        {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Error Banner */}
-          {errorBanner && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 p-4 rounded-2xl font-bold flex items-center gap-2">
-              <AlertTriangle className="flex-shrink-0" size={16} />
-              <p>{errorBanner}</p>
+          {modalError && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 p-4 rounded-2xl font-bold flex items-center gap-3">
+              <AlertTriangle className="flex-shrink-0" size={18} />
+              <p>{modalError}</p>
             </div>
           )}
 
-          {/* Success Toast banner */}
           {successToast && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-4 rounded-2xl font-bold flex items-center gap-2">
-              <CheckCircle2 className="flex-shrink-0" size={16} />
+            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-4 rounded-2xl font-bold flex items-center gap-3">
+              <CheckCircle2 className="flex-shrink-0" size={18} />
               <p>{successToast}</p>
             </div>
           )}
 
-          {/* Acknowledge Escalation panel */}
-          {isPendingReview && (
-            <div className="bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-3">
-              <h4 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
-                <AlertTriangle className="text-amber-500" size={16} />
-                Awaiting Acknowledgment
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal">
-                This administrative escalation has not been formally
-                acknowledged yet. Please verify receipt to move its review state
-                to under review.
+          {/* Department Mismatch Confirmation Banner */}
+          {officerDepartmentWarning && (
+            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm">
+                <AlertTriangle size={18} />
+                <span>Officer Department Mismatch Warning</span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-normal">
+                Issue Department:{" "}
+                <strong>{formatDepartmentLabel(issueDepartment)}</strong>
+                <br />
+                Selected Officer Department:{" "}
+                <strong>
+                  {formatDepartmentLabel(
+                    officerDepartmentWarning.officerDepartment,
+                  )}
+                </strong>
+                <br />
+                This officer belongs to a different department than the issue
+                requires. Confirm that you still want to continue with this
+                officer reassignment.
               </p>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOfficerDepartmentWarning(null)}
+                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteAction}
+                  disabled={loading}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
+                >
+                  Confirm Mismatched Reassignment
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Incompatibility Prompt Confirmation Cards */}
+          {uoIncompatibilityPrompt && (
+            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm">
+                <AlertTriangle size={18} />
+                <span>Unit Officer Incompatibility Warning</span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-normal">
+                {uoIncompatibilityPrompt.message}
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setUoIncompatibilityPrompt(null)}
+                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300"
+                >
+                  Cancel Reassignment
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUoIncompatibilityOverride}
+                  disabled={loading}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
+                >
+                  Clear Incompatible Field Officer & Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {classIncompatibilityPrompt && (
+            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm">
+                <AlertTriangle size={18} />
+                <span>Classification Incompatibility Warning</span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-normal">
+                {classIncompatibilityPrompt.message}
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setClassIncompatibilityPrompt(null)}
+                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmClassificationOverride}
+                  disabled={loading}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
+                >
+                  Clear Incompatible Officer Assignments & Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pending Acknowledgement Banner */}
+          {isPendingReview && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 font-bold">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                    Escalation Awaiting Acknowledgement
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    This escalation has not been formally acknowledged by City
+                    Admin yet.
+                  </p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={handleAcknowledgeEscalation}
                 disabled={loading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl text-xs transition-colors shadow flex-shrink-0 cursor-pointer"
               >
                 Acknowledge Escalation
               </button>
             </div>
           )}
 
-          {/* Issue Context Summary */}
-          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-4">
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">
-              Issue Context
+          {/* 1. Issue Overview & SLA Details */}
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+              Issue Context Overview & SLA Health
             </h3>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div>
-                <span className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Issue Code
+                <span className="block text-[10px] text-slate-400 font-bold uppercase">
+                  Category
                 </span>
-                <span className="font-mono text-cyan-600 dark:text-cyan-400 font-extrabold">
-                  {issue.ticket_id}
+                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                  {issue?.category}
                 </span>
               </div>
               <div>
-                <span className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Current Category
+                <span className="block text-[10px] text-slate-400 font-bold uppercase">
+                  Department
                 </span>
-                <span className="font-extrabold uppercase">
-                  {issue.category}
+                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                  {formatDepartmentLabel(issueDepartment)}
                 </span>
               </div>
-              <div className="col-span-2">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Location
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold uppercase">
+                  Operational Status
                 </span>
-                <p className="font-semibold text-slate-700 dark:text-slate-300">
-                  {issue.location}
-                </p>
+                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                  {issue?.status}
+                </span>
               </div>
-              <div className="col-span-2">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Description
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold uppercase">
+                  SLA Target
                 </span>
-                <p className="font-semibold text-slate-600 dark:text-slate-400 leading-relaxed mt-1">
-                  {issue.description}
-                </p>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {issue?.sla?.deadline
+                    ? formatDateTime(issue.sla.deadline)
+                    : "No deadline"}
+                </span>
               </div>
             </div>
 
-            {issue.escalation_reason && (
-              <div className="bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 rounded-xl p-3.5 space-y-1">
-                <span className="block text-[10px] text-purple-600 dark:text-purple-400 font-black uppercase">
-                  Escalation Trigger Reason
-                </span>
-                <p className="font-extrabold text-slate-800 dark:text-white leading-normal">
-                  "{issue.escalation_reason}"
-                </p>
-              </div>
-            )}
+            {/* SLA Extension History */}
+            {issue?.sla?.extensionHistory &&
+              issue.sla.extensionHistory.length > 0 && (
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400">
+                    SLA Extension History ({issue.sla.extensionHistory.length}{" "}
+                    extensions)
+                  </span>
+                  <div className="max-h-24 overflow-y-auto space-y-1">
+                    {issue.sla.extensionHistory.map((ext, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px]"
+                      >
+                        <span className="font-bold text-cyan-600 dark:text-cyan-400">
+                          Extended to {formatDateTime(ext.newDeadline)}
+                        </span>
+                        <span className="text-slate-400 ml-2">
+                          Reason: "{ext.notes || ext.reason}"
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
           </div>
 
-          {/* Choose administrative action */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">
-              Choose Administrative Action
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[
-                "extend_sla",
-                "reassign_ward",
-                "reassign_field",
-                "change_category",
-                "approve",
-                "dismiss",
-                "reject",
-              ].map((type) => {
-                const label = {
-                  extend_sla: "Extend SLA",
-                  reassign_ward: "Reassign UO",
-                  reassign_field: "Reassign FO",
-                  change_category: "Recategorize",
-                  approve: "Approve Resolution",
-                  dismiss: "Dismiss Escalation",
-                  reject: "Reject Issue",
-                }[type];
+          {/* 2. Persistent Escalation Details Section */}
+          {hasEscalationData && (
+            <section className="overflow-hidden rounded-2xl border border-purple-200 bg-white dark:border-purple-900/50 dark:bg-slate-950/70">
+              <div className="border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 px-5 py-4 dark:border-purple-900/40 dark:from-purple-950/30 dark:to-indigo-950/20">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-600 text-white shadow">
+                      <ArrowUpRight className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                        Escalation Details
+                      </h3>
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        Administrative escalation context and current review
+                        state
+                      </p>
+                    </div>
+                  </div>
 
-                const isSelected = actionType === type;
-
-                return (
-                  <button
-                    type="button"
-                    key={type}
-                    onClick={() => setActionType(type)}
-                    className={`p-3 rounded-xl border text-center font-bold text-xs transition-all duration-200 ${
-                      isSelected
-                        ? "bg-teal-50 dark:bg-teal-950/20 border-teal-500 text-teal-650 dark:text-teal-450"
-                        : "bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-800 text-slate-655 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  <span
+                    className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${
+                      ESCALATION_STATUS_STYLES[escalationDisplayStatus]
+                        ?.className ||
+                      "border-slate-200 bg-slate-50 text-slate-700"
                     }`}
                   >
-                    {label}
+                    {ESCALATION_STATUS_STYLES[escalationDisplayStatus]?.label ||
+                      escalationDisplayStatus}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <EscalationField
+                    label="Escalation Category"
+                    value={formatEscalationCategory(
+                      escalationData.category ||
+                        issue?.escalation_category ||
+                        issue?.category,
+                    )}
+                  />
+                  <EscalationField
+                    label="Priority"
+                    value={String(
+                      escalationData.priority ||
+                        issue?.escalation_priority ||
+                        issue?.priority ||
+                        "medium",
+                    ).toUpperCase()}
+                  />
+                  <EscalationField
+                    label="Escalated At"
+                    value={formatDateTime(
+                      escalationData.escalatedAt || issue?.escalated_at,
+                    )}
+                  />
+                  <EscalationField
+                    label="Escalation Count"
+                    value={
+                      escalationData.count ||
+                      escalationData.escalationCount ||
+                      issue?.escalation_count ||
+                      1
+                    }
+                  />
+                  {(escalationData.escalatedByName || issue?.escalated_by) && (
+                    <EscalationField
+                      label="Escalated By"
+                      value={
+                        escalationData.escalatedByName || issue?.escalated_by
+                      }
+                    />
+                  )}
+                  {(escalationData.reviewedByName ||
+                    issue?.escalation_reviewed_by_name) && (
+                    <EscalationField
+                      label="Reviewed By"
+                      value={
+                        escalationData.reviewedByName ||
+                        issue?.escalation_reviewed_by_name
+                      }
+                    />
+                  )}
+                  {(escalationData.reviewedAt ||
+                    issue?.escalation_reviewed_at) && (
+                    <EscalationField
+                      label="Reviewed At"
+                      value={formatDateTime(
+                        escalationData.reviewedAt ||
+                          issue?.escalation_reviewed_at,
+                      )}
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Escalation Reason
+                  </p>
+                  <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
+                    <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-200">
+                      {escalationData.reason ||
+                        issue?.escalation_reason ||
+                        "No escalation reason was recorded."}
+                    </p>
+                  </div>
+                </div>
+
+                {(escalationData.comments || issue?.escalation_comments) && (
+                  <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Additional Escalation Comments
+                    </p>
+                    <p className="whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                      "{escalationData.comments || issue?.escalation_comments}"
+                    </p>
+                  </div>
+                )}
+
+                {isEscalationResolved && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-black text-emerald-800 dark:text-emerald-300">
+                          Escalation Resolution Approved
+                        </p>
+
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <EscalationField
+                            label="Resolved At"
+                            value={formatDateTime(
+                              escalationData.resolvedAt ||
+                                issue?.escalation_resolved_at,
+                            )}
+                          />
+                          <EscalationField
+                            label="Resolved By"
+                            value={
+                              escalationData.resolvedByName ||
+                              issue?.escalation_resolved_by_name ||
+                              "City Admin"
+                            }
+                          />
+                        </div>
+
+                        <div className="mt-3">
+                          <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                            Resolution Notes
+                          </p>
+                          <p className="whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-emerald-900 dark:text-emerald-200">
+                            {escalationData.resolutionNotes ||
+                              escalationData.resolutionNote ||
+                              issue?.escalation_resolution_notes ||
+                              "No resolution notes were recorded."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {responseRejectedAt && (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
+                    <div className="flex items-start gap-3">
+                      <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-600 dark:text-rose-400" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-black text-rose-800 dark:text-rose-300">
+                          Previous Escalation Response Rejected
+                        </p>
+                        <div className="mt-2 text-xs font-semibold space-y-1">
+                          <p className="text-rose-700 dark:text-rose-300">
+                            <strong>Rejected At:</strong>{" "}
+                            {formatDateTime(responseRejectedAt)}
+                          </p>
+                          <p className="whitespace-pre-wrap break-words text-rose-800 dark:text-rose-200 leading-relaxed pt-1">
+                            <strong>Rejection Reason:</strong>{" "}
+                            {responseRejectionReason ||
+                              "Further corrective action was requested."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* 3. Persistent Escalation Timeline Section */}
+          {(hasEscalationData || normalisedTimeline.length > 0) && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/60">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Escalation / Activity Timeline
+                  </h3>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Complete administrative history of this issue
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {normalisedTimeline.length} Events
+                </span>
+              </div>
+
+              {normalisedTimeline.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+                  <Activity className="mx-auto h-7 w-7 text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+                    No escalation timeline entries available
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-slate-400">
+                    Administrative actions will appear here as the escalation is
+                    processed.
+                  </p>
+                </div>
+              ) : (
+                <div className="relative space-y-0 pl-1">
+                  {normalisedTimeline.map((event, index) => {
+                    const isLast = index === normalisedTimeline.length - 1;
+                    return (
+                      <div key={event.id} className="relative flex gap-4 pb-6">
+                        {!isLast && (
+                          <div className="absolute bottom-0 left-[17px] top-9 w-px bg-slate-200 dark:bg-slate-700" />
+                        )}
+
+                        <div className="relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-400 shadow-sm">
+                          <Activity className="h-4 w-4" />
+                        </div>
+
+                        <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <p className="text-xs font-black text-slate-900 dark:text-white">
+                              {formatTimelineAction(event.type)}
+                            </p>
+                            <time className="text-[10px] font-bold text-slate-400">
+                              {formatDateTime(event.performedAt)}
+                            </time>
+                          </div>
+
+                          <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            Performed by {event.performedBy}
+                          </p>
+
+                          {event.notes && (
+                            <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
+                              {event.notes}
+                            </p>
+                          )}
+
+                          {(event.oldValue || event.newValue) && (
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {event.oldValue && (
+                                <div className="rounded-lg bg-rose-50 p-2.5 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                                  <p className="text-[9px] font-black uppercase text-rose-500">
+                                    Previous Value
+                                  </p>
+                                  <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                    {formatHistoryValue(event.oldValue)}
+                                  </p>
+                                </div>
+                              )}
+                              {event.newValue && (
+                                <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                                  <p className="text-[9px] font-black uppercase text-emerald-500">
+                                    Updated Value
+                                  </p>
+                                  <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                    {formatHistoryValue(event.newValue)}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 4. Administrative Action Selector Section */}
+          <div className="space-y-2">
+            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+              {hasActiveUnresolvedEscalation
+                ? "Resolve Active Escalation"
+                : "Operational Actions"}
+            </h3>
+
+            <div className="flex flex-wrap gap-2">
+              {availableActions.map((tab) => {
+                const TabIcon = tab.icon;
+                const active = actionType === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActionType(tab.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      active
+                        ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <TabIcon size={14} />
+                    <span>{tab.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Action configuration forms */}
-          <div
-            className={`bg-gradient-to-br ${config.bgGradient} border ${config.borderColor} rounded-2xl p-5 space-y-4`}
-          >
+          {/* 5. Selected Action Form */}
+          <div className="bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
             <div>
-              <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                <ActionIcon size={16} />
+              <h4
+                className={`text-sm font-black flex items-center gap-1.5 ${config.color}`}
+              >
                 {config.title}
               </h4>
-              <p className="text-xs text-slate-550 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
                 {config.description}
               </p>
             </div>
 
-            {actionType === "extend_sla" && (
-              <div className="space-y-2">
-                <label className="block text-[10px] text-slate-400 uppercase font-bold">
-                  New SLA Target Deadline
-                </label>
-                <input
-                  type="datetime-local"
-                  value={newSlaDeadline}
-                  onChange={(e) => setNewSlaDeadline(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100"
-                />
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Current deadline:{" "}
-                  {issue.sla_deadline
-                    ? new Date(issue.sla_deadline).toLocaleString()
-                    : "None"}
-                </p>
+            {/* Extend SLA Form */}
+            {!hasActiveUnresolvedEscalation && actionType === "extend_sla" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Current SLA Deadline
+                    </label>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-300">
+                      {issue?.sla?.deadline
+                        ? formatDateTime(issue.sla.deadline)
+                        : "None"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Proposed SLA Target Deadline *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={newSlaDeadline}
+                      onChange={(e) => setNewSlaDeadline(e.target.value)}
+                      className={`w-full p-2.5 bg-white dark:bg-slate-900 border rounded-xl font-semibold text-slate-800 dark:text-slate-100 ${
+                        fieldErrors.newSlaDeadline
+                          ? "border-red-500"
+                          : "border-slate-200 dark:border-slate-800"
+                      }`}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
-            {actionType === "reassign_ward" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
-                    Select Unit Officer Profile
-                  </label>
-                  <select
-                    value={selectedWardOfficer}
-                    onChange={(e) => handleUoChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 cursor-pointer"
-                  >
-                    <option value="">-- Choose Unit Officer --</option>
-                    {wardOfficers.map((o) => (
-                      <option key={o.profileId} value={o.profileId}>
-                        {o.fullName} ({o.department}) - Active Workload:{" "}
-                        {o.currentWorkload}/{o.maximumCapacity}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {officerMismatchWarning && (
-                  <div className="bg-red-500/5 border border-red-500/20 text-red-600 dark:text-red-400 p-3 rounded-xl flex gap-2">
-                    <AlertTriangle className="flex-shrink-0" size={15} />
-                    <p>
-                      Department incompatibility detected between selected Unit
-                      Officer and current Field Officer.
+            {/* Reassign Unit Officer Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "reassign_unit_officer" && (
+                <div className="space-y-4">
+                  {/* Issue Compatibility Header Summary */}
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      Required Issue Department
+                    </p>
+                    <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                      {formatDepartmentLabel(issueDepartment)}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Officers from this department are prioritised as suitable
+                      candidates.
                     </p>
                   </div>
-                )}
-              </div>
-            )}
 
-            {actionType === "reassign_field" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
-                    Select Field Officer Profile
-                  </label>
-                  <select
-                    value={selectedFieldOfficer}
-                    onChange={(e) => handleFoChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 cursor-pointer"
-                  >
-                    <option value="">-- Choose Field Officer --</option>
-                    {fieldOfficers.map((o) => (
-                      <option key={o.profileId} value={o.profileId}>
-                        {o.fullName} ({o.department}) - Workload:{" "}
-                        {o.currentWorkload}/{o.maximumCapacity}
-                      </option>
-                    ))}
-                  </select>
+                  {/* Current Unit Officer Summary */}
+                  <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      Currently Assigned Unit Officer
+                    </p>
+                    <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                      {currentUnitOfficer?.name ||
+                        currentUnitOfficer?.fullName ||
+                        "No Unit Officer Assigned"}
+                    </p>
+                    {currentUnitOfficer && (
+                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        Department:{" "}
+                        {formatDepartmentLabel(currentUnitOfficer.department)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Candidate List */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                      Select Unit Officer Candidate (City Admin Scope:{" "}
+                      {issue?.city || "Local"}) *
+                    </label>
+                    {isUnitOfficerLoading ? (
+                      <div className="flex items-center justify-center py-8 gap-2 text-cyan-500 font-bold">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Loading Unit Officer candidates...</span>
+                      </div>
+                    ) : sortedUnitOfficers.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                        No Unit Officers available in{" "}
+                        {issue?.city || "your city"}.
+                      </p>
+                    ) : (
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {sortedUnitOfficers.map((uo, idx) => {
+                          const candidateDept = normalizeDepartment(
+                            uo.department,
+                          );
+                          const isDepartmentMatch =
+                            candidateDept === issueDepartment;
+                          const isCurrentlyAssigned =
+                            String(uo.profileId) ===
+                            String(currentUnitOfficerProfileId);
+                          const isCapacityFull =
+                            Number(uo.availableCapacity ?? 0) <= 0;
+                          const isSuitable =
+                            isDepartmentMatch && !isCapacityFull;
+                          const isSelected =
+                            String(selectedUnitOfficerId) ===
+                            String(uo.profileId);
+                          const isCandidateDisabled =
+                            isCurrentlyAssigned || isCapacityFull;
+
+                          const candidateCardClass = isSelected
+                            ? "border-purple-500 bg-purple-50 ring-2 ring-purple-500/20 dark:bg-purple-950/30"
+                            : isCurrentlyAssigned
+                              ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/20"
+                              : isCapacityFull
+                                ? "cursor-not-allowed border-rose-200 bg-rose-50/50 opacity-70 dark:border-rose-900/40 dark:bg-rose-950/10"
+                                : isDepartmentMatch
+                                  ? "border-emerald-300 bg-emerald-50/50 hover:border-emerald-500 dark:border-emerald-900/50 dark:bg-emerald-950/10"
+                                  : "border-amber-200 bg-amber-50/40 hover:border-amber-400 dark:border-amber-900/40 dark:bg-amber-950/10";
+
+                          const prevCandidate = sortedUnitOfficers[idx - 1];
+                          const isFirstMismatch =
+                            !isDepartmentMatch &&
+                            (!prevCandidate ||
+                              normalizeDepartment(prevCandidate.department) ===
+                                issueDepartment);
+
+                          return (
+                            <div key={uo.profileId} className="space-y-2">
+                              {isFirstMismatch && (
+                                <div className="pt-2 pb-1 text-[10px] font-black uppercase text-amber-500 tracking-wider flex items-center gap-2">
+                                  <span>
+                                    Other Officers — Department Mismatch
+                                  </span>
+                                  <div className="flex-1 h-px bg-amber-200 dark:bg-amber-900/50" />
+                                </div>
+                              )}
+
+                              <div
+                                onClick={() => {
+                                  if (!isCandidateDisabled) {
+                                    setSelectedUnitOfficerId(uo.profileId);
+                                  }
+                                }}
+                                className={`rounded-2xl border p-4 transition-all ${candidateCardClass} ${
+                                  !isCandidateDisabled ? "cursor-pointer" : ""
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <input
+                                    type="radio"
+                                    name="uo_candidate"
+                                    checked={isSelected}
+                                    disabled={isCandidateDisabled}
+                                    onChange={() => {
+                                      if (!isCandidateDisabled) {
+                                        setSelectedUnitOfficerId(uo.profileId);
+                                      }
+                                    }}
+                                    className="mt-1 accent-purple-600 cursor-pointer"
+                                  />
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-black text-slate-900 dark:text-white">
+                                        {uo.name || uo.fullName}
+                                      </p>
+
+                                      {isCurrentlyAssigned && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300 bg-cyan-100 px-2 py-0.5 text-[9px] font-black uppercase text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+                                          <Shield size={10} />
+                                          Current Assignment
+                                        </span>
+                                      )}
+
+                                      {isSelected && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-100 px-2 py-0.5 text-[9px] font-black uppercase text-purple-700 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
+                                          <CheckCircle size={10} />
+                                          Selected Replacement
+                                        </span>
+                                      )}
+
+                                      {isSuitable && !isCurrentlyAssigned && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                          <CheckCircle2 size={10} />
+                                          Suitable for Issue
+                                        </span>
+                                      )}
+
+                                      {!isDepartmentMatch && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                          <AlertTriangle size={10} />
+                                          Department Mismatch
+                                        </span>
+                                      )}
+
+                                      {isCapacityFull && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                                          <XCircle size={10} />
+                                          Capacity Reached
+                                        </span>
+                                      )}
+
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[9px] font-bold text-cyan-700 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-300">
+                                        Within Scope
+                                      </span>
+                                    </div>
+
+                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Officer Department
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                                          {formatDepartmentLabel(uo.department)}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Required Issue Dept
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                                          {formatDepartmentLabel(
+                                            issueDepartment,
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Workload
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                                          {uo.currentWorkload ?? 0}/
+                                          {uo.maximumCapacity ?? 10}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Available Capacity
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                                          {uo.availableCapacity ?? 0}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <p className="mt-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                      {isCurrentlyAssigned
+                                        ? "This officer is currently assigned to the issue."
+                                        : isCapacityFull
+                                          ? "Unavailable because the officer has reached the maximum active-issue capacity."
+                                          : isDepartmentMatch
+                                            ? "Suitable because the officer’s department matches the issue department and capacity is available."
+                                            : `Not recommended because the officer belongs to ${formatDepartmentLabel(uo.department)}, while this issue requires ${formatDepartmentLabel(issueDepartment)}.`}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
 
-                {officerMismatchWarning && (
-                  <div className="bg-red-500/5 border border-red-500/20 text-red-650 dark:text-red-400 p-3 rounded-xl flex gap-2">
-                    <AlertTriangle className="flex-shrink-0" size={15} />
-                    <p>
-                      Department incompatibility detected between selected Field
-                      Officer and current Unit Officer.
+            {/* Reassign Field Officer Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "reassign_field_officer" && (
+                <div className="space-y-4">
+                  {/* Issue Compatibility Header Summary */}
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      Required Issue Department
+                    </p>
+                    <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                      {formatDepartmentLabel(issueDepartment)}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Officers from this department are prioritised as suitable
+                      candidates.
                     </p>
                   </div>
-                )}
+
+                  {/* Current Field Officer Summary */}
+                  <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      Currently Assigned Field Officer
+                    </p>
+                    <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                      {currentFieldOfficer?.name ||
+                        currentFieldOfficer?.fullName ||
+                        "No Field Officer Assigned"}
+                    </p>
+                    {currentFieldOfficer && (
+                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        Department:{" "}
+                        {formatDepartmentLabel(currentFieldOfficer.department)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Candidate List */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                      Select Field Officer Candidate (City Admin Scope:{" "}
+                      {issue?.city || "Local"}) *
+                    </label>
+                    {isFieldOfficerLoading ? (
+                      <div className="flex items-center justify-center py-8 gap-2 text-indigo-500 font-bold">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Loading Field Officer candidates...</span>
+                      </div>
+                    ) : sortedFieldOfficers.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                        No Field Officers available in{" "}
+                        {issue?.city || "your city"}.
+                      </p>
+                    ) : (
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {sortedFieldOfficers.map((fo, idx) => {
+                          const candidateDept = normalizeDepartment(
+                            fo.department,
+                          );
+                          const isDepartmentMatch =
+                            candidateDept === issueDepartment;
+                          const isCurrentlyAssigned =
+                            String(fo.profileId) ===
+                            String(currentFieldOfficerProfileId);
+                          const isCapacityFull =
+                            Number(fo.availableCapacity ?? 0) <= 0;
+                          const hasReportingMismatch =
+                            fo.compatibilityWarnings?.some(
+                              (warning) =>
+                                String(warning)
+                                  .toLowerCase()
+                                  .includes("unit officer") ||
+                                String(warning)
+                                  .toLowerCase()
+                                  .includes("reporting"),
+                            );
+                          const isSuitable =
+                            isDepartmentMatch &&
+                            !isCapacityFull &&
+                            !hasReportingMismatch;
+                          const isSelected =
+                            String(selectedFieldOfficerId) ===
+                            String(fo.profileId);
+                          const isCandidateDisabled =
+                            isCurrentlyAssigned || isCapacityFull;
+
+                          const candidateCardClass = isSelected
+                            ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500/20 dark:bg-indigo-950/30"
+                            : isCurrentlyAssigned
+                              ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/20"
+                              : isCapacityFull
+                                ? "cursor-not-allowed border-rose-200 bg-rose-50/50 opacity-70 dark:border-rose-900/40 dark:bg-rose-950/10"
+                                : isDepartmentMatch && !hasReportingMismatch
+                                  ? "border-emerald-300 bg-emerald-50/50 hover:border-emerald-500 dark:border-emerald-900/50 dark:bg-emerald-950/10"
+                                  : "border-amber-200 bg-amber-50/40 hover:border-amber-400 dark:border-amber-900/40 dark:bg-amber-950/10";
+
+                          const prevCandidate = sortedFieldOfficers[idx - 1];
+                          const isFirstMismatch =
+                            !isDepartmentMatch &&
+                            (!prevCandidate ||
+                              normalizeDepartment(prevCandidate.department) ===
+                                issueDepartment);
+
+                          return (
+                            <div key={fo.profileId} className="space-y-2">
+                              {isFirstMismatch && (
+                                <div className="pt-2 pb-1 text-[10px] font-black uppercase text-amber-500 tracking-wider flex items-center gap-2">
+                                  <span>
+                                    Other Officers — Department Mismatch
+                                  </span>
+                                  <div className="flex-1 h-px bg-amber-200 dark:bg-amber-900/50" />
+                                </div>
+                              )}
+
+                              <div
+                                onClick={() => {
+                                  if (!isCandidateDisabled) {
+                                    setSelectedFieldOfficerId(fo.profileId);
+                                  }
+                                }}
+                                className={`rounded-2xl border p-4 transition-all ${candidateCardClass} ${
+                                  !isCandidateDisabled ? "cursor-pointer" : ""
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <input
+                                    type="radio"
+                                    name="fo_candidate"
+                                    checked={isSelected}
+                                    disabled={isCandidateDisabled}
+                                    onChange={() => {
+                                      if (!isCandidateDisabled) {
+                                        setSelectedFieldOfficerId(fo.profileId);
+                                      }
+                                    }}
+                                    className="mt-1 accent-indigo-600 cursor-pointer"
+                                  />
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-black text-slate-900 dark:text-white">
+                                        {fo.name || fo.fullName}
+                                      </p>
+
+                                      {isCurrentlyAssigned && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300 bg-cyan-100 px-2 py-0.5 text-[9px] font-black uppercase text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+                                          <Shield size={10} />
+                                          Current Assignment
+                                        </span>
+                                      )}
+
+                                      {isSelected && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-indigo-100 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+                                          <CheckCircle size={10} />
+                                          Selected Replacement
+                                        </span>
+                                      )}
+
+                                      {isSuitable && !isCurrentlyAssigned && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                          <CheckCircle2 size={10} />
+                                          Suitable for Issue
+                                        </span>
+                                      )}
+
+                                      {!isDepartmentMatch && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                          <AlertTriangle size={10} />
+                                          Department Mismatch
+                                        </span>
+                                      )}
+
+                                      {hasReportingMismatch && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                                          <AlertTriangle size={10} />
+                                          Reporting Relationship Mismatch
+                                        </span>
+                                      )}
+
+                                      {isCapacityFull && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                                          <XCircle size={10} />
+                                          Capacity Reached
+                                        </span>
+                                      )}
+
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[9px] font-bold text-cyan-700 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-300">
+                                        Within Scope
+                                      </span>
+                                    </div>
+
+                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Officer Department
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                                          {formatDepartmentLabel(fo.department)}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Required Issue Dept
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
+                                          {formatDepartmentLabel(
+                                            issueDepartment,
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Workload
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                                          {fo.currentWorkload ?? 0}/
+                                          {fo.maximumCapacity ?? 10}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+                                          Available Capacity
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                                          {fo.availableCapacity ?? 0}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <p className="mt-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                      {isCurrentlyAssigned
+                                        ? "This officer is currently assigned to the issue."
+                                        : isCapacityFull
+                                          ? "Unavailable because the officer has reached the maximum active-issue capacity."
+                                          : hasReportingMismatch
+                                            ? `Reporting relationship warning: ${fo.compatibilityWarnings?.join("; ") || "Officer reports to a different Unit Officer"}`
+                                            : isDepartmentMatch
+                                              ? "Suitable because the officer’s department matches the issue department and capacity is available."
+                                              : `Not recommended because the officer belongs to ${formatDepartmentLabel(fo.department)}, while this issue requires ${formatDepartmentLabel(issueDepartment)}.`}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            {/* Change Classification Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "change_classification" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                        Proposed Category *
+                      </label>
+                      <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 capitalize cursor-pointer"
+                      >
+                        {ISSUE_CATEGORIES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label} ({c.value})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                        Responsible Department (Derived)
+                      </label>
+                      <div className="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-mono font-extrabold text-cyan-600 dark:text-cyan-400">
+                        {formatDepartmentLabel(derivedDepartment)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Select Subcategories *
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(ISSUE_SUBCATEGORIES[selectedCategory] || []).map(
+                        (sub) => {
+                          const selected = selectedSubcategories.includes(sub);
+                          return (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => handleToggleSubcategory(sub)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                selected
+                                  ? "bg-amber-500 text-white shadow-sm"
+                                  : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                              }`}
+                            >
+                              {sub}
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {/* Update Priority Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "update_priority" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                      Proposed Priority *
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {["low", "medium", "high", "critical"].map((p) => {
+                        const selected = selectedPriority === p;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setSelectedPriority(p)}
+                            className={`p-2.5 rounded-xl border text-center font-black uppercase text-xs transition-all cursor-pointer ${
+                              selected
+                                ? p === "critical"
+                                  ? "bg-red-500 text-white border-red-600"
+                                  : p === "high"
+                                    ? "bg-orange-500 text-white border-orange-600"
+                                    : p === "medium"
+                                      ? "bg-amber-500 text-white border-amber-600"
+                                      : "bg-emerald-500 text-white border-emerald-600"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {/* Send Message Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "send_message" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Select Recipient *
+                    </label>
+                    <select
+                      value={messageRecipient}
+                      onChange={(e) => setMessageRecipient(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                    >
+                      <option value="both">
+                        Both Unit Officer & Field Officer
+                      </option>
+                      <option value="unit_officer">Unit Officer Only</option>
+                      <option value="field_officer">Field Officer Only</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Message Content *
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Enter explicit operational instruction or clarification message..."
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+              )}
+
+            {/* Approve Escalation Resolution Form */}
+            {hasActiveUnresolvedEscalation && actionType === "approve" && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
+                This action resolves the administrative escalation. It does not
+                automatically close or reject the civic issue.
               </div>
             )}
 
-            {actionType === "change_category" && (
-              <div className="space-y-2">
-                <label className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Correct Category Classification
-                </label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 cursor-pointer capitalize"
-                >
-                  <option value="road">Road</option>
-                  <option value="electricity">Electricity</option>
-                  <option value="water">Water</option>
-                  <option value="sanitation">Sanitation</option>
-                  <option value="drainage">Drainage</option>
-                  <option value="solid_waste">Solid Waste</option>
-                  <option value="public_health">Public Health</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            )}
+            {/* Reject Escalation Response Form */}
+            {hasActiveUnresolvedEscalation &&
+              actionType === "reject_response" && (
+                <div className="space-y-3">
+                  <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300 font-semibold">
+                    <Info size={14} className="inline mr-1 -mt-0.5" />
+                    This action does not reject or close the civic issue. The
+                    escalation will remain active and further corrective action
+                    will be required.
+                  </div>
+                </div>
+              )}
 
-            {actionType === "reject" && (
-              <div className="space-y-2">
-                <label className="block text-[10px] text-slate-400 uppercase font-bold">
-                  Civic Issue Rejection Reason *
+            {/* Request Corrective Action Form */}
+            {!hasActiveUnresolvedEscalation &&
+              actionType === "request_action" && (
+                <div className="space-y-3">
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
+                    <Info size={14} className="inline mr-1 -mt-0.5" />
+                    This action sends an officer-only instruction. It does not
+                    change the issue status, SLA status, escalation review
+                    status, or escalation timeline.
+                  </div>
+
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20 space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                      Recipients (Officers Only)
+                    </p>
+                    {(issue?.assignedUnitOfficer?.name ||
+                      issue?.assigned_officer?.name) && (
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Unit Officer:{" "}
+                        {issue?.assignedUnitOfficer?.name ||
+                          issue?.assigned_officer?.name}
+                      </p>
+                    )}
+                    {(issue?.assignedFieldOfficer?.name ||
+                      issue?.field_officer?.name) && (
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Field Officer:{" "}
+                        {issue?.assignedFieldOfficer?.name ||
+                          issue?.field_officer?.name}
+                      </p>
+                    )}
+                    {!issue?.assignedUnitOfficer &&
+                      !issue?.assignedFieldOfficer &&
+                      !issue?.assigned_officer &&
+                      !issue?.field_officer && (
+                        <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                          No Unit Officer or Field Officer is currently
+                          assigned. Assign an officer before sending corrective
+                          instructions.
+                        </p>
+                      )}
+                    <p className="text-[10px] text-slate-500 font-medium pt-1">
+                      Visibility: Officers only (Citizen will not receive this
+                      notification)
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {/* Common Reason / Notes Textarea */}
+            {actionType !== "send_message" && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  {actionType === "approve"
+                    ? "Resolution Notes *"
+                    : actionType === "reject_response"
+                      ? "Reason for Rejecting the Escalation Response *"
+                      : actionType === "request_action"
+                        ? "Corrective Instructions *"
+                        : "Administrative Justification Reason *"}
                 </label>
                 <textarea
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  required
-                  rows={2}
-                  className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none h-16 resize-none"
-                  placeholder="State the reason why the citizen reported issue is rejected..."
+                  rows={3}
+                  placeholder={
+                    actionType === "reject_response"
+                      ? "Explain why the submitted corrective action or escalation response is insufficient and what further action is required."
+                      : actionType === "request_action"
+                        ? "Describe the exact corrective action the assigned officers must perform."
+                        : "Provide explicit operational justification or resolution notes..."
+                  }
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className={`w-full p-3 bg-white dark:bg-slate-900 border rounded-xl text-xs font-semibold ${
+                    fieldErrors.reason
+                      ? "border-red-500"
+                      : "border-slate-200 dark:border-slate-800"
+                  }`}
                 />
               </div>
             )}
-
-            {actionType === "dismiss" && (
-              <div className="space-y-2">
-                <label className="block text-[10px] text-slate-450 uppercase font-bold">
-                  Escalation Dismissal Reason *
-                </label>
-                <textarea
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  required
-                  rows={2}
-                  className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none h-16 resize-none"
-                  placeholder="State the reason why the escalation review is rejected/dismissed..."
-                />
-              </div>
-            )}
-
-            {/* Resolution/Audit Notes */}
-            <div className="space-y-2">
-              <label className="block text-[10px] text-slate-400 uppercase font-bold">
-                Resolution Notes *
-              </label>
-              <textarea
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-                required
-                rows={3}
-                className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none h-20 resize-none"
-                placeholder="Provide details of resolution decision..."
-              />
-            </div>
           </div>
         </div>
 
-        {/* Footer actions */}
-        <div className="bg-slate-50 dark:bg-slate-950/80 px-6 py-4 border-t border-slate-200 dark:border-slate-800/80 flex gap-3">
+        {/* Modal Footer Actions */}
+        <div className="bg-slate-900 p-4 border-t border-slate-800 flex items-center justify-end gap-3 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-center"
+            className="px-4 py-2.5 rounded-xl font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={handleResolveEscalation}
-            disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-white transition-colors text-center ${
-              loading
-                ? "bg-slate-400 cursor-not-allowed"
-                : "bg-teal-650 hover:bg-teal-700 shadow"
+            onClick={handleExecuteAction}
+            disabled={
+              loading ||
+              (actionType === "request_action" &&
+                !issue?.assignedUnitOfficer &&
+                !issue?.assignedFieldOfficer &&
+                !issue?.assigned_officer &&
+                !issue?.field_officer)
+            }
+            className={`px-6 py-2.5 rounded-xl font-black text-white text-xs shadow-lg transition-all cursor-pointer ${
+              loading ||
+              (actionType === "request_action" &&
+                !issue?.assignedUnitOfficer &&
+                !issue?.assignedFieldOfficer &&
+                !issue?.assigned_officer &&
+                !issue?.field_officer)
+                ? "bg-slate-600 cursor-not-allowed"
+                : actionType === "reject_response"
+                  ? "bg-red-600 hover:bg-red-700 shadow-red-600/30"
+                  : "bg-cyan-500 hover:bg-cyan-600 shadow-cyan-500/30"
             }`}
           >
             {loading
               ? "Processing..."
-              : actionType === "reject"
-                ? "Reject Civic Issue"
-                : "Confirm Action"}
+              : actionType === "reject_response"
+                ? "Reject Escalation Response"
+                : "Submit Action"}
           </button>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modalJSX, document.body);
 }
+
+export default CityAdminEscalationResolutionModal;

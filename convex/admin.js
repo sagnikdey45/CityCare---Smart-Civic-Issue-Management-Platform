@@ -1044,9 +1044,26 @@ export const getOfficerCommandCenterData = query({
   },
 });
 
+function normalizeDepartment(dept) {
+  if (!dept) return "";
+  const d = dept.toLowerCase().trim();
+  if (d.includes("road")) return "road";
+  if (d.includes("light") || d.includes("electr")) return "electricity";
+  if (d.includes("water")) return "water";
+  if (d.includes("waste") || d.includes("sanitat")) return "sanitation";
+  if (d.includes("drain")) return "drainage";
+  if (d.includes("health")) return "public_health";
+  return d;
+}
+
 export const getAssignableOfficers = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    issueId: v.optional(v.id("issues")),
+    officerType: v.optional(
+      v.union(v.literal("unit_officer"), v.literal("field_officer")),
+    ),
+  },
+  handler: async (ctx, args) => {
     const rawUnitOfficers = await ctx.db.query("unitOfficers").collect();
     const rawFieldOfficers = await ctx.db.query("fieldOfficers").collect();
 
@@ -1057,8 +1074,10 @@ export const getAssignableOfficers = query({
           : null;
         return {
           _id: officer._id,
+          profileId: officer._id,
           userId: officer.userId ?? "",
           fullName: officer.fullName ?? "",
+          name: officer.fullName ?? "",
           email: officer.email ?? "",
           phone: officer.phone ?? "",
           city: officer.city ?? "",
@@ -1066,8 +1085,14 @@ export const getAssignableOfficers = query({
           district: officer.district ?? "",
           department: officer.department ?? "",
           rating: officer.rating ?? 0,
-          efficiencyScore: officer.efficiencyScore ?? 0,
+          efficiencyScore: officer.efficiencyScore ?? 80,
           activeIssueCount: officer.activeIssueIds?.length ?? 0,
+          currentWorkload: officer.activeIssueIds?.length ?? 0,
+          maximumCapacity: 50,
+          availableCapacity: Math.max(
+            0,
+            50 - (officer.activeIssueIds?.length ?? 0),
+          ),
           profilePictureUrl,
         };
       }),
@@ -1078,10 +1103,14 @@ export const getAssignableOfficers = query({
         const profilePictureUrl = officer.profilePicture
           ? await ctx.storage.getUrl(officer.profilePicture)
           : null;
+        const activeCount = officer.currentActiveIssues ?? 0;
+        const limit = officer.maxIssueCapacity ?? 10;
         return {
           _id: officer._id,
+          profileId: officer._id,
           userId: officer.userId ?? "",
           fullName: officer.fullName ?? "",
+          name: officer.fullName ?? "",
           email: officer.email ?? "",
           phone: officer.phone ?? "",
           city: officer.city ?? "",
@@ -1089,16 +1118,101 @@ export const getAssignableOfficers = query({
           district: officer.district ?? "",
           department: officer.department ?? "",
           specialisations: officer.specialisations ?? [],
-          currentActiveIssues: officer.currentActiveIssues ?? 0,
-          maxIssueCapacity: officer.maxIssueCapacity ?? 15,
+          currentActiveIssues: activeCount,
+          activeIssueCount: activeCount,
+          currentWorkload: activeCount,
+          maxIssueCapacity: limit,
+          maximumCapacity: limit,
+          availableCapacity: Math.max(0, limit - activeCount),
           rating: officer.rating ?? 0,
-          efficiencyScore: officer.efficiencyScore ?? 0,
+          efficiencyScore: officer.efficiencyScore ?? 80,
           profilePictureUrl,
         };
       }),
     );
 
+    let issue = null;
+    if (args.issueId) {
+      issue = await ctx.db.get(args.issueId);
+    }
+
+    let candidates = [];
+    if (args.officerType) {
+      const sourceList =
+        args.officerType === "unit_officer" ? unitOfficers : fieldOfficers;
+      const targetCity = issue?.city || "";
+      const targetDept = issue ? issue.department || issue.category : "";
+
+      candidates = sourceList.map((o) => {
+        const isSameCity = Boolean(
+          targetCity &&
+            o.city &&
+            o.city.toLowerCase().trim() === targetCity.toLowerCase().trim(),
+        );
+        const isSameDepartment = Boolean(
+          targetDept &&
+            o.department &&
+            normalizeDepartment(o.department) ===
+              normalizeDepartment(targetDept),
+        );
+        const isRecommended =
+          isSameCity && isSameDepartment && o.availableCapacity > 0;
+
+        const compatibilityWarnings = [];
+        if (!isSameCity)
+          compatibilityWarnings.push("Different City Assignment");
+        if (!isSameDepartment)
+          compatibilityWarnings.push("Department Mismatch");
+        if (o.availableCapacity <= 0)
+          compatibilityWarnings.push("Capacity Reached");
+
+        let recommendationReason = "Available capacity";
+        if (isSameCity && isSameDepartment) {
+          recommendationReason =
+            "Same city & department with available capacity";
+        } else if (isSameCity) {
+          recommendationReason = "Same city with available capacity";
+        } else if (isSameDepartment) {
+          recommendationReason = "Same department in another city";
+        }
+
+        return {
+          ...o,
+          role: args.officerType,
+          performanceScore: o.efficiencyScore || 80,
+          isSameCity,
+          isSameDepartment,
+          isRecommended,
+          recommendationReason,
+          compatibilityWarnings,
+        };
+      });
+
+      // Candidate priority sorting order
+      candidates.sort((a, b) => {
+        const scoreA =
+          (a.isSameCity ? 100 : 0) +
+          (a.isSameDepartment ? 50 : 0) +
+          (a.availableCapacity > 0 ? 25 : 0);
+        const scoreB =
+          (b.isSameCity ? 100 : 0) +
+          (b.isSameDepartment ? 50 : 0) +
+          (b.availableCapacity > 0 ? 25 : 0);
+        return scoreB - scoreA || a.currentWorkload - b.currentWorkload;
+      });
+    }
+
     return {
+      issueContext: issue
+        ? {
+            issueId: issue._id,
+            city: issue.city,
+            state: issue.state,
+            category: issue.category,
+            department: issue.department || issue.category,
+          }
+        : null,
+      candidates,
       unitOfficers,
       fieldOfficers,
     };

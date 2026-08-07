@@ -314,7 +314,7 @@ export default defineSchema({
     description: v.string(),
 
     category: v.string(),
-    department: v.string(),
+    department: v.optional(v.string()),
 
     subcategory: v.array(v.string()),
 
@@ -437,7 +437,7 @@ export default defineSchema({
         reason: v.string(),
         comments: v.optional(v.string()),
         escalatedBy: v.id("users"),
-        prevIssueStatus: v.string(),
+        prevIssueStatus: v.optional(v.string()),
         escalatedAt: v.number(),
         resolved: v.optional(v.boolean()),
         resolvedAt: v.optional(v.number()),
@@ -542,6 +542,7 @@ export default defineSchema({
     scope: v.union(
       v.literal("officer_and_citizen"), // visible to citizen and officers
       v.literal("citizen"), // citizens only
+      v.literal("officer"),
       v.literal("admin_only"), // admin only
     ),
 
