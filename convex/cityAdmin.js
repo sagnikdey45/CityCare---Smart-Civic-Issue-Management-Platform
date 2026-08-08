@@ -1,5 +1,24 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import {
+  TERMINAL_STATUSES,
+  ACTIVE_STATUSES,
+  DUPLICATE_THRESHOLD,
+  normalizeLocation,
+  safePercentage,
+  calculateMedian,
+  getRangeStart,
+  getPreviousRangeBounds,
+  getIssueId,
+  getPossibleDuplicateIds,
+  getIssueCreatedAt,
+  calculateDuplicatePairs,
+  buildPersistedDuplicatePairs,
+  mergeDuplicatePairs,
+  buildCalculatedDuplicateGroups,
+  enrichCalculatedDuplicateGroup,
+  buildTimeBuckets,
+} from "../lib/cityIssueAnalytics";
 
 const normalizeKey = (val) => (val || "").toLowerCase().trim();
 
@@ -26,6 +45,151 @@ async function resolveCityAdminUserId(ctx, cityAdminUserIdStr) {
     }
   }
   return null;
+}
+
+function normalizeStatus(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function getOverviewRangeBounds(days, now = Date.now()) {
+  const currentDate = new Date(now);
+
+  if (days === 0) {
+    return {
+      isAllTime: true,
+      currentStart: null,
+      currentEnd: now,
+      previousStart: null,
+      previousEnd: null,
+    };
+  }
+
+  if (days === 1) {
+    const currentStartDate = new Date(currentDate);
+    currentStartDate.setHours(0, 0, 0, 0);
+    const currentStart = currentStartDate.getTime();
+    const previousEnd = currentStart - 1;
+    const previousStart = currentStart - 24 * 60 * 60 * 1000;
+
+    return {
+      isAllTime: false,
+      currentStart,
+      currentEnd: now,
+      previousStart,
+      previousEnd,
+    };
+  }
+
+  const duration = days * 24 * 60 * 60 * 1000;
+  const currentStart = now - duration;
+  const previousEnd = currentStart - 1;
+  const previousStart = currentStart - duration;
+
+  return {
+    isAllTime: false,
+    currentStart,
+    currentEnd: now,
+    previousStart,
+    previousEnd,
+  };
+}
+
+function getIssueTimestamp(issue) {
+  const value = issue.createdAt ?? issue._creationTime ?? null;
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const timestamp =
+    typeof value === "number" ? value : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getResolutionTimestamp(issue) {
+  const value = issue.resolvedAt ?? issue.closedAt ?? null;
+  if (!value) {
+    return null;
+  }
+  const timestamp =
+    typeof value === "number" ? value : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getClosedTimestamp(issue) {
+  const value = issue.closedAt ?? null;
+  if (!value) {
+    return null;
+  }
+  const timestamp =
+    typeof value === "number" ? value : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isWithinRange(timestamp, start, end) {
+  if (timestamp === null || timestamp === undefined) {
+    return false;
+  }
+  return timestamp >= start && timestamp <= end;
+}
+
+function calculateKpiChange(currentValue, previousValue) {
+  const current = Number(currentValue) || 0;
+  const previous = Number(previousValue) || 0;
+  const changeValue = current - previous;
+
+  if (previous === 0) {
+    if (current === 0) {
+      return {
+        changeValue: 0,
+        changePercent: 0,
+        trendDirection: "neutral",
+      };
+    }
+    return {
+      changeValue,
+      changePercent: null,
+      trendDirection: "up",
+    };
+  }
+
+  const changePercent = Number(
+    (((current - previous) / previous) * 100).toFixed(1),
+  );
+  return {
+    changeValue,
+    changePercent,
+    trendDirection:
+      changePercent > 0 ? "up" : changePercent < 0 ? "down" : "neutral",
+  };
+}
+
+function buildKpiResult(
+  currentValue,
+  previousValue,
+  trendType,
+  comparisonEnabled,
+) {
+  if (!comparisonEnabled) {
+    return {
+      value: currentValue,
+      previousValue: null,
+      changeValue: null,
+      changePercent: null,
+      trendDirection: "neutral",
+      trendType,
+      comparisonAvailable: false,
+    };
+  }
+
+  const change = calculateKpiChange(currentValue, previousValue);
+  return {
+    value: currentValue,
+    previousValue,
+    ...change,
+    trendType,
+    comparisonAvailable: true,
+  };
 }
 
 export const getCityAdminOverview = query({
@@ -55,11 +219,8 @@ export const getCityAdminOverview = query({
     const city = cityAdmin.city;
     const state = cityAdmin.state;
     const now = Date.now();
-    const rangeDays = args.days ?? 7;
-    const isAllTime = rangeDays === 0;
-
-    // Filter range calculation
-    const cutoff = isAllTime ? 0 : now - rangeDays * 24 * 60 * 60 * 1000;
+    const rangeDays = args.days ?? 0;
+    const bounds = getOverviewRangeBounds(rangeDays, now);
 
     // 3. Query issues within the city (indexed)
     const allCityIssues = await ctx.db
@@ -67,11 +228,17 @@ export const getCityAdminOverview = query({
       .withIndex("by_city", (q) => q.eq("city", city))
       .collect();
 
-    // Split into all-time vs range-filtered
-    const rangeIssues = allCityIssues.filter((i) => {
-      const created = i.createdAt ?? i._creationTime ?? now;
-      return isAllTime || created >= cutoff;
-    });
+    // Range-filtered issues
+    const rangeIssues = bounds.isAllTime
+      ? allCityIssues
+      : allCityIssues.filter((i) => {
+          const timestamp = getIssueTimestamp(i);
+          return isWithinRange(
+            timestamp,
+            bounds.currentStart,
+            bounds.currentEnd,
+          );
+        });
 
     // 4. Query officers within the city (indexed/filtered)
     const unitOfficers = await ctx.db
@@ -606,6 +773,202 @@ export const getCityAdminOverview = query({
       });
     }
 
+    // Calculate comparative KPI metrics across current and previous periods
+    const currentPeriodIssuesForKpis = bounds.isAllTime
+      ? allCityIssues
+      : allCityIssues.filter((issue) => {
+          const timestamp = getIssueTimestamp(issue);
+          return isWithinRange(
+            timestamp,
+            bounds.currentStart,
+            bounds.currentEnd,
+          );
+        });
+
+    const previousPeriodIssues = bounds.isAllTime
+      ? []
+      : allCityIssues.filter((issue) => {
+          const timestamp = getIssueTimestamp(issue);
+          return isWithinRange(
+            timestamp,
+            bounds.previousStart,
+            bounds.previousEnd,
+          );
+        });
+
+    const totalIssuesVal = bounds.isAllTime
+      ? allCityIssues.length
+      : currentPeriodIssuesForKpis.length;
+    const previousTotalIssuesVal = previousPeriodIssues.length;
+
+    const countActive = (issuesList) =>
+      issuesList.filter(
+        (issue) => !TERMINAL_STATUSES.has(normalizeStatus(issue.status)),
+      ).length;
+
+    const activeIssuesVal = bounds.isAllTime
+      ? countActive(allCityIssues)
+      : countActive(currentPeriodIssuesForKpis);
+    const previousActiveIssuesVal = countActive(previousPeriodIssues);
+
+    const currentResolvedIssuesVal = bounds.isAllTime
+      ? allCityIssues.filter((issue) =>
+          ["resolved", "closed"].includes(normalizeStatus(issue.status)),
+        ).length
+      : allCityIssues.filter((issue) => {
+          const resolvedAt = getResolutionTimestamp(issue);
+          return (
+            resolvedAt !== null &&
+            isWithinRange(resolvedAt, bounds.currentStart, bounds.currentEnd)
+          );
+        }).length;
+
+    const previousResolvedIssuesVal = bounds.isAllTime
+      ? 0
+      : allCityIssues.filter((issue) => {
+          const resolvedAt = getResolutionTimestamp(issue);
+          return (
+            resolvedAt !== null &&
+            isWithinRange(resolvedAt, bounds.previousStart, bounds.previousEnd)
+          );
+        }).length;
+
+    const currentClosedIssuesVal = bounds.isAllTime
+      ? allCityIssues.filter(
+          (issue) => normalizeStatus(issue.status) === "closed",
+        ).length
+      : allCityIssues.filter((issue) => {
+          const closedAt = getClosedTimestamp(issue);
+          if (closedAt !== null) {
+            return isWithinRange(
+              closedAt,
+              bounds.currentStart,
+              bounds.currentEnd,
+            );
+          }
+          const timestamp = getIssueTimestamp(issue);
+          return (
+            normalizeStatus(issue.status) === "closed" &&
+            isWithinRange(timestamp, bounds.currentStart, bounds.currentEnd)
+          );
+        }).length;
+
+    const previousClosedIssuesVal = bounds.isAllTime
+      ? 0
+      : allCityIssues.filter((issue) => {
+          const closedAt = getClosedTimestamp(issue);
+          if (closedAt !== null) {
+            return isWithinRange(
+              closedAt,
+              bounds.previousStart,
+              bounds.previousEnd,
+            );
+          }
+          const timestamp = getIssueTimestamp(issue);
+          return (
+            normalizeStatus(issue.status) === "closed" &&
+            isWithinRange(timestamp, bounds.previousStart, bounds.previousEnd)
+          );
+        }).length;
+
+    const isSlaBreached = (issue) =>
+      issue.slaBreached === true ||
+      Number(issue.slaBreachedCount ?? 0) > 0 ||
+      issue.sla?.status === "breached" ||
+      (issue.slaDeadline &&
+        !TERMINAL_STATUSES.has(normalizeStatus(issue.status)) &&
+        issue.slaDeadline < now);
+
+    const currentSlaBreachedVal = bounds.isAllTime
+      ? allCityIssues.filter(isSlaBreached).length
+      : currentPeriodIssuesForKpis.filter(isSlaBreached).length;
+
+    const previousSlaBreachedVal = bounds.isAllTime
+      ? 0
+      : previousPeriodIssues.filter(isSlaBreached).length;
+
+    const isHighPriority = (issue) => {
+      const priority = String(
+        issue.priority ?? issue.severity ?? "",
+      ).toLowerCase();
+      return priority === "high" || priority === "critical";
+    };
+
+    const currentHighPriorityVal = bounds.isAllTime
+      ? allCityIssues.filter(isHighPriority).length
+      : currentPeriodIssuesForKpis.filter(isHighPriority).length;
+
+    const previousHighPriorityVal = bounds.isAllTime
+      ? 0
+      : previousPeriodIssues.filter(isHighPriority).length;
+
+    const kpis = {
+      totalIssues: buildKpiResult(
+        totalIssuesVal,
+        previousTotalIssuesVal,
+        "negative_when_up",
+        !bounds.isAllTime,
+      ),
+      activeIssues: buildKpiResult(
+        activeIssuesVal,
+        previousActiveIssuesVal,
+        "negative_when_up",
+        !bounds.isAllTime,
+      ),
+      resolvedIssues: buildKpiResult(
+        currentResolvedIssuesVal,
+        previousResolvedIssuesVal,
+        "positive_when_up",
+        !bounds.isAllTime,
+      ),
+      closedIssues: buildKpiResult(
+        currentClosedIssuesVal,
+        previousClosedIssuesVal,
+        "positive_when_up",
+        !bounds.isAllTime,
+      ),
+      slaBreachedIssues: buildKpiResult(
+        currentSlaBreachedVal,
+        previousSlaBreachedVal,
+        "negative_when_up",
+        !bounds.isAllTime,
+      ),
+      highPriorityIssues: buildKpiResult(
+        currentHighPriorityVal,
+        previousHighPriorityVal,
+        "negative_when_up",
+        !bounds.isAllTime,
+      ),
+    };
+
+    const comparison = {
+      enabled: !bounds.isAllTime,
+      currentStart: bounds.currentStart,
+      currentEnd: bounds.currentEnd,
+      previousStart: bounds.previousStart,
+      previousEnd: bounds.previousEnd,
+      currentLabel:
+        rangeDays === 1
+          ? "Today"
+          : rangeDays === 7
+            ? "Last 7 Days"
+            : rangeDays === 30
+              ? "Last 30 Days"
+              : rangeDays === 90
+                ? "Last 90 Days"
+                : "All Time",
+      previousLabel:
+        rangeDays === 1
+          ? "Previous Day"
+          : rangeDays === 7
+            ? "Previous 7 Days"
+            : rangeDays === 30
+              ? "Previous 30 Days"
+              : rangeDays === 90
+                ? "Previous 90 Days"
+                : null,
+    };
+
     return {
       scope: {
         cityAdminUserId: args.cityAdminUserId,
@@ -613,9 +976,12 @@ export const getCityAdminOverview = query({
         city,
         state,
         rangeDays,
-        rangeLabel: isAllTime ? "All Time" : `${rangeDays} Days`,
+        rangeLabel: bounds.isAllTime ? "All Time" : `${rangeDays} Days`,
         generatedAt: now,
       },
+
+      kpis,
+      comparison,
 
       summary: {
         totalIssues: rangeIssues.length,
@@ -2402,6 +2768,715 @@ export const migrateLegacyDepartments = mutation({
       issuesMigrated,
       unitOfficersMigrated,
       fieldOfficersMigrated,
+    };
+  },
+});
+
+/**
+ * Read-only City Issue Analytics Query
+ * Returns city-wide analytics, connected-component duplicate groups, time trends, category/department breakdowns, and SLA health.
+ */
+export const getCityIssueAnalytics = query({
+  args: {
+    cityAdminUserId: v.id("users"),
+    range: v.optional(
+      v.union(
+        v.literal("today"),
+        v.literal("7d"),
+        v.literal("30d"),
+        v.literal("90d"),
+        v.literal("all"),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.cityAdminUserId);
+    if (!user || user.role !== "city_admin") {
+      throw new Error("Unauthorized. Only City Admins can access analytics.");
+    }
+
+    const cityAdmin = await ctx.db
+      .query("cityAdmins")
+      .withIndex("by_user", (q) => q.eq("userId", args.cityAdminUserId))
+      .unique();
+
+    if (!cityAdmin) {
+      throw new Error("City Admin profile not found.");
+    }
+
+    const city = cityAdmin.city;
+    const state = cityAdmin.state;
+    const normalizedAdminCity = normalizeLocation(city);
+    const normalizedAdminState = normalizeLocation(state);
+    const now = Date.now();
+    const selectedRange = args.range || "all";
+    const rangeStart = getRangeStart(selectedRange, now);
+
+    // 1. Fetch all issues in database safely to prevent city-name casing/whitespace mismatch
+    const allIssues = await ctx.db.query("issues").collect();
+
+    const allCityIssues = allIssues.filter((issue) => {
+      const cityMatches = normalizeLocation(issue.city) === normalizedAdminCity;
+      const stateMatches =
+        !normalizedAdminState ||
+        !issue.state ||
+        normalizeLocation(issue.state) === normalizedAdminState;
+      return cityMatches && stateMatches;
+    });
+
+    // 2. Fetch explicitly referenced duplicate issues by ID (handles cross-city or missing reference edge cases)
+    const referencedDuplicateIds = new Map();
+    for (const issue of allCityIssues) {
+      const issueId = getIssueId(issue);
+      const dupIds = getPossibleDuplicateIds(issue);
+      for (const duplicateId of dupIds) {
+        const key = String(duplicateId);
+        if (key && key !== issueId) {
+          referencedDuplicateIds.set(key, duplicateId);
+        }
+      }
+    }
+
+    const existingCityIssueIds = new Set(
+      allCityIssues.map((issue) => getIssueId(issue)).filter(Boolean),
+    );
+    const missingReferenceIds = [...referencedDuplicateIds.entries()]
+      .filter(([key]) => !existingCityIssueIds.has(key))
+      .map(([, id]) => id);
+
+    const referencedIssues = await Promise.all(
+      missingReferenceIds.map(async (id) => {
+        try {
+          return await ctx.db.get(id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const validReferencedIssues = referencedIssues.filter(
+      (issue) =>
+        issue &&
+        normalizeLocation(issue.city) === normalizedAdminCity &&
+        (!normalizedAdminState ||
+          !issue.state ||
+          normalizeLocation(issue.state) === normalizedAdminState),
+    );
+
+    const analyticsIssueMap = new Map();
+    for (const issue of [...allCityIssues, ...validReferencedIssues]) {
+      const id = getIssueId(issue);
+      if (id) {
+        analyticsIssueMap.set(id, issue);
+      }
+    }
+
+    const duplicateSourceIssues = [...analyticsIssueMap.values()];
+
+    // 3. Ranged issues for volume metrics
+    const rangedIssues = allCityIssues.filter((i) => {
+      if (rangeStart === null) return true;
+      const created = getIssueCreatedAt(i) ?? now;
+      return created >= rangeStart && created <= now;
+    });
+
+    const rangedIssueIdSet = new Set(
+      rangedIssues.map((i) => getIssueId(i)).filter(Boolean),
+    );
+
+    // 4. Connected Component Duplicate Groups (Dynamic Similarity + Persisted)
+    const { pairs: calculatedPairs } = calculateDuplicatePairs(
+      duplicateSourceIssues,
+      { threshold: DUPLICATE_THRESHOLD },
+    );
+
+    const persistedPairs = buildPersistedDuplicatePairs(duplicateSourceIssues);
+    const duplicatePairs = mergeDuplicatePairs(persistedPairs, calculatedPairs);
+
+    const rawCalculatedGroups = buildCalculatedDuplicateGroups(
+      duplicateSourceIssues,
+      duplicatePairs,
+    );
+
+    const enrichedAllGroups = rawCalculatedGroups.map((g, idx) =>
+      enrichCalculatedDuplicateGroup(g, idx),
+    );
+
+    // Filter duplicate groups matching selected range (at least 1 member created in range)
+    const matchingGroups = enrichedAllGroups.filter((group) => {
+      if (rangeStart === null) return true;
+      return group.members.some((member) => {
+        const createdAt = member.createdAt;
+        return (
+          createdAt !== null && createdAt >= rangeStart && createdAt <= now
+        );
+      });
+    });
+
+    // Canonical duplicate-linked set containing all unique member string IDs across matching groups
+    const duplicateLinkedSet = new Set();
+    for (const group of matchingGroups) {
+      for (const member of group.members || []) {
+        const memberId = getIssueId(member);
+        if (memberId) {
+          duplicateLinkedSet.add(memberId);
+        }
+      }
+    }
+
+    const duplicateLinkedInRangeSet = new Set();
+    for (const issueId of duplicateLinkedSet) {
+      if (rangedIssueIdSet.has(issueId)) {
+        duplicateLinkedInRangeSet.add(issueId);
+      }
+    }
+
+    const duplicateRate = safePercentage(
+      duplicateLinkedInRangeSet.size,
+      rangedIssues.length,
+    );
+    const duplicateLinkedIssueCount = duplicateLinkedSet.size;
+    const duplicateLinkedIssuesInRange = duplicateLinkedInRangeSet.size;
+    const redundantIssueCount = matchingGroups.reduce(
+      (sum, g) => sum + Math.max(0, Number(g.redundantIssueCount || 0)),
+      0,
+    );
+    const groupCount = matchingGroups.length;
+    const averageGroupSize =
+      groupCount > 0
+        ? Number((duplicateLinkedIssueCount / groupCount).toFixed(1))
+        : 0;
+    const largestGroupSize = matchingGroups.reduce(
+      (max, g) => Math.max(max, g.memberCount),
+      0,
+    );
+
+    const activeGroupCount = matchingGroups.filter(
+      (g) => g.activeMemberCount > 0,
+    ).length;
+    const resolvedGroupCount = matchingGroups.filter(
+      (g) => g.activeMemberCount === 0,
+    ).length;
+
+    // 2. City Overview Metrics
+    const totalCityIssues = allCityIssues.length;
+    const issuesCreatedInRange = rangedIssues.length;
+    const currentActiveIssues = allCityIssues.filter(
+      (i) => !TERMINAL_STATUSES.has(i.status),
+    ).length;
+
+    const resolvedInRange = rangedIssues.filter(
+      (i) => i.status === "resolved" || i.status === "closed",
+    );
+    const resolutionRate = safePercentage(
+      resolvedInRange.length,
+      issuesCreatedInRange,
+    );
+
+    const resolutionDurations = resolvedInRange
+      .map((i) => {
+        const created = getIssueCreatedAt(i) ?? 0;
+        const resolved = i.resolvedAt ?? i.closedAt ?? i.updatedAt ?? 0;
+        if (created > 0 && resolved >= created) {
+          return (resolved - created) / (1000 * 60 * 60);
+        }
+        return null;
+      })
+      .filter((h) => h !== null);
+
+    const averageResolutionHours =
+      resolutionDurations.length > 0
+        ? Number(
+            (
+              resolutionDurations.reduce((a, b) => a + b, 0) /
+              resolutionDurations.length
+            ).toFixed(1),
+          )
+        : 0;
+    const medianResolutionHours = calculateMedian(resolutionDurations);
+
+    const currentSlaBreaches = allCityIssues.filter(
+      (i) =>
+        !TERMINAL_STATUSES.has(i.status) &&
+        (i.slaBreached || i.sla?.status === "breached"),
+    ).length;
+    const currentEscalations = allCityIssues.filter(
+      (i) =>
+        !TERMINAL_STATUSES.has(i.status) &&
+        (i.escalatedToAdmin || i.is_escalated || i.escalation?.isEscalated),
+    ).length;
+    const reopenedIssues = rangedIssues.filter(
+      (i) => i.isReopened || i.reopenCount > 0,
+    ).length;
+    const unassignedIssues = allCityIssues.filter(
+      (i) =>
+        !TERMINAL_STATUSES.has(i.status) &&
+        !i.assignedUnitOfficer &&
+        !i.assignedFieldOfficer,
+    ).length;
+
+    const ratedIssues = rangedIssues.filter(
+      (i) =>
+        typeof i.citizenRating === "number" &&
+        i.citizenRating >= 1 &&
+        i.citizenRating <= 5,
+    );
+    const ratedIssueCount = ratedIssues.length;
+    const averageCitizenRating =
+      ratedIssueCount > 0
+        ? Number(
+            (
+              ratedIssues.reduce((sum, i) => sum + i.citizenRating, 0) /
+              ratedIssueCount
+            ).toFixed(1),
+          )
+        : 0;
+
+    // 3. Time Series Trends
+    const trends = buildTimeBuckets(rangedIssues, selectedRange, now, {
+      duplicateLinkedIssueIds: duplicateLinkedSet,
+    });
+
+    // 4. Status Analytics
+    const statusCounts = {};
+    allCityIssues.forEach((i) => {
+      const st = i.status || "unknown";
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+    });
+
+    // 5. Category Analytics
+    const categoryMap = new Map();
+    rangedIssues.forEach((i) => {
+      const cat = i.category || "other";
+      const issueId = getIssueId(i);
+      const isDupLinked = issueId ? duplicateLinkedSet.has(issueId) : false;
+
+      const existing = categoryMap.get(cat) || {
+        category: cat,
+        totalIssues: 0,
+        activeIssues: 0,
+        resolvedIssues: 0,
+        duplicateLinkedIssues: 0,
+        escalatedIssues: 0,
+        slaBreachedIssues: 0,
+        reopenedIssues: 0,
+        resHours: [],
+        ratings: [],
+      };
+
+      existing.totalIssues++;
+      if (!TERMINAL_STATUSES.has(i.status)) existing.activeIssues++;
+      if (i.status === "resolved" || i.status === "closed")
+        existing.resolvedIssues++;
+      if (isDupLinked) existing.duplicateLinkedIssues++;
+      if (i.escalatedToAdmin || i.is_escalated || i.escalation?.isEscalated)
+        existing.escalatedIssues++;
+      if (i.slaBreached || i.sla?.status === "breached")
+        existing.slaBreachedIssues++;
+      if (i.isReopened || i.reopenCount > 0) existing.reopenedIssues++;
+
+      const created = getIssueCreatedAt(i) ?? 0;
+      const resolved = i.resolvedAt ?? i.closedAt ?? null;
+      if (resolved && created && resolved >= created) {
+        existing.resHours.push((resolved - created) / (1000 * 60 * 60));
+      }
+      if (typeof i.citizenRating === "number" && i.citizenRating > 0) {
+        existing.ratings.push(i.citizenRating);
+      }
+
+      categoryMap.set(cat, existing);
+    });
+
+    const categoryAnalytics = Array.from(categoryMap.values())
+      .map((c) => ({
+        category: c.category,
+        totalIssues: c.totalIssues,
+        activeIssues: c.activeIssues,
+        resolvedIssues: c.resolvedIssues,
+        duplicateLinkedIssues: c.duplicateLinkedIssues,
+        duplicateRate: safePercentage(c.duplicateLinkedIssues, c.totalIssues),
+        escalatedIssues: c.escalatedIssues,
+        slaBreachedIssues: c.slaBreachedIssues,
+        reopenedIssues: c.reopenedIssues,
+        averageResolutionHours:
+          c.resHours.length > 0
+            ? Number(
+                (
+                  c.resHours.reduce((a, b) => a + b, 0) / c.resHours.length
+                ).toFixed(1),
+              )
+            : 0,
+        averageCitizenRating:
+          c.ratings.length > 0
+            ? Number(
+                (
+                  c.ratings.reduce((a, b) => a + b, 0) / c.ratings.length
+                ).toFixed(1),
+              )
+            : 0,
+      }))
+      .sort((a, b) => b.totalIssues - a.totalIssues);
+
+    // 6. Department Analytics
+    const deptMap = new Map();
+    rangedIssues.forEach((i) => {
+      const dept = i.department || i.category || "unassigned";
+      const issueId = getIssueId(i);
+      const isDupLinked = issueId ? duplicateLinkedSet.has(issueId) : false;
+
+      const existing = deptMap.get(dept) || {
+        department: dept,
+        totalIssues: 0,
+        activeIssues: 0,
+        resolvedIssues: 0,
+        duplicateLinkedIssues: 0,
+        escalatedIssues: 0,
+        slaBreachedIssues: 0,
+        unassignedUnitOfficerCount: 0,
+        unassignedFieldOfficerCount: 0,
+        resHours: [],
+      };
+
+      existing.totalIssues++;
+      if (!TERMINAL_STATUSES.has(i.status)) existing.activeIssues++;
+      if (i.status === "resolved" || i.status === "closed")
+        existing.resolvedIssues++;
+      if (isDupLinked) existing.duplicateLinkedIssues++;
+      if (i.escalatedToAdmin || i.is_escalated || i.escalation?.isEscalated)
+        existing.escalatedIssues++;
+      if (i.slaBreached || i.sla?.status === "breached")
+        existing.slaBreachedIssues++;
+      if (!i.assignedUnitOfficer) existing.unassignedUnitOfficerCount++;
+      if (!i.assignedFieldOfficer) existing.unassignedFieldOfficerCount++;
+
+      const created = getIssueCreatedAt(i) ?? 0;
+      const resolved = i.resolvedAt ?? i.closedAt ?? null;
+      if (resolved && created && resolved >= created) {
+        existing.resHours.push((resolved - created) / (1000 * 60 * 60));
+      }
+
+      deptMap.set(dept, existing);
+    });
+
+    const departmentAnalytics = Array.from(deptMap.values())
+      .map((d) => ({
+        department: d.department,
+        totalIssues: d.totalIssues,
+        activeIssues: d.activeIssues,
+        resolvedIssues: d.resolvedIssues,
+        duplicateLinkedIssues: d.duplicateLinkedIssues,
+        escalatedIssues: d.escalatedIssues,
+        slaBreachedIssues: d.slaBreachedIssues,
+        unassignedUnitOfficerCount: d.unassignedUnitOfficerCount,
+        unassignedFieldOfficerCount: d.unassignedFieldOfficerCount,
+        averageResolutionHours:
+          d.resHours.length > 0
+            ? Number(
+                (
+                  d.resHours.reduce((a, b) => a + b, 0) / d.resHours.length
+                ).toFixed(1),
+              )
+            : 0,
+      }))
+      .sort((a, b) => b.totalIssues - a.totalIssues);
+
+    // 7. Priority Analytics
+    const priorityMap = new Map();
+    rangedIssues.forEach((i) => {
+      const prio = i.priority || "medium";
+      const issueId = getIssueId(i);
+      const isDupLinked = issueId ? duplicateLinkedSet.has(issueId) : false;
+
+      const existing = priorityMap.get(prio) || {
+        priority: prio,
+        totalIssues: 0,
+        activeIssues: 0,
+        resolvedIssues: 0,
+        duplicateLinkedIssues: 0,
+        slaBreachedIssues: 0,
+        escalatedIssues: 0,
+      };
+
+      existing.totalIssues++;
+      if (!TERMINAL_STATUSES.has(i.status)) existing.activeIssues++;
+      if (i.status === "resolved" || i.status === "closed")
+        existing.resolvedIssues++;
+      if (isDupLinked) existing.duplicateLinkedIssues++;
+      if (i.slaBreached || i.sla?.status === "breached")
+        existing.slaBreachedIssues++;
+      if (i.escalatedToAdmin || i.is_escalated || i.escalation?.isEscalated)
+        existing.escalatedIssues++;
+
+      priorityMap.set(prio, existing);
+    });
+
+    const priorityAnalytics = Array.from(priorityMap.values()).map((p) => ({
+      priority: p.priority,
+      totalIssues: p.totalIssues,
+      activeIssues: p.activeIssues,
+      duplicateLinkedIssues: p.duplicateLinkedIssues,
+      slaBreachedIssues: p.slaBreachedIssues,
+      escalatedIssues: p.escalatedIssues,
+      resolutionRate: safePercentage(p.resolvedIssues, p.totalIssues),
+    }));
+
+    // 8. Previous Period Comparison
+    let comparison = null;
+    const prevBounds = getPreviousRangeBounds(selectedRange, now);
+    if (prevBounds) {
+      const prevIssues = allCityIssues.filter((i) => {
+        const created = i.createdAt ?? i._creationTime ?? 0;
+        return created >= prevBounds.start && created <= prevBounds.end;
+      });
+
+      const prevCount = prevIssues.length;
+      const currentCount = rangedIssues.length;
+      const issueVolumeChangePercent =
+        prevCount > 0 ? safePercentage(currentCount - prevCount, prevCount) : 0;
+
+      const prevDupLinked = prevIssues.filter(
+        (i) =>
+          Array.isArray(i.possibleDuplicateIds) &&
+          i.possibleDuplicateIds.length > 0,
+      ).length;
+      const prevDupRate = safePercentage(prevDupLinked, prevCount);
+      const duplicateRateChangePoints = Number(
+        (duplicateRate - prevDupRate).toFixed(1),
+      );
+
+      const prevResolved = prevIssues.filter(
+        (i) => i.status === "resolved" || i.status === "closed",
+      ).length;
+      const prevResRate = safePercentage(prevResolved, prevCount);
+      const resolutionRateChangePoints = Number(
+        (resolutionRate - prevResRate).toFixed(1),
+      );
+
+      const prevBreached = prevIssues.filter(
+        (i) => i.slaBreached || i.sla?.status === "breached",
+      ).length;
+      const slaBreachChangePercent =
+        prevBreached > 0
+          ? safePercentage(currentSlaBreaches - prevBreached, prevBreached)
+          : 0;
+
+      const prevEscalated = prevIssues.filter(
+        (i) =>
+          i.escalatedToAdmin || i.is_escalated || i.escalation?.isEscalated,
+      ).length;
+      const escalationChangePercent =
+        prevEscalated > 0
+          ? safePercentage(currentEscalations - prevEscalated, prevEscalated)
+          : 0;
+
+      comparison = {
+        previousStart: prevBounds.start,
+        previousEnd: prevBounds.end,
+        issueVolumeChangePercent,
+        duplicateRateChangePoints,
+        resolutionRateChangePoints,
+        slaBreachChangePercent,
+        escalationChangePercent,
+      };
+    }
+
+    return {
+      scope: {
+        city,
+        state,
+      },
+      range: {
+        selected: selectedRange,
+        label:
+          selectedRange === "today"
+            ? "Today"
+            : selectedRange === "7d"
+              ? "Last 7 Days"
+              : selectedRange === "30d"
+                ? "Last 30 Days"
+                : selectedRange === "90d"
+                  ? "Last 90 Days"
+                  : "All Time",
+        startAt: rangeStart,
+        endAt: now,
+        bucketType: trends.bucketType,
+      },
+      overview: {
+        totalCityIssues,
+        issuesCreatedInRange,
+        currentActiveIssues,
+        resolvedInRange: resolvedInRange.length,
+        resolutionRate,
+        averageResolutionHours,
+        medianResolutionHours,
+        currentSlaBreaches,
+        currentEscalations,
+        reopenedIssues,
+        unassignedIssues,
+        averageCitizenRating,
+        ratedIssueCount,
+      },
+      duplicateAnalytics: {
+        groupCount,
+        duplicateLinkedIssueCount,
+        duplicateLinkedIssuesInRange,
+        redundantIssueCount,
+        duplicateRate,
+        averageGroupSize,
+        largestGroupSize,
+        activeGroupCount,
+        resolvedGroupCount,
+        persistedPairCount: persistedPairs.length,
+        calculatedPairCount: calculatedPairs.length,
+        groups: matchingGroups,
+      },
+      trends,
+      statusAnalytics: {
+        distribution: statusCounts,
+      },
+      categoryAnalytics,
+      departmentAnalytics,
+      priorityAnalytics,
+      comparison,
+    };
+  },
+});
+
+/**
+ * Read-only Detailed Issue Query for City Admin
+ * Resolves full issue document, reporter profile, assigned officer profiles, and update logs safely.
+ */
+export const getCityIssueDetails = query({
+  args: {
+    cityAdminUserId: v.id("users"),
+    issueId: v.id("issues"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.cityAdminUserId);
+    if (!user || user.role !== "city_admin") {
+      throw new Error(
+        "Unauthorized. Only City Admins can access issue details.",
+      );
+    }
+
+    const cityAdmin = await ctx.db
+      .query("cityAdmins")
+      .withIndex("by_user", (q) => q.eq("userId", args.cityAdminUserId))
+      .unique();
+
+    if (!cityAdmin) {
+      throw new Error("City Admin profile not found.");
+    }
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      return null;
+    }
+
+    // Verify city & state scope
+    const normalizedAdminCity = normalizeLocation(cityAdmin.city);
+    const normalizedAdminState = normalizeLocation(cityAdmin.state);
+
+    const issueCity = normalizeLocation(issue.city);
+    const issueState = normalizeLocation(issue.state);
+
+    if (
+      issueCity !== normalizedAdminCity ||
+      (normalizedAdminState &&
+        issueState &&
+        issueState !== normalizedAdminState)
+    ) {
+      throw new Error(
+        "Unauthorized. Issue is outside your administrative city scope.",
+      );
+    }
+
+    // Fetch reporter details
+    let reporterDetails = null;
+    if (issue.reportedBy) {
+      try {
+        const reporterUser = await ctx.db.get(issue.reportedBy);
+        if (reporterUser) {
+          reporterDetails = {
+            id: String(reporterUser._id),
+            name:
+              reporterUser.fullName ||
+              reporterUser.name ||
+              "Registered Citizen",
+            email: reporterUser.email || null,
+            phone: reporterUser.phone || null,
+          };
+        }
+      } catch {
+        reporterDetails = null;
+      }
+    }
+
+    // Fetch assigned officers
+    let unitOfficerDetails = null;
+    if (issue.assignedUnitOfficer) {
+      try {
+        const officerUser = await ctx.db.get(issue.assignedUnitOfficer);
+        if (officerUser) {
+          unitOfficerDetails = {
+            id: String(officerUser._id),
+            name:
+              officerUser.fullName ||
+              officerUser.name ||
+              "Assigned Unit Officer",
+            email: officerUser.email || null,
+            phone: officerUser.phone || null,
+            department: officerUser.department || issue.department || null,
+          };
+        }
+      } catch {
+        unitOfficerDetails = null;
+      }
+    }
+
+    let fieldOfficerDetails = null;
+    if (issue.assignedFieldOfficer) {
+      try {
+        const officerUser = await ctx.db.get(issue.assignedFieldOfficer);
+        if (officerUser) {
+          fieldOfficerDetails = {
+            id: String(officerUser._id),
+            name:
+              officerUser.fullName ||
+              officerUser.name ||
+              "Assigned Field Officer",
+            email: officerUser.email || null,
+            phone: officerUser.phone || null,
+            department: officerUser.department || issue.department || null,
+          };
+        }
+      } catch {
+        fieldOfficerDetails = null;
+      }
+    }
+
+    // Fetch issue updates / timeline log
+    let issueUpdates = [];
+    try {
+      const updates = await ctx.db
+        .query("issueUpdates")
+        .withIndex("by_issue", (q) => q.eq("issueId", args.issueId))
+        .collect();
+      issueUpdates = updates.sort(
+        (a, b) =>
+          (a.createdAt || a._creationTime || 0) -
+          (b.createdAt || b._creationTime || 0),
+      );
+    } catch {
+      issueUpdates = [];
+    }
+
+    return {
+      ...issue,
+      reporterDetails,
+      unitOfficerDetails,
+      fieldOfficerDetails,
+      issueUpdates,
     };
   },
 });

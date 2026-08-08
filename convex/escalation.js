@@ -873,26 +873,23 @@ export const rejectEscalation = mutation({
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
     await ctx.db.patch(args.issueId, {
-      escalatedToAdmin: true,
+      escalatedToAdmin: false,
       escalation: {
         ...issue.escalation,
-        resolved: false,
-        resolvedAt: undefined,
-        resolutionNote: undefined,
-        adminReviewStatus: "reviewed",
-        responseRejectedAt: now,
-        responseRejectedBy: adminDbId,
-        responseRejectionReason: reason,
+        resolved: true,
+        resolvedAt: now,
+        resolutionNote: `The escalation has been rejected due to "${args.reason}".`,
+        adminReviewStatus: "resolved",
       },
     });
 
     await ctx.db.insert("escalationResolutionActions", {
       issueId: args.issueId,
-      actionType: "reject_escalation_response",
+      actionType: "reject_escalation",
       performedBy: adminDbId,
       performedAt: now,
       oldValue: issue.escalation.adminReviewStatus || "pending",
-      newValue: "reviewed",
+      newValue: "rejected",
       notes: reason,
     });
 

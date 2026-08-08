@@ -47,58 +47,112 @@ export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
     return () => setIsMounted(false);
   }, []);
 
-  // Fetch Scoped SLA Monitoring Data
-  const data = useQuery(api.slaMonitoring.getScopedSLAMonitoringData, {
-    cityAdminUserId,
-    search: searchTerm || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    category: categoryFilter !== "all" ? categoryFilter : undefined,
-    priority: priorityFilter !== "all" ? priorityFilter : undefined,
-    slaStatus: slaStatusFilter !== "all" ? slaStatusFilter : undefined,
-    escalationStatus:
-      escalationStatusFilter !== "all" ? escalationStatusFilter : undefined,
-    assignmentStatus:
-      assignmentStatusFilter !== "all" ? assignmentStatusFilter : undefined,
-    dateRange: dateRangeFilter !== "all" ? dateRangeFilter : undefined,
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    statusFilter,
+    categoryFilter,
+    priorityFilter,
+    slaStatusFilter,
+    escalationStatusFilter,
+    assignmentStatusFilter,
+    dateRangeFilter,
     sortBy,
-    page: currentPage,
-    pageSize,
-  });
+  ]);
+
+  // Fetch Scoped SLA Monitoring Data (skip if cityAdminUserId is undefined)
+  const queryArgs = cityAdminUserId
+    ? {
+        cityAdminUserId,
+        search: searchTerm.trim() || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        priority: priorityFilter !== "all" ? priorityFilter : undefined,
+        slaStatus: slaStatusFilter !== "all" ? slaStatusFilter : undefined,
+        escalationStatus:
+          escalationStatusFilter !== "all" ? escalationStatusFilter : undefined,
+        assignmentStatus:
+          assignmentStatusFilter !== "all" ? assignmentStatusFilter : undefined,
+        dateRange: dateRangeFilter !== "all" ? dateRangeFilter : undefined,
+        sortBy,
+        page: currentPage,
+        pageSize,
+      }
+    : "skip";
+
+  const data = useQuery(
+    api.slaMonitoring.getScopedSLAMonitoringData,
+    queryArgs,
+  );
 
   const isDataLoading = data === undefined;
   const cityInfo = data?.cityInfo ??
     data?.scope ?? { city: "Scope", state: "" };
-  const rawMetrics = data?.metrics ?? data?.summary ?? {};
 
-  const metrics = {
-    totalIssues: rawMetrics.totalIssues ?? 0,
-    activeIssues: rawMetrics.activeIssues ?? rawMetrics.monitoredIssues ?? 0,
-    monitoredIssues:
-      rawMetrics.monitoredIssues ?? rawMetrics.monitoredCount ?? 0,
-    complianceRate: rawMetrics.complianceRate ?? 0,
+  const hasMetrics = Boolean(data && (data.metrics || data.summary));
+  const rawMetrics = data?.metrics ?? data?.summary ?? null;
 
-    breachedCount: rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
-    atRiskCount: rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0,
-    dueSoonCount: rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0,
-    onTrackCount: rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0,
-    noDeadlineCount: rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
-
-    escalatedCount: rawMetrics.escalatedCount ?? rawMetrics.escalated ?? 0,
-    pendingReviewCount:
-      rawMetrics.pendingReviewCount ?? rawMetrics.pendingAdminReview ?? 0,
-    reviewedEscalationCount:
-      rawMetrics.reviewedEscalationCount ?? rawMetrics.reviewedEscalations ?? 0,
-    resolvedEscalationCount:
-      rawMetrics.resolvedEscalationCount ?? rawMetrics.resolvedEscalations ?? 0,
-
-    slaStatusDistribution: rawMetrics.slaStatusDistribution ?? {
-      breached: rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
-      at_risk: rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0,
-      due_soon: rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0,
-      on_track: rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0,
-      no_deadline: rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
-    },
-  };
+  const metrics = rawMetrics
+    ? {
+        totalIssues: Number(rawMetrics.totalIssues ?? 0),
+        activeIssues: Number(
+          rawMetrics.activeIssues ?? rawMetrics.monitoredIssues ?? 0,
+        ),
+        monitoredIssues: Number(
+          rawMetrics.monitoredIssues ?? rawMetrics.monitoredCount ?? 0,
+        ),
+        complianceRate:
+          rawMetrics.complianceRate === null ||
+          rawMetrics.complianceRate === undefined
+            ? null
+            : Number(rawMetrics.complianceRate),
+        breachedCount: Number(
+          rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
+        ),
+        atRiskCount: Number(rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0),
+        dueSoonCount: Number(
+          rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0,
+        ),
+        onTrackCount: Number(
+          rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0,
+        ),
+        noDeadlineCount: Number(
+          rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
+        ),
+        escalatedCount: Number(
+          rawMetrics.activeEscalationCount ??
+            rawMetrics.escalatedCount ??
+            rawMetrics.escalated ??
+            0,
+        ),
+        pendingReviewCount: Number(
+          rawMetrics.pendingReviewCount ?? rawMetrics.pendingAdminReview ?? 0,
+        ),
+        reviewedEscalationCount: Number(
+          rawMetrics.reviewedEscalationCount ??
+            rawMetrics.reviewedEscalations ??
+            0,
+        ),
+        resolvedEscalationCount: Number(
+          rawMetrics.resolvedEscalationCount ??
+            rawMetrics.resolvedEscalations ??
+            0,
+        ),
+        slaStatusDistribution: rawMetrics.slaStatusDistribution ?? {
+          breached: Number(
+            rawMetrics.breachedCount ?? rawMetrics.breached ?? 0,
+          ),
+          at_risk: Number(rawMetrics.atRiskCount ?? rawMetrics.atRisk ?? 0),
+          due_soon: Number(rawMetrics.dueSoonCount ?? rawMetrics.dueSoon ?? 0),
+          on_track: Number(rawMetrics.onTrackCount ?? rawMetrics.onTrack ?? 0),
+          no_deadline: Number(
+            rawMetrics.noDeadlineCount ?? rawMetrics.noDeadline ?? 0,
+          ),
+        },
+      }
+    : null;
 
   const issues = data?.issues ?? [];
   const pagination = data?.pagination ?? {
@@ -109,6 +163,24 @@ export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
     hasNextPage: false,
     hasPreviousPage: false,
   };
+
+  // Reset control drawer if issue is removed from page/filter
+  useEffect(() => {
+    if (
+      activeControlIssueId &&
+      data !== undefined &&
+      !issues.some((i) => i.id === activeControlIssueId)
+    ) {
+      setActiveControlIssueId(null);
+    }
+  }, [activeControlIssueId, data, issues]);
+
+  // Development diagnostic
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development" && data !== undefined) {
+      console.log("[City Admin SLA data]", data);
+    }
+  }, [data]);
 
   // Derive latest reactive issue object for drawer
   const activeControlIssue =
@@ -201,122 +273,133 @@ export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => showToast("SLA data refreshed.")}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl font-extrabold text-xs transition-all flex items-center gap-2 border border-white/20 text-white cursor-pointer"
-            >
-              <RefreshCw size={14} />
-              <span>Refresh</span>
-            </button>
+            <div className="px-4 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl font-extrabold text-xs flex items-center gap-2 border border-white/20 text-white">
+              <Activity size={14} className="text-emerald-400 animate-pulse" />
+              <span>Live Convex Data</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Summary KPI Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        {/* Compliance Rate */}
-        <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-3xl text-white shadow-md flex flex-col justify-between">
-          <span className="text-[10px] font-black uppercase text-cyan-100 tracking-wider">
-            SLA Compliance
-          </span>
-          <div className="my-2">
-            <span className="text-2xl sm:text-3xl font-black">
-              {isDataLoading
-                ? "—"
-                : metrics.monitoredIssues > 0
-                  ? `${metrics.complianceRate}%`
-                  : "N/A"}
-            </span>
-          </div>
-          <span className="text-[10px] font-medium text-cyan-100">
-            {isDataLoading
-              ? "Loading..."
-              : `${metrics.monitoredIssues} Active Monitored`}
-          </span>
-        </div>
+      {/* Summary KPI Section */}
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+          KPI cards represent all eligible issues in the City Admin scope.
+        </p>
 
-        {/* Breached SLA */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-rose-500">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              SLA Breached
-            </span>
-            <AlertTriangle size={16} />
+        {isDataLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-28 animate-pulse rounded-3xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900"
+              />
+            ))}
           </div>
-          <span className="text-2xl font-black text-rose-600 dark:text-rose-400 my-1">
-            {isDataLoading ? "—" : metrics.breachedCount}
-          </span>
-          <span className="text-[10px] text-slate-400 font-semibold">
-            Overdue Target
-          </span>
-        </div>
+        ) : !hasMetrics ? (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 font-semibold text-xs">
+            SLA summary metrics were not returned by the backend query.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            {/* Compliance Rate */}
+            <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-3xl text-white shadow-md flex flex-col justify-between">
+              <span className="text-[10px] font-black uppercase text-cyan-100 tracking-wider">
+                SLA Compliance
+              </span>
+              <div className="my-2">
+                <span className="text-2xl sm:text-3xl font-black">
+                  {Number.isFinite(Number(metrics.complianceRate))
+                    ? `${Number(metrics.complianceRate).toFixed(1)}%`
+                    : "N/A"}
+                </span>
+              </div>
+              <span className="text-[10px] font-medium text-cyan-100">
+                {`${metrics.monitoredIssues} active issues with SLA deadlines`}
+              </span>
+            </div>
 
-        {/* At Risk SLA */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-amber-500">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              At Risk (24–48h)
-            </span>
-            <Clock size={16} />
-          </div>
-          <span className="text-2xl font-black text-amber-600 dark:text-amber-400 my-1">
-            {isDataLoading ? "—" : metrics.atRiskCount}
-          </span>
-          <span className="text-[10px] text-slate-400 font-semibold">
-            Expiring Soon
-          </span>
-        </div>
+            {/* Breached SLA */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between text-rose-500">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  SLA Breached
+                </span>
+                <AlertTriangle size={16} />
+              </div>
+              <span className="text-2xl font-black text-rose-600 dark:text-rose-400 my-1">
+                {metrics.breachedCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                Overdue Target
+              </span>
+            </div>
 
-        {/* Due Soon */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-yellow-500">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              Due Soon (≤24h)
-            </span>
-            <Clock size={16} />
-          </div>
-          <span className="text-2xl font-black text-yellow-600 dark:text-yellow-400 my-1">
-            {isDataLoading ? "—" : metrics.dueSoonCount}
-          </span>
-          <span className="text-[10px] text-slate-400 font-semibold">
-            Immediate Action
-          </span>
-        </div>
+            {/* At Risk SLA */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between text-amber-500">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  At Risk (24–48h)
+                </span>
+                <Clock size={16} />
+              </div>
+              <span className="text-2xl font-black text-amber-600 dark:text-amber-400 my-1">
+                {metrics.atRiskCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                Expiring Soon
+              </span>
+            </div>
 
-        {/* Active Escalations */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-purple-500">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              Escalated
-            </span>
-            <ArrowUpRight size={16} />
-          </div>
-          <span className="text-2xl font-black text-purple-600 dark:text-purple-400 my-1">
-            {isDataLoading ? "—" : metrics.escalatedCount}
-          </span>
-          <span className="text-[10px] text-purple-500 font-bold">
-            {isDataLoading
-              ? "Loading..."
-              : `${metrics.pendingReviewCount} Pending Review`}
-          </span>
-        </div>
+            {/* Due Soon */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between text-yellow-500">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Due Soon (≤24h)
+                </span>
+                <Clock size={16} />
+              </div>
+              <span className="text-2xl font-black text-yellow-600 dark:text-yellow-400 my-1">
+                {metrics.dueSoonCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                Immediate Action
+              </span>
+            </div>
 
-        {/* On Track */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-emerald-500">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              On Track
-            </span>
-            <CheckCircle size={16} />
+            {/* Active Escalations */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between text-purple-500">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Active Escalations
+                </span>
+                <ArrowUpRight size={16} />
+              </div>
+              <span className="text-2xl font-black text-purple-600 dark:text-purple-400 my-1">
+                {metrics.escalatedCount}
+              </span>
+              <span className="text-[10px] text-purple-500 font-bold">
+                {`${metrics.pendingReviewCount} pending review`}
+              </span>
+            </div>
+
+            {/* On Track */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between text-emerald-500">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  On Track
+                </span>
+                <CheckCircle size={16} />
+              </div>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 my-1">
+                {metrics.onTrackCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                Healthy Resolution
+              </span>
+            </div>
           </div>
-          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 my-1">
-            {isDataLoading ? "—" : metrics.onTrackCount}
-          </span>
-          <span className="text-[10px] text-slate-400 font-semibold">
-            Healthy Resolution
-          </span>
-        </div>
+        )}
       </div>
 
       {/* Filter and Control Bar */}

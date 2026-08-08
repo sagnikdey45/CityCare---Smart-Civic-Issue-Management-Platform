@@ -44,6 +44,52 @@ function CityAdminOverviewSkeleton() {
   );
 }
 
+function getTrendSemantic(trendDirection, trendType) {
+  if (trendDirection === "neutral") return "neutral";
+  if (trendType === "positive_when_up")
+    return trendDirection === "up" ? "positive" : "negative";
+  if (trendType === "negative_when_up")
+    return trendDirection === "up" ? "negative" : "positive";
+  return "neutral";
+}
+
+function getKpiTrendDisplay(trend) {
+  if (!trend || trend.comparisonAvailable === false) {
+    return {
+      label: "All-time total",
+      direction: "neutral",
+      semantic: "neutral",
+    };
+  }
+
+  const semantic = getTrendSemantic(trend.trendDirection, trend.trendType);
+
+  if (trend.changePercent === null) {
+    return {
+      label: trend.changeValue > 0 ? `+${trend.changeValue} new` : "No change",
+      direction: trend.trendDirection,
+      semantic,
+    };
+  }
+
+  const prefix = trend.changePercent > 0 ? "+" : "";
+  return {
+    label: `${prefix}${trend.changePercent}%`,
+    direction: trend.trendDirection,
+    semantic,
+  };
+}
+
+function getTrendBadgeClass(semantic) {
+  if (semantic === "positive") {
+    return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+  }
+  if (semantic === "negative") {
+    return "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+  }
+  return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+}
+
 export default function CityAdminOverview({
   overviewData,
   onSelectIssue,
@@ -55,6 +101,8 @@ export default function CityAdminOverview({
   const {
     scope = {},
     summary = {},
+    kpis: liveKpis = {},
+    comparison = {},
     recentIssues = [],
     urgentIssues = [],
     recentEscalations = [],
@@ -82,49 +130,72 @@ export default function CityAdminOverview({
   const kpis = useMemo(
     () => [
       {
+        key: "totalIssues",
         label: "Total Issues",
-        value: summary.totalIssues,
-        trend: "+12%",
+        value: liveKpis?.totalIssues?.value ?? summary.totalIssues ?? 0,
+        trend: liveKpis?.totalIssues,
         icon: FileText,
         color: "blue",
+        supportingText:
+          dateRange === "all" ? "All city issues" : "Created in selected range",
       },
       {
+        key: "activeIssues",
         label: "Active Issues",
-        value: summary.activeIssues,
-        trend: "+8%",
+        value: liveKpis?.activeIssues?.value ?? summary.activeIssues ?? 0,
+        trend: liveKpis?.activeIssues,
         icon: Activity,
         color: "purple",
+        supportingText:
+          dateRange === "all"
+            ? "Currently active city issues"
+            : "Created in range and still active",
       },
       {
+        key: "resolvedIssues",
         label: "Resolved",
-        value: summary.resolvedIssues,
-        trend: "+15%",
+        value: liveKpis?.resolvedIssues?.value ?? summary.resolvedIssues ?? 0,
+        trend: liveKpis?.resolvedIssues,
         icon: CheckCircle2,
         color: "emerald",
+        supportingText:
+          dateRange === "all"
+            ? "Currently resolved or closed"
+            : "Resolved during selected range",
       },
       {
+        key: "closedIssues",
         label: "Closed",
-        value: summary.closedIssues,
-        trend: "+5%",
+        value: liveKpis?.closedIssues?.value ?? summary.closedIssues ?? 0,
+        trend: liveKpis?.closedIssues,
         icon: Target,
         color: "gray",
+        supportingText:
+          dateRange === "all"
+            ? "Currently closed"
+            : "Closed during selected range",
       },
       {
+        key: "slaBreachedIssues",
         label: "SLA Breached",
-        value: summary.overdueIssues,
-        trend: "-3%",
+        value: liveKpis?.slaBreachedIssues?.value ?? summary.overdueIssues ?? 0,
+        trend: liveKpis?.slaBreachedIssues,
         icon: AlertTriangle,
         color: "red",
+        supportingText: "Issues requiring SLA attention",
       },
       {
+        key: "highPriorityIssues",
         label: "High Priority",
-        value: summary.escalatedIssues,
-        trend: "+2",
+        value:
+          liveKpis?.highPriorityIssues?.value ?? summary.escalatedIssues ?? 0,
+        trend: liveKpis?.highPriorityIssues,
         icon: Zap,
         color: "orange",
+        supportingText: "High and critical issues",
       },
     ],
-    [summary],
+    [liveKpis, summary, dateRange],
   );
 
   if (!overviewData) {
@@ -138,87 +209,103 @@ export default function CityAdminOverview({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
-        {kpis.map((kpi, idx) => (
-          <div
-            key={idx}
-            className="group relative bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700 hover:shadow-2xl hover:shadow-cyan-500/10 dark:hover:shadow-cyan-500/20 transition-all duration-500 hover:-translate-y-1 overflow-hidden"
-          >
-            <div
-              className={`absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 dark:group-hover:opacity-10 transition-opacity duration-500 ${
-                kpi.color === "blue"
-                  ? "from-cyan-400 to-blue-600"
-                  : kpi.color === "purple"
-                    ? "from-violet-400 to-blue-600"
-                    : kpi.color === "emerald"
-                      ? "from-emerald-400 to-teal-600"
-                      : kpi.color === "gray"
-                        ? "from-slate-400 to-slate-600"
-                        : kpi.color === "red"
-                          ? "from-red-400 to-rose-600"
-                          : "from-orange-400 to-amber-600"
-              }`}
-            ></div>
+        {kpis.map((kpi, idx) => {
+          const trendDisplay = getKpiTrendDisplay(kpi.trend);
+          const tooltipTitle =
+            comparison?.enabled && comparison?.previousLabel
+              ? `Compared with ${comparison.previousLabel}`
+              : "All-time metrics do not have a previous-period comparison";
 
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="relative">
+          return (
+            <div
+              key={idx}
+              title={tooltipTitle}
+              className="group relative bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700 hover:shadow-2xl hover:shadow-cyan-500/10 dark:hover:shadow-cyan-500/20 transition-all duration-500 hover:-translate-y-1 overflow-hidden"
+            >
+              <div
+                className={`absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 dark:group-hover:opacity-10 transition-opacity duration-500 ${
+                  kpi.color === "blue"
+                    ? "from-cyan-400 to-blue-600"
+                    : kpi.color === "purple"
+                      ? "from-violet-400 to-blue-600"
+                      : kpi.color === "emerald"
+                        ? "from-emerald-400 to-teal-600"
+                        : kpi.color === "gray"
+                          ? "from-slate-400 to-slate-600"
+                          : kpi.color === "red"
+                            ? "from-red-400 to-rose-600"
+                            : "from-orange-400 to-amber-600"
+                }`}
+              ></div>
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="relative">
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-br blur-md opacity-40 ${
+                        kpi.color === "blue"
+                          ? "from-cyan-400 to-blue-600"
+                          : kpi.color === "purple"
+                            ? "from-violet-400 to-blue-600"
+                            : kpi.color === "emerald"
+                              ? "from-emerald-400 to-teal-600"
+                              : kpi.color === "gray"
+                                ? "from-slate-400 to-slate-600"
+                                : kpi.color === "red"
+                                  ? "from-red-400 to-rose-600"
+                                  : "from-orange-400 to-amber-600"
+                      }`}
+                    ></div>
+                    <div
+                      className={`relative w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg ${
+                        kpi.color === "blue"
+                          ? "from-cyan-400 to-blue-600"
+                          : kpi.color === "purple"
+                            ? "from-violet-400 to-blue-600"
+                            : kpi.color === "emerald"
+                              ? "from-emerald-400 to-teal-600"
+                              : kpi.color === "gray"
+                                ? "from-slate-400 to-slate-600"
+                                : kpi.color === "red"
+                                  ? "from-red-400 to-rose-600"
+                                  : "from-orange-400 to-amber-600"
+                      }`}
+                    >
+                      <kpi.icon className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
                   <div
-                    className={`absolute inset-0 bg-gradient-to-br blur-md opacity-40 ${
-                      kpi.color === "blue"
-                        ? "from-cyan-400 to-blue-600"
-                        : kpi.color === "purple"
-                          ? "from-violet-400 to-blue-600"
-                          : kpi.color === "emerald"
-                            ? "from-emerald-400 to-teal-600"
-                            : kpi.color === "gray"
-                              ? "from-slate-400 to-slate-600"
-                              : kpi.color === "red"
-                                ? "from-red-400 to-rose-600"
-                                : "from-orange-400 to-amber-600"
-                    }`}
-                  ></div>
-                  <div
-                    className={`relative w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg ${
-                      kpi.color === "blue"
-                        ? "from-cyan-400 to-blue-600"
-                        : kpi.color === "purple"
-                          ? "from-violet-400 to-blue-600"
-                          : kpi.color === "emerald"
-                            ? "from-emerald-400 to-teal-600"
-                            : kpi.color === "gray"
-                              ? "from-slate-400 to-slate-600"
-                              : kpi.color === "red"
-                                ? "from-red-400 to-rose-600"
-                                : "from-orange-400 to-amber-600"
-                    }`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${getTrendBadgeClass(trendDisplay.semantic)}`}
                   >
-                    <kpi.icon className="w-6 h-6 text-white" />
+                    {trendDisplay.direction === "up" ? (
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    ) : trendDisplay.direction === "down" ? (
+                      <TrendingDown className="w-3.5 h-3.5" />
+                    ) : (
+                      <Activity className="w-3.5 h-3.5" />
+                    )}
+                    <span>{trendDisplay.label}</span>
                   </div>
                 </div>
-                <div
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                    kpi.trend.startsWith("+")
-                      ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                      : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                  }`}
-                >
-                  {kpi.trend.startsWith("+") ? (
-                    <TrendingUp className="w-3.5 h-3.5" />
-                  ) : (
-                    <TrendingDown className="w-3.5 h-3.5" />
+                <p className="text-3xl font-black text-slate-900 dark:text-white mb-1 tracking-tight">
+                  {kpi.value}
+                </p>
+                <p className="text-xs text-slate-800 dark:text-slate-200 font-extrabold mb-1">
+                  {kpi.label}
+                </p>
+                {kpi.trend?.comparisonAvailable &&
+                  kpi.trend.previousValue !== null && (
+                    <p className="text-[11px] text-slate-400 font-medium mb-1">
+                      Previous: {kpi.trend.previousValue}
+                    </p>
                   )}
-                  {kpi.trend}
-                </div>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  {kpi.supportingText}
+                </p>
               </div>
-              <p className="text-3xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">
-                {kpi.value}
-              </p>
-              <p className="text-sm text-slate-655 dark:text-slate-400 font-semibold">
-                {kpi.label}
-              </p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Map & Categories Section */}

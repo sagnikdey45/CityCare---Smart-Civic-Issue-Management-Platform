@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import CityAdminOverview from "../city-admin/CityAdminOverview";
 import CityAdminAllIssues from "../city-admin/CityAdminAllIssues";
 import CityAdminSLAMonitor from "../city-admin/CityAdminSLAMonitor";
+import CityIssueAnalytics from "../city-admin/CityIssueAnalytics";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -54,6 +55,13 @@ import {
   MoreVertical,
   Loader2,
   Globe,
+  Building2,
+  Phone,
+  Mail,
+  User,
+  CheckSquare,
+  Info,
+  Star,
 } from "lucide-react";
 import {
   initializeCityAdminMockData,
@@ -68,6 +76,169 @@ import { ModeToggle } from "../ModeToggle";
 // import PublicDashboardModeration from './PublicDashboardModeration';
 // import { CityCitizenGamificationSection } from './admin/CityCitizenGamificationSection';
 
+// Safe helper functions for City Admin issue detail modal
+function formatLabel(value, fallback = "N/A") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatDateTime(value, fallback = "N/A") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatDate(value, fallback = "N/A") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getOfficerDisplayName(officer, fallback = "Unassigned") {
+  if (!officer) return fallback;
+  if (typeof officer === "string") return officer;
+  return officer.name ?? officer.fullName ?? officer.email ?? fallback;
+}
+
+function getReporterDetails(issue) {
+  const isAnonymous =
+    issue?.isAnonymous === true || issue?.is_anonymous === true;
+  if (isAnonymous) {
+    return {
+      name: "Anonymous Citizen",
+      email: null,
+      phone: null,
+      anonymous: true,
+    };
+  }
+
+  const reporter =
+    issue?.reporterDetails ??
+    issue?.reporter ??
+    issue?.citizen ??
+    issue?.citizenDetails ??
+    null;
+  return {
+    name:
+      reporter?.fullName ??
+      reporter?.name ??
+      issue?.reporterName ??
+      issue?.citizenName ??
+      "Registered Citizen",
+    email:
+      reporter?.email ?? issue?.reporterEmail ?? issue?.citizenEmail ?? null,
+    phone:
+      reporter?.phone ?? issue?.reporterPhone ?? issue?.citizenPhone ?? null,
+    anonymous: false,
+  };
+}
+
+function getPriorityBadgeClass(priority) {
+  switch (String(priority).toLowerCase()) {
+    case "critical":
+      return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30";
+    case "high":
+      return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30";
+    case "medium":
+      return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30";
+    case "low":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    default:
+      return "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30";
+  }
+}
+
+function getStatusBadgeClass(status) {
+  switch (String(status).toLowerCase()) {
+    case "resolved":
+    case "closed":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    case "rejected":
+    case "withdrawn":
+      return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30";
+    case "escalated":
+      return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30";
+    case "in_progress":
+      return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30";
+    case "pending_uo_verification":
+      return "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30";
+    case "rework_required":
+      return "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30";
+    case "reopened":
+      return "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-400 border-fuchsia-500/30";
+    case "verified":
+    case "assigned":
+      return "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/30";
+    default:
+      return "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30";
+  }
+}
+
+function getIssueSlaState(issue) {
+  const terminalStatuses = new Set([
+    "resolved",
+    "closed",
+    "rejected",
+    "withdrawn",
+  ]);
+  const currentStatus = String(issue?.status ?? "").toLowerCase();
+
+  if (terminalStatuses.has(currentStatus)) {
+    return { key: "completed", label: "Completed", hoursRemaining: null };
+  }
+
+  if (issue?.slaBreached === true || issue?.sla?.status === "breached") {
+    return { key: "breached", label: "SLA Breached", hoursRemaining: null };
+  }
+
+  const deadline =
+    issue?.slaDeadline ?? issue?.sla?.deadline ?? issue?.sla_deadline ?? null;
+  if (!deadline) {
+    return {
+      key: "no_deadline",
+      label: "No SLA Deadline",
+      hoursRemaining: null,
+    };
+  }
+
+  const deadlineTime = new Date(deadline).getTime();
+  if (!Number.isFinite(deadlineTime)) {
+    return {
+      key: "no_deadline",
+      label: "Invalid SLA Deadline",
+      hoursRemaining: null,
+    };
+  }
+
+  const difference = deadlineTime - Date.now();
+  const hoursRemaining = Math.round(difference / (1000 * 60 * 60));
+
+  if (difference < 0) {
+    return { key: "breached", label: "SLA Breached", hoursRemaining };
+  }
+  if (difference <= 24 * 60 * 60 * 1000) {
+    return { key: "due_soon", label: "Due Soon", hoursRemaining };
+  }
+  if (difference <= 48 * 60 * 60 * 1000) {
+    return { key: "at_risk", label: "At Risk", hoursRemaining };
+  }
+
+  return { key: "on_track", label: "On Track", hoursRemaining };
+}
+
 export default function CityAdminDashboard() {
   const { data: session, status: sessionStatus } = useSession();
   const dbUser = useQuery(
@@ -78,6 +249,45 @@ export default function CityAdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [dateRange, setDateRange] = useState("all");
   const [selectedIssue, setSelectedIssue] = useState(null);
+  const [selectedIssueId, setSelectedIssueId] = useState(null);
+
+  const selectedIssueDetails = useQuery(
+    api.cityAdmin.getCityIssueDetails,
+    dbUser?._id && selectedIssueId
+      ? { cityAdminUserId: dbUser._id, issueId: selectedIssueId }
+      : "skip",
+  );
+
+  const handleSelectIssue = (issue) => {
+    if (!issue) return;
+    const issueId = issue._id ?? issue.id ?? null;
+    setSelectedIssue(issue);
+    if (issueId && typeof issueId === "string" && issueId.length > 5) {
+      setSelectedIssueId(issueId);
+    } else {
+      setSelectedIssueId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedIssue && !selectedIssueId) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setSelectedIssue(null);
+        setSelectedIssueId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedIssue, selectedIssueId]);
 
   const rangeDays =
     dateRange === "today"
@@ -86,8 +296,8 @@ export default function CityAdminDashboard() {
         ? 7
         : dateRange === "30d"
           ? 30
-          : dateRange === "all"
-            ? 0
+          : dateRange === "90d"
+            ? 90
             : 0;
 
   const overviewData = useQuery(
@@ -199,7 +409,7 @@ export default function CityAdminDashboard() {
     const allIssues = getCityAdminIssues();
     const updatedIssues = allIssues.map((issue) =>
       issue.id === issueId
-        ? { ...issue, severity: "high", priority_score: 10.0 }
+        ? { ...issue, priority: "high", priority_score: 10.0 }
         : issue,
     );
     setCityAdminIssues(updatedIssues);
@@ -283,33 +493,6 @@ export default function CityAdminDashboard() {
     alert("Issue closed successfully!");
   }
 
-  function handleMergeDuplicates(primaryId, duplicateIds) {
-    const allIssues = getCityAdminIssues();
-    const updatedIssues = allIssues.map((issue) =>
-      duplicateIds.includes(issue.id)
-        ? {
-            ...issue,
-            status: "resolved",
-            description: `Merged with ${primaryId}`,
-          }
-        : issue,
-    );
-    setCityAdminIssues(updatedIssues);
-
-    addCityAdminAuditLog({
-      action: "Duplicates Merged",
-      performed_by: "City Admin",
-      performer_role: "admin",
-      timestamp: new Date().toLocaleString(),
-      affected_entity: primaryId,
-      notes: `Merged ${duplicateIds.length} duplicate issues`,
-    });
-
-    loadIssues();
-    loadAuditLogs();
-    alert("Duplicates merged successfully!");
-  }
-
   const filteredIssues = issues.filter((issue) => {
     if (filterStatus !== "all" && issue.status !== filterStatus) return false;
     if (filterCategory !== "all" && issue.category !== filterCategory)
@@ -351,54 +534,6 @@ export default function CityAdminDashboard() {
     return `${hours}h`;
   };
 
-  const kpis = [
-    {
-      label: "Total Issues",
-      value: issues.length,
-      trend: "+12%",
-      icon: FileText,
-      color: "blue",
-    },
-    {
-      label: "Active Issues",
-      value: issues.filter((i) => ["pending", "in_progress"].includes(i.status))
-        .length,
-      trend: "+8%",
-      icon: Activity,
-      color: "purple",
-    },
-    {
-      label: "Resolved",
-      value: issues.filter((i) => i.status === "resolved").length,
-      trend: "+15%",
-      icon: CheckCircle2,
-      color: "emerald",
-    },
-    {
-      label: "Closed",
-      value: issues.filter((i) => i.status === "resolved").length,
-      trend: "+5%",
-      icon: Target,
-      color: "gray",
-    },
-    {
-      label: "SLA Breached",
-      value: issues.filter(
-        (i) => getSLAStatus(i.created_at, i.status) === "breached",
-      ).length,
-      trend: "-3%",
-      icon: AlertTriangle,
-      color: "red",
-    },
-    {
-      label: "High Priority",
-      value: issues.filter((i) => i.severity === "high").length,
-      trend: "+2",
-      icon: Zap,
-      color: "orange",
-    },
-  ];
-
   const categoryStats = issues.reduce((acc, issue) => {
     acc[issue.category] = (acc[issue.category] || 0) + 1;
     return acc;
@@ -417,57 +552,8 @@ export default function CityAdminDashboard() {
     .slice(0, 10);
 
   const escalatedIssues = filteredIssues
-    .filter((i) => i.severity === "high" && i.status !== "resolved")
+    .filter((i) => i.priority === "high" && i.status !== "resolved")
     .slice(0, 5);
-
-  const duplicateGroups = findDuplicates(filteredIssues);
-
-  function findDuplicates(issues) {
-    const groups = [];
-    const processed = new Set();
-
-    issues.forEach((issue, i) => {
-      if (processed.has(issue.id)) return;
-
-      const duplicates = [];
-      issues.forEach((other, j) => {
-        if (i === j || processed.has(other.id)) return;
-
-        const similarity = calculateSimilarity(issue.title, other.title);
-        if (similarity > 0.7) {
-          duplicates.push({
-            id: other.id,
-            code: other.ticket_id,
-            title: other.title,
-            location: other.address,
-            confidence: similarity,
-          });
-          processed.add(other.id);
-        }
-      });
-
-      if (duplicates.length > 0) {
-        groups.push({
-          primary: {
-            id: issue.id,
-            code: issue.ticket_id,
-            title: issue.title,
-            location: issue.address,
-          },
-          duplicates,
-        });
-      }
-    });
-
-    return groups.slice(0, 3);
-  }
-
-  function calculateSimilarity(str1, str2) {
-    const words1 = new Set(str1.toLowerCase().split(/\s+/));
-    const words2 = new Set(str2.toLowerCase().split(/\s+/));
-    const intersection = new Set([...words1].filter((x) => words2.has(x)));
-    return intersection.size / Math.max(words1.size, words2.size);
-  }
 
   const renderSidebar = () => (
     <div className="fixed left-0 top-0 h-full w-72 bg-gradient-to-br from-white via-slate-50 to-white dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col z-50 shadow-2xl border-r border-slate-200 dark:border-white/10">
@@ -511,9 +597,9 @@ export default function CityAdminDashboard() {
             gradient: "from-amber-500 to-orange-500",
           },
           {
-            id: "duplicates",
-            label: "Duplicates",
-            icon: Copy,
+            id: "city-analytics",
+            label: "City Issue Analytics",
+            icon: BarChart3,
             gradient: "from-teal-500 to-cyan-500",
           },
           {
@@ -664,7 +750,8 @@ export default function CityAdminDashboard() {
           <option value="today">Today</option>
           <option value="7d">Last 7 Days</option>
           <option value="30d">Last 30 Days</option>
-          <option value="all">All</option>
+          <option value="90d">Last 90 Days</option>
+          <option value="all">All Time</option>
         </select>
 
         <div className="relative">
@@ -824,7 +911,7 @@ export default function CityAdminDashboard() {
           >
             <option>By Category</option>
             <option>By Status</option>
-            <option>By Severity</option>
+            <option>By priority</option>
             <option>By SLA Risk</option>
           </select>
 
@@ -978,106 +1065,6 @@ export default function CityAdminDashboard() {
       cityAdminUserId={dbUser._id}
       onViewIssue={setSelectedIssue}
     />
-  );
-
-  const renderDuplicateDetection = () => (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-            Duplicate Detection Workbench
-          </h2>
-          <p className="text-sm text-gray-500">
-            AI-powered duplicate detection to reduce field visits
-          </p>
-        </div>
-        <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded-full">
-          {duplicateGroups.length} Group
-          {duplicateGroups.length !== 1 ? "s" : ""} Detected
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        </div>
-      ) : duplicateGroups.length === 0 ? (
-        <div className="text-center py-12">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-          <p className="text-gray-500">No duplicate issues detected!</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {duplicateGroups.map((group, idx) => (
-            <div
-              key={idx}
-              className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
-            >
-              <div className="mb-3 pb-3 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded">
-                    PRIMARY
-                  </span>
-                  <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
-                    {group.primary.code}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  {group.primary.title}
-                </h3>
-                <p className="text-sm text-gray-500">
-                  {group.primary.location}
-                </p>
-              </div>
-
-              <div className="space-y-2 mb-3">
-                {group.duplicates.map((dup, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-mono text-gray-600 dark:text-gray-400">
-                          {dup.code}
-                        </span>
-                        <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-medium rounded">
-                          {Math.round(dup.confidence * 100)}% Match
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-900 dark:text-white">
-                        {dup.title}
-                      </p>
-                      <p className="text-xs text-gray-500">{dup.location}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() =>
-                    handleMergeDuplicates(
-                      group.primary.id,
-                      group.duplicates.map((d) => d.id),
-                    )
-                  }
-                  className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Merge Issues
-                </button>
-                <button className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white text-sm font-medium rounded-lg transition-colors">
-                  Link as Duplicate
-                </button>
-                <button className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 text-sm font-medium rounded-lg transition-colors">
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 
   const renderOfficerManagement = () => (
@@ -1482,7 +1469,7 @@ export default function CityAdminDashboard() {
               </h3>
             </div>
             <p className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
-              {issues.filter((i) => i.severity === "high").length}
+              {issues.filter((i) => i.priority === "high").length}
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400">
               Require attention
@@ -1572,7 +1559,7 @@ export default function CityAdminDashboard() {
                   Status
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                  Severity
+                  priority
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
                   Created
@@ -1583,7 +1570,7 @@ export default function CityAdminDashboard() {
               {filteredIssues.slice(0, 50).map((issue) => (
                 <tr
                   key={issue.id}
-                  onClick={() => setSelectedIssue(issue)}
+                  onClick={() => handleSelectIssue(issue)}
                   className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                 >
                   <td className="py-3 px-4">
@@ -1609,14 +1596,14 @@ export default function CityAdminDashboard() {
                   <td className="py-3 px-4">
                     <span
                       className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        issue.severity === "high"
+                        issue.priority === "high"
                           ? "bg-red-100 text-red-700"
-                          : issue.severity === "medium"
+                          : issue.priority === "medium"
                             ? "bg-amber-100 text-amber-700"
                             : "bg-gray-100 text-gray-700"
                       }`}
                     >
-                      {issue.severity}
+                      {issue.priority}
                     </span>
                   </td>
                   <td className="py-3 px-4">
@@ -1634,124 +1621,886 @@ export default function CityAdminDashboard() {
   );
 
   const renderIssueDetailModal = () => {
-    if (!selectedIssue) return null;
+    if (!selectedIssue && !selectedIssueId) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-6 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {selectedIssue.title}
-                </h2>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    selectedIssue.severity === "high"
-                      ? "bg-red-100 text-red-700"
-                      : selectedIssue.severity === "medium"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {selectedIssue.severity.toUpperCase()}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 font-mono">
-                {selectedIssue.ticket_id}
-              </p>
-            </div>
+    const isLoadingDetails =
+      selectedIssueId && selectedIssueDetails === undefined && !selectedIssue;
+    const isErrorDetails =
+      selectedIssueId && selectedIssueDetails === null && !selectedIssue;
+
+    const activeIssue = selectedIssueDetails || selectedIssue;
+
+    if (isLoadingDetails) {
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+            <RefreshCw className="w-10 h-10 text-cyan-500 animate-spin mx-auto" />
+            <h3 className="text-base font-black text-slate-900 dark:text-white">
+              Loading Issue Details...
+            </h3>
+            <p className="text-xs text-slate-500">
+              Fetching administrative records from Convex database.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (isErrorDetails || !activeIssue) {
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+            <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+            <h3 className="text-base font-black text-slate-900 dark:text-white">
+              Issue Unavailable
+            </h3>
+            <p className="text-xs text-slate-500">
+              Issue details are unavailable or outside your administrative city
+              scope.
+            </p>
             <button
-              onClick={() => setSelectedIssue(null)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              type="button"
+              onClick={() => {
+                setSelectedIssue(null);
+                setSelectedIssueId(null);
+              }}
+              className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs rounded-xl"
             >
-              <X className="w-5 h-5" />
+              Close
             </button>
           </div>
+        </div>
+      );
+    }
 
-          <div className="p-6 space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Category</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {selectedIssue.category}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Status</p>
-                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded-full capitalize">
-                  {selectedIssue.status.replace("_", " ")}
-                </span>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Reporter</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {selectedIssue.is_anonymous ? "Anonymous" : "Registered User"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Created</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {new Date(selectedIssue.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
+    const issueCode =
+      activeIssue?.issueCode ??
+      activeIssue?.code ??
+      activeIssue?.ticket_id ??
+      "Issue Code Unavailable";
+    const title = activeIssue?.title ?? "Untitled Issue";
+    const description =
+      activeIssue?.description ?? "No description was provided for this issue.";
+    const category = activeIssue?.category ?? "other";
+    const department =
+      activeIssue?.department ?? activeIssue?.category ?? "unassigned";
+    const priority = String(
+      activeIssue?.priority ?? activeIssue?.severity ?? "medium",
+    ).toLowerCase();
+    const status = String(activeIssue?.status ?? "unknown").toLowerCase();
+    const address =
+      activeIssue?.address ?? activeIssue?.location ?? "Location unavailable";
+    const createdAt =
+      activeIssue?.createdAt ??
+      activeIssue?.created_at ??
+      activeIssue?._creationTime ??
+      null;
+    const updatedAt = activeIssue?.updatedAt ?? activeIssue?.updated_at ?? null;
 
-            <div>
-              <p className="text-xs text-gray-500 mb-2">Description</p>
-              <p className="text-sm text-gray-900 dark:text-white">
-                {selectedIssue.description}
-              </p>
-            </div>
+    const subcategories = Array.isArray(activeIssue?.subcategory)
+      ? activeIssue.subcategory
+      : activeIssue?.subcategory
+        ? [activeIssue.subcategory]
+        : Array.isArray(activeIssue?.subCategories)
+          ? activeIssue.subCategories
+          : [];
+    const tags = Array.isArray(activeIssue?.tags) ? activeIssue.tags : [];
 
-            <div>
-              <p className="text-xs text-gray-500 mb-2">Location</p>
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-900 dark:text-white">
-                    {selectedIssue.address}
+    const latitude = Number(
+      activeIssue?.latitude ?? activeIssue?.coordinates?.latitude,
+    );
+    const longitude = Number(
+      activeIssue?.longitude ?? activeIssue?.coordinates?.longitude,
+    );
+    const hasValidCoordinates =
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180;
+
+    const reporter = getReporterDetails(activeIssue);
+
+    const unitOfficer =
+      activeIssue?.unitOfficerDetails ??
+      activeIssue?.assignedUnitOfficerDetails ??
+      activeIssue?.assignedUnitOfficer ??
+      null;
+    const fieldOfficer =
+      activeIssue?.fieldOfficerDetails ??
+      activeIssue?.assignedFieldOfficerDetails ??
+      activeIssue?.assignedFieldOfficer ??
+      null;
+
+    const slaState = getIssueSlaState(activeIssue);
+
+    const escalation = activeIssue?.escalation ?? null;
+    const isEscalated =
+      activeIssue?.escalatedToAdmin === true ||
+      activeIssue?.is_escalated === true ||
+      status === "escalated" ||
+      Boolean(escalation);
+
+    const possibleDuplicateIds = Array.isArray(
+      activeIssue?.possibleDuplicateIds,
+    )
+      ? activeIssue.possibleDuplicateIds
+      : [];
+    const isDuplicateLinked =
+      possibleDuplicateIds.length > 0 ||
+      activeIssue?.duplicateGroupId ||
+      activeIssue?.duplicateScore ||
+      activeIssue?.duplicateConfidence ||
+      activeIssue?.bestDuplicateScore;
+
+    const rejection = activeIssue?.rejection ?? null;
+    const hasRejection = Boolean(rejection || activeIssue?.rejectionReason);
+
+    const resolvedAt = activeIssue?.resolvedAt ?? activeIssue?.closedAt ?? null;
+    const hasResolution = Boolean(
+      resolvedAt ||
+        activeIssue?.citizenRating ||
+        activeIssue?.resolutionSummary,
+    );
+
+    const evidenceUrls = [
+      ...(Array.isArray(activeIssue?.images) ? activeIssue.images : []),
+      ...(Array.isArray(activeIssue?.attachments)
+        ? activeIssue.attachments
+        : []),
+      ...(Array.isArray(activeIssue?.beforePhotos)
+        ? activeIssue.beforePhotos
+        : []),
+      ...(Array.isArray(activeIssue?.afterPhotos)
+        ? activeIssue.afterPhotos
+        : []),
+      ...(Array.isArray(activeIssue?.resolutionImages)
+        ? activeIssue.resolutionImages
+        : []),
+    ].filter(Boolean);
+
+    const timelineEvents = [];
+    if (createdAt)
+      timelineEvents.push({ label: "Reported", timestamp: createdAt });
+    if (activeIssue?.verifiedAt)
+      timelineEvents.push({
+        label: "Verified",
+        timestamp: activeIssue.verifiedAt,
+      });
+    if (activeIssue?.assignedAt)
+      timelineEvents.push({
+        label: "Assigned",
+        timestamp: activeIssue.assignedAt,
+      });
+    if (activeIssue?.workStartedAt)
+      timelineEvents.push({
+        label: "Work Started",
+        timestamp: activeIssue.workStartedAt,
+      });
+    if (escalation?.escalatedAt || activeIssue?.escalatedAt)
+      timelineEvents.push({
+        label: "Escalated",
+        timestamp: escalation?.escalatedAt || activeIssue?.escalatedAt,
+      });
+    if (resolvedAt)
+      timelineEvents.push({ label: "Resolved", timestamp: resolvedAt });
+    if (activeIssue?.closedAt)
+      timelineEvents.push({ label: "Closed", timestamp: activeIssue.closedAt });
+    if (activeIssue?.reopenedAt)
+      timelineEvents.push({
+        label: "Reopened",
+        timestamp: activeIssue.reopenedAt,
+      });
+    if (updatedAt && updatedAt !== createdAt)
+      timelineEvents.push({ label: "Last Updated", timestamp: updatedAt });
+
+    timelineEvents.sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="city-admin-issue-modal-title"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setSelectedIssue(null);
+            setSelectedIssueId(null);
+          }
+        }}
+      >
+        <div className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+          {/* Header */}
+          <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95 sm:px-7">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-800 px-2 py-0.5 rounded-lg">
+                    CITY ISSUE DETAILS
+                  </span>
+                  <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
+                    {issueCode}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase ${getPriorityBadgeClass(priority)}`}
+                  >
+                    {formatLabel(priority, "Medium")}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${getStatusBadgeClass(status)}`}
+                  >
+                    {formatLabel(status, "Unknown")}
                   </span>
                 </div>
-                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium flex items-center gap-1">
-                  <ExternalLink className="w-3 h-3" />
-                  Open in Maps
-                </button>
+
+                <h2
+                  id="city-admin-issue-modal-title"
+                  className="text-lg sm:text-xl font-black text-slate-900 dark:text-white truncate tracking-tight"
+                >
+                  {title}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Close issue details"
+                onClick={() => {
+                  setSelectedIssue(null);
+                  setSelectedIssueId(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Body Content */}
+          <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-7 space-y-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+              {/* Left Column (2/3) */}
+              <div className="space-y-6 xl:col-span-2">
+                {/* Description & Classification */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-black uppercase tracking-wider text-[10px]">
+                      Description & Classification
+                    </span>
+                    <span>Reported {formatDate(createdAt)}</span>
+                  </div>
+
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                    {description}
+                  </p>
+
+                  <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-400">
+                      Category:
+                    </span>
+                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold px-2.5 py-0.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60 capitalize">
+                      {formatLabel(category)}
+                    </span>
+
+                    <span className="text-[10px] font-bold text-slate-400 ml-2">
+                      Department:
+                    </span>
+                    <span className="bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400 text-xs font-bold px-2.5 py-0.5 rounded-lg border border-cyan-200 dark:border-cyan-800 capitalize">
+                      {formatLabel(department)}
+                    </span>
+                  </div>
+
+                  {subcategories.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        Subcategories:
+                      </span>
+                      {subcategories.map((sub, i) => (
+                        <span
+                          key={i}
+                          className="bg-slate-50 dark:bg-slate-850/60 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-slate-200/50 dark:border-slate-800"
+                        >
+                          {formatLabel(sub)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {tags.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        Tags:
+                      </span>
+                      {tags.map((tag, i) => (
+                        <span
+                          key={i}
+                          className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-[10px] font-bold px-2 py-0.5 rounded-md"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Location Information */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-cyan-500" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                        Location Details
+                      </h3>
+                    </div>
+
+                    {hasValidCoordinates && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.open(
+                            `https://www.google.com/maps?q=${latitude},${longitude}`,
+                            "_blank",
+                            "noopener,noreferrer",
+                          );
+                        }}
+                        className="text-cyan-600 dark:text-cyan-400 hover:underline text-xs font-bold inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open in Maps
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">
+                    {address}
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div>
+                      <span className="block text-[10px] text-slate-400">
+                        City
+                      </span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {formatLabel(
+                          activeIssue?.city || activeIssue?.scope?.city,
+                          "N/A",
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-400">
+                        State
+                      </span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {formatLabel(
+                          activeIssue?.state || activeIssue?.scope?.state,
+                          "N/A",
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-400">
+                        Latitude
+                      </span>
+                      <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                        {Number.isFinite(latitude)
+                          ? latitude.toFixed(5)
+                          : "N/A"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-400">
+                        Longitude
+                      </span>
+                      <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                        {Number.isFinite(longitude)
+                          ? longitude.toFixed(5)
+                          : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Officer Assignment */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-cyan-500" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Officer Assignment
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Unit Officer */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-850/60 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-1.5 text-xs">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block">
+                        Unit Officer
+                      </span>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {getOfficerDisplayName(unitOfficer)}
+                      </p>
+                      {typeof unitOfficer === "object" &&
+                        unitOfficer?.email && (
+                          <p className="text-[11px] text-slate-500 font-medium truncate">
+                            {unitOfficer.email}
+                          </p>
+                        )}
+                      {typeof unitOfficer === "object" &&
+                        unitOfficer?.phone && (
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            {unitOfficer.phone}
+                          </p>
+                        )}
+                    </div>
+
+                    {/* Field Officer */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-850/60 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-1.5 text-xs">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 block">
+                        Field Officer
+                      </span>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {getOfficerDisplayName(fieldOfficer)}
+                      </p>
+                      {typeof fieldOfficer === "object" &&
+                        fieldOfficer?.email && (
+                          <p className="text-[11px] text-slate-500 font-medium truncate">
+                            {fieldOfficer.email}
+                          </p>
+                        )}
+                      {typeof fieldOfficer === "object" &&
+                        fieldOfficer?.phone && (
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            {fieldOfficer.phone}
+                          </p>
+                        )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Escalation Details */}
+                {isEscalated && (
+                  <div className="p-5 bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/30 rounded-2xl space-y-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                        Escalation Record
+                      </h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">
+                          Review Status
+                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white capitalize">
+                          {formatLabel(
+                            escalation?.adminReviewStatus ||
+                              activeIssue?.escalation_admin_review_status ||
+                              "pending_review",
+                          )}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">
+                          Escalation Category
+                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white capitalize">
+                          {formatLabel(
+                            escalation?.category ||
+                              activeIssue?.escalation_category ||
+                              "SLA Breach",
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {(escalation?.reason ||
+                      activeIssue?.escalation_reason ||
+                      escalation?.comments) && (
+                      <div className="pt-2 border-t border-amber-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block">
+                          Escalation Reason / Notes
+                        </span>
+                        <p className="font-medium">
+                          {escalation?.reason ||
+                            activeIssue?.escalation_reason ||
+                            escalation?.comments}
+                        </p>
+                      </div>
+                    )}
+
+                    {(escalation?.resolutionNote ||
+                      activeIssue?.escalation_resolution_notes) && (
+                      <div className="pt-2 border-t border-amber-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block">
+                          Resolution Notes
+                        </span>
+                        <p className="font-medium">
+                          {escalation?.resolutionNote ||
+                            activeIssue?.escalation_resolution_notes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Duplicate Context */}
+                {isDuplicateLinked && (
+                  <div className="p-5 bg-purple-500/5 dark:bg-purple-950/20 border border-purple-500/30 rounded-2xl space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Copy className="w-4 h-4 text-purple-500" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                          Duplicate Context
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-extrabold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-lg">
+                        {activeIssue?.duplicateLevel || "Possible Duplicate"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      {activeIssue?.bestDuplicateScore && (
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">
+                            Match Score
+                          </span>
+                          <span className="font-black text-purple-600 dark:text-purple-400">
+                            {activeIssue.bestDuplicateScore}/100
+                          </span>
+                        </div>
+                      )}
+                      {activeIssue?.duplicateGroupId && (
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">
+                            Group ID
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white truncate block">
+                            {activeIssue.duplicateGroupId}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">
+                          Linked Count
+                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {possibleDuplicateIds.length} Linked Issues
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rejection / Verification */}
+                {hasRejection && (
+                  <div className="p-5 bg-red-500/5 dark:bg-red-950/20 border border-red-500/30 rounded-2xl space-y-2 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-500" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-red-800 dark:text-red-300">
+                        Rejection Details
+                      </h3>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {rejection?.reason ||
+                        activeIssue?.rejectionReason ||
+                        rejection?.notes ||
+                        "No rejection details specified."}
+                    </p>
+                  </div>
+                )}
+
+                {/* Evidence & Attachments */}
+                {evidenceUrls.length > 0 && (
+                  <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-cyan-500" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                        Evidence & Attachments ({evidenceUrls.length})
+                      </h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {evidenceUrls.map((url, i) => (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 aspect-video flex items-center justify-center"
+                        >
+                          <img
+                            src={url}
+                            alt={`Attachment ${i + 1}`}
+                            className="object-cover w-full h-full group-hover:scale-105 transition-transform"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resolution & Feedback */}
+                {hasResolution && (
+                  <div className="p-5 bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/30 rounded-2xl space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                          Resolution Summary
+                        </h3>
+                      </div>
+                      {resolvedAt && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Resolved {formatDate(resolvedAt)}
+                        </span>
+                      )}
+                    </div>
+
+                    {activeIssue?.resolutionSummary && (
+                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                        {activeIssue.resolutionSummary}
+                      </p>
+                    )}
+
+                    {citizenRating !== null && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-emerald-500/20 text-xs">
+                        <span className="text-[10px] font-bold text-slate-400">
+                          Citizen Rating:
+                        </span>
+                        <div className="flex items-center gap-1 font-black text-amber-500">
+                          <Star className="w-3.5 h-3.5 fill-amber-400" />
+                          <span>{citizenRating}/5</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {citizenFeedback && (
+                      <p className="text-xs text-slate-600 dark:text-slate-400 italic">
+                        "{citizenFeedback}"
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Summary Column (1/3) */}
+              <div className="space-y-5">
+                {/* Sticky Summary Card */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-4 shadow-2xs">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-2">
+                    Issue Overview
+                  </h3>
+
+                  <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Code</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">
+                        {issueCode}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Priority</span>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-black rounded-md border uppercase ${getPriorityBadgeClass(priority)}`}
+                      >
+                        {formatLabel(priority, "Medium")}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Status</span>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-black rounded-md border ${getStatusBadgeClass(status)}`}
+                      >
+                        {formatLabel(status, "Unknown")}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Category</span>
+                      <span className="font-bold text-slate-900 dark:text-white capitalize">
+                        {formatLabel(category)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Created</span>
+                      <span className="font-medium text-slate-900 dark:text-white">
+                        {formatDate(createdAt)}
+                      </span>
+                    </div>
+
+                    {updatedAt && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Last Updated</span>
+                        <span className="font-medium text-slate-900 dark:text-white">
+                          {formatDate(updatedAt)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* SLA Status Card */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-cyan-500" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                        SLA Monitor
+                      </h3>
+                    </div>
+                    <span
+                      className={`px-2.5 py-0.5 text-[10px] font-black rounded-full border ${
+                        slaState.key === "breached"
+                          ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                          : slaState.key === "due_soon"
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            : slaState.key === "completed"
+                              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      }`}
+                    >
+                      {slaState.label}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    <span className="text-[10px] text-slate-400 block">
+                      SLA Deadline
+                    </span>
+                    <p className="font-bold text-slate-900 dark:text-white">
+                      {formatDateTime(
+                        activeIssue?.slaDeadline ?? activeIssue?.sla?.deadline,
+                      )}
+                    </p>
+
+                    {slaState.hoursRemaining !== null && (
+                      <p
+                        className={`text-xs font-extrabold ${slaState.hoursRemaining < 0 ? "text-red-500" : "text-amber-500"}`}
+                      >
+                        {slaState.hoursRemaining < 0
+                          ? `Overdue by ${Math.abs(slaState.hoursRemaining)} hours`
+                          : `${slaState.hoursRemaining} hours remaining`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reporter Card */}
+                <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-cyan-500" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Citizen Reporter
+                    </h3>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs">
+                    <p className="font-bold text-slate-900 dark:text-white">
+                      {reporter.name}
+                    </p>
+                    {reporter.email && (
+                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                        <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{reporter.email}</span>
+                      </div>
+                    )}
+                    {reporter.phone && (
+                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                        <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{reporter.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline Log */}
+                {timelineEvents.length > 0 && (
+                  <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Issue Timeline
+                    </h3>
+
+                    <div className="space-y-3 border-l-2 border-slate-100 dark:border-slate-800 pl-3">
+                      {timelineEvents.map((evt, i) => (
+                        <div key={i} className="relative space-y-0.5 text-xs">
+                          <div className="absolute -left-[17px] top-1 w-2 h-2 rounded-full bg-cyan-500" />
+                          <span className="font-bold text-slate-900 dark:text-white block">
+                            {evt.label}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {formatDateTime(evt.timestamp)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
 
-            <div>
-              <p className="text-xs text-gray-500 mb-2">Admin Actions</p>
-              <div className="flex flex-wrap gap-2">
+          {/* Sticky Footer */}
+          <div className="sticky bottom-0 z-20 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <span className="text-xs text-slate-500 font-semibold text-center sm:text-left">
+              Read-only administrative view
+            </span>
+
+            <div className="flex items-center gap-2 justify-end">
+              {hasValidCoordinates && (
                 <button
-                  onClick={() => handleVerifyIssue(selectedIssue.id)}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg"
-                >
-                  Mark In Progress
-                </button>
-                <button
-                  onClick={() => handleCloseIssue(selectedIssue.id)}
-                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium rounded-lg"
-                >
-                  Mark Resolved
-                </button>
-                <button
-                  onClick={() => handleEscalateIssue(selectedIssue.id)}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg"
-                >
-                  Escalate
-                </button>
-                <button
+                  type="button"
                   onClick={() => {
-                    const officerId = prompt("Enter Officer ID:");
-                    if (officerId)
-                      handleReassignIssue(selectedIssue.id, officerId);
+                    window.open(
+                      `https://www.google.com/maps?q=${latitude},${longitude}`,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
                   }}
-                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg"
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-1.5"
                 >
-                  Reassign
+                  <MapPin className="w-3.5 h-3.5" />
+                  View on Map
                 </button>
-              </div>
+              )}
+
+              {activeTab !== "sla" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedIssue(null);
+                    setSelectedIssueId(null);
+                    setActiveTab("sla");
+                  }}
+                  className="px-4 py-2 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Open SLA Controls
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedIssue(null);
+                  setSelectedIssueId(null);
+                }}
+                className="px-4 py-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 font-bold text-xs rounded-xl transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -1821,7 +2570,7 @@ export default function CityAdminDashboard() {
                 {activeTab === "overview" && (
                   <CityAdminOverview
                     overviewData={overviewData}
-                    onSelectIssue={setSelectedIssue}
+                    onSelectIssue={handleSelectIssue}
                     dateRange={dateRange}
                     onSetDateRange={setDateRange}
                   />
@@ -1830,11 +2579,18 @@ export default function CityAdminDashboard() {
                 {activeTab === "issues" && dbUser?._id && (
                   <CityAdminAllIssues
                     cityAdminUserId={dbUser._id}
-                    onSelectIssue={setSelectedIssue}
+                    onSelectIssue={handleSelectIssue}
                   />
                 )}
                 {activeTab === "sla" && renderSLAMonitoring()}
-                {activeTab === "duplicates" && renderDuplicateDetection()}
+                {activeTab === "city-analytics" && dbUser?._id && (
+                  <CityIssueAnalytics
+                    cityAdminUserId={dbUser._id}
+                    dateRange={dateRange}
+                    onSetDateRange={setDateRange}
+                    onSelectIssue={handleSelectIssue}
+                  />
+                )}
                 {activeTab === "officers" && renderOfficerManagement()}
                 {activeTab === "departments" && renderDepartmentPerformance()}
                 {activeTab === "audit" && renderAuditLogs()}

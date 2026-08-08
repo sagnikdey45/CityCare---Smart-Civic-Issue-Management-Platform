@@ -2,63 +2,6 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireCityAdmin } from "./helpers/cityAdminAuth";
 
-/**
- * Backend helper to define SLA state consistently.
- */
-function calculateIssueSlaState(issue, now) {
-  const terminalStatuses = ["resolved", "closed", "rejected", "withdrawn"];
-
-  if (terminalStatuses.includes(issue.status)) {
-    return {
-      status: "completed",
-      hoursRemaining: 0,
-      overdueHours: 0,
-    };
-  }
-
-  if (!issue.slaDeadline) {
-    return {
-      status: "no_deadline",
-      hoursRemaining: null,
-      overdueHours: 0,
-    };
-  }
-
-  const difference = issue.slaDeadline - now;
-
-  if (difference < 0) {
-    return {
-      status: "breached",
-      hoursRemaining: 0,
-      overdueHours: Math.ceil(Math.abs(difference) / 3600000),
-    };
-  }
-
-  const hoursRemaining = Math.round((difference / 3600000) * 10) / 10;
-
-  if (hoursRemaining <= 24) {
-    return {
-      status: "due_soon",
-      hoursRemaining,
-      overdueHours: 0,
-    };
-  }
-
-  if (hoursRemaining <= 48) {
-    return {
-      status: "at_risk",
-      hoursRemaining,
-      overdueHours: 0,
-    };
-  }
-
-  return {
-    status: "on_track",
-    hoursRemaining,
-    overdueHours: 0,
-  };
-}
-
 const TERMINAL_ISSUE_STATUSES = new Set([
   "resolved",
   "closed",
@@ -66,38 +9,179 @@ const TERMINAL_ISSUE_STATUSES = new Set([
   "withdrawn",
 ]);
 
+function normalizeStatus(status) {
+  return String(status || "")
+    .trim()
+    .toLowerCase();
+}
+
 function isActiveIssue(issue) {
-  return !TERMINAL_ISSUE_STATUSES.has(issue.status);
+  return !TERMINAL_ISSUE_STATUSES.has(normalizeStatus(issue.status));
+}
+
+function getTimestamp(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const timestamp =
+    typeof value === "number" ? value : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 /**
- * Backend helper to define Escalation state consistently.
+ * Centralized SLA state helper for backend queries, table filters, and KPI cards.
+ */
+function getSlaState(issue, now = Date.now()) {
+  if (!isActiveIssue(issue)) {
+    return {
+      status: "completed",
+      deadline: getTimestamp(issue.slaDeadline ?? issue.sla?.deadline),
+      hoursRemaining: 0,
+      overdueHours: 0,
+    };
+  }
+
+  const deadline = getTimestamp(issue.slaDeadline ?? issue.sla?.deadline);
+
+  if (deadline === null) {
+    return {
+      status: "no_deadline",
+      deadline: null,
+      hoursRemaining: null,
+      overdueHours: 0,
+    };
+  }
+
+  const difference = deadline - now;
+  const hoursRemaining = Math.ceil(difference / (1000 * 60 * 60));
+
+  if (difference < 0) {
+    return {
+      status: "breached",
+      deadline,
+      hoursRemaining,
+      overdueHours: Math.ceil(Math.abs(difference) / (1000 * 60 * 60)),
+    };
+  }
+
+  if (difference <= 24 * 60 * 60 * 1000) {
+    return {
+      status: "due_soon",
+      deadline,
+      hoursRemaining,
+      overdueHours: 0,
+    };
+  }
+
+  if (difference <= 48 * 60 * 60 * 1000) {
+    return {
+      status: "at_risk",
+      deadline,
+      hoursRemaining,
+      overdueHours: 0,
+    };
+  }
+
+  return {
+    status: "on_track",
+    deadline,
+    hoursRemaining,
+    overdueHours: 0,
+  };
+}
+
+function hasNonEmptyValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  return true;
+}
+
+/**
+ * Centralized Escalation state helper with strict validation.
  */
 function getEscalationState(issue) {
+  const nested =
+    issue?.escalation && typeof issue.escalation === "object"
+      ? issue.escalation
+      : {};
+
+  const status = normalizeStatus(issue?.status);
+
+  const hasExplicitFlag =
+    issue?.escalatedToAdmin === true ||
+    issue?.is_escalated === true ||
+    nested?.isEscalated === true;
+
+  const hasEscalationTimestamp =
+    getTimestamp(
+      issue?.escalatedAt ?? issue?.escalationAt ?? nested?.escalatedAt,
+    ) !== null;
+
+  const hasEscalationReason =
+    hasNonEmptyValue(issue?.escalationReason) ||
+    hasNonEmptyValue(nested?.reason);
+
+  const hasEscalationCategory =
+    hasNonEmptyValue(issue?.escalationCategory) ||
+    hasNonEmptyValue(nested?.category);
+
+  const hasEscalationActor = Boolean(issue?.escalatedBy ?? nested?.escalatedBy);
+
+  const hasResolutionHistory =
+    issue?.escalationResolved === true ||
+    nested?.resolved === true ||
+    getTimestamp(issue?.escalationResolvedAt ?? nested?.resolvedAt) !== null;
+
+  const hasReviewHistory =
+    getTimestamp(issue?.escalationReviewedAt ?? nested?.reviewedAt) !== null ||
+    Boolean(issue?.escalationReviewedBy ?? nested?.reviewedBy);
+
+  const hasEscalationCount =
+    Number(issue?.escalationCount ?? nested?.escalationCount ?? 0) > 0;
+
   const isEscalated =
-    issue.status === "escalated" ||
-    issue.escalatedToAdmin === true ||
-    Boolean(issue.escalationReason) ||
-    Boolean(issue.escalationCategory) ||
-    Boolean(issue.escalation?.reason);
+    status === "escalated" ||
+    hasExplicitFlag ||
+    hasEscalationTimestamp ||
+    hasEscalationReason ||
+    hasEscalationCategory ||
+    hasEscalationActor ||
+    hasResolutionHistory ||
+    hasReviewHistory ||
+    hasEscalationCount;
+
+  const rawReviewStatus =
+    issue?.escalationAdminReviewStatus ??
+    nested?.adminReviewStatus ??
+    nested?.status ??
+    null;
+
+  const reviewStatus =
+    isEscalated && hasNonEmptyValue(rawReviewStatus)
+      ? normalizeStatus(rawReviewStatus)
+      : isEscalated
+        ? "pending"
+        : null;
 
   const resolved =
-    issue.escalationResolved === true ||
-    issue.escalation?.resolved === true ||
-    issue.escalationAdminReviewStatus === "resolved" ||
-    issue.escalation?.adminReviewStatus === "resolved";
-
-  const reviewStatus = resolved
-    ? "resolved"
-    : issue.escalationAdminReviewStatus ||
-      issue.escalation?.adminReviewStatus ||
-      "pending";
+    isEscalated &&
+    (issue?.escalationResolved === true ||
+      nested?.resolved === true ||
+      reviewStatus === "resolved");
 
   return {
     isEscalated,
-    reviewStatus,
     resolved,
     isActive: isEscalated && !resolved,
+    reviewStatus,
+    hasEscalationTimestamp,
+    hasEscalationReason,
+    hasReviewHistory,
+    hasResolutionHistory,
   };
 }
 
@@ -183,7 +267,7 @@ export const getScopedSLAMonitoringData = query({
           String(issue.assignedFieldOfficer),
         );
 
-        const slaState = calculateIssueSlaState(issue, now);
+        const slaState = getSlaState(issue, now);
         const escalationState = getEscalationState(issue);
 
         const rawActions = actionsByIssue.get(String(issue._id)) || [];
@@ -214,9 +298,11 @@ export const getScopedSLAMonitoringData = query({
         const assignedUnitOfficer =
           uoProfile || uoUser
             ? {
+                id: uoUser?._id || uoProfile?.userId,
                 profileId: uoProfile?._id,
                 userId: uoUser?._id || uoProfile?.userId,
                 name: uoProfile?.fullName || uoUser?.fullName || "Unit Officer",
+                email: uoUser?.email || uoProfile?.email || null,
                 department: uoProfile?.department || issue.category,
               }
             : null;
@@ -224,48 +310,112 @@ export const getScopedSLAMonitoringData = query({
         const assignedFieldOfficer =
           foProfile || foUser
             ? {
+                id: foUser?._id || foProfile?.userId,
                 profileId: foProfile?._id,
                 userId: foUser?._id || foProfile?.userId,
                 name:
                   foProfile?.fullName || foUser?.fullName || "Field Officer",
+                email: foUser?.email || foProfile?.email || null,
                 department: foProfile?.department || issue.category,
               }
             : null;
 
-        const isEscalated = escalationState.isEscalated;
-        const escCategory =
-          issue.escalationCategory ||
-          issue.escalation?.category ||
-          issue.category;
-        const escPriority =
-          issue.escalationPriority ||
-          issue.escalation?.priority ||
-          issue.priority;
-        const escReason =
-          issue.escalationReason || issue.escalation?.reason || "";
-        const escComments =
-          issue.escalationComments || issue.escalation?.comments || "";
-        const escAt =
-          issue.escalatedAt ||
-          issue.escalation?.escalatedAt ||
-          issue._creationTime;
-        const escBy = issue.escalatedBy || issue.escalation?.escalatedBy;
-        const escReviewedAt =
-          issue.escalationReviewedAt || issue.escalation?.reviewedAt;
-        const escReviewedBy =
-          issue.escalationReviewedBy || issue.escalation?.reviewedBy;
-        const escResolved =
-          issue.escalationResolved || issue.escalation?.resolved || false;
-        const escResolvedAt =
-          issue.escalationResolvedAt || issue.escalation?.resolvedAt;
-        const escResolutionNotes =
-          issue.escalationResolutionNotes ||
-          issue.escalation?.resolutionNote ||
-          "";
-        const escCount =
-          issue.escalationCount ||
-          issue.escalation?.escalationCount ||
-          (isEscalated ? 1 : 0);
+        const ESCALATION_ACTION_TYPES = new Set([
+          "review_escalation",
+          "request_corrective_action",
+          "reassign_unit_officer",
+          "reassign_field_officer",
+          "extend_sla",
+          "change_category",
+          "reject_issue",
+          "resolve_escalation",
+          "dismiss_escalation",
+        ]);
+
+        const escalationActions = enrichedActions.filter((action) =>
+          ESCALATION_ACTION_TYPES.has(
+            String(action.type ?? action.actionType ?? "")
+              .trim()
+              .toLowerCase(),
+          ),
+        );
+        const hasEscalationActions = escalationActions.length > 0;
+
+        const isEscalatedBase = escalationState.isEscalated;
+        const finalIsEscalated = isEscalatedBase || hasEscalationActions;
+
+        const escAt = finalIsEscalated
+          ? getTimestamp(
+              issue.escalatedAt ??
+                issue.escalationAt ??
+                issue.escalation?.escalatedAt,
+            )
+          : null;
+
+        const escCategory = finalIsEscalated
+          ? (issue.escalationCategory ?? issue.escalation?.category ?? null)
+          : null;
+
+        const escPriority = finalIsEscalated
+          ? (issue.escalationPriority ?? issue.escalation?.priority ?? null)
+          : null;
+
+        const escReason = finalIsEscalated
+          ? (issue.escalationReason ?? issue.escalation?.reason ?? null)
+          : null;
+
+        const escComments = finalIsEscalated
+          ? (issue.escalationComments ?? issue.escalation?.comments ?? null)
+          : null;
+
+        const storedEscalationCount = Number(
+          issue.escalationCount ?? issue.escalation?.escalationCount ?? 0,
+        );
+        const escCount = finalIsEscalated
+          ? Math.max(storedEscalationCount, 1)
+          : 0;
+
+        const escBy = finalIsEscalated
+          ? (issue.escalatedBy ?? issue.escalation?.escalatedBy ?? null)
+          : null;
+
+        const escReviewedAt = finalIsEscalated
+          ? getTimestamp(
+              issue.escalationReviewedAt ?? issue.escalation?.reviewedAt,
+            )
+          : null;
+
+        const escReviewedBy = finalIsEscalated
+          ? (issue.escalationReviewedBy ?? issue.escalation?.reviewedBy ?? null)
+          : null;
+
+        const escResolved = finalIsEscalated ? escalationState.resolved : false;
+        const escResolvedAt = finalIsEscalated
+          ? getTimestamp(
+              issue.escalationResolvedAt ?? issue.escalation?.resolvedAt,
+            )
+          : null;
+
+        const escResolutionNotes = finalIsEscalated
+          ? (issue.escalationResolutionNotes ??
+            issue.escalation?.resolutionNote ??
+            issue.escalation?.resolutionNotes ??
+            null)
+          : null;
+
+        if (
+          !finalIsEscalated &&
+          (escAt !== null || escCount > 0 || escalationActions.length > 0)
+        ) {
+          console.warn("[SLA escalation normalization inconsistency]", {
+            issueId: String(issue._id),
+            issueCode: issue.issueCode,
+            isEscalated: finalIsEscalated,
+            escalatedAt: escAt,
+            escalationCount: escCount,
+            actionCount: escalationActions.length,
+          });
+        }
 
         return {
           id: issue._id,
@@ -306,8 +456,11 @@ export const getScopedSLAMonitoringData = query({
           overdue_hours: slaState.overdueHours,
 
           escalation: {
-            isEscalated,
-            status: escalationState.reviewStatus,
+            isEscalated: finalIsEscalated,
+            isActive: finalIsEscalated && !escResolved,
+            status: finalIsEscalated
+              ? (escalationState.reviewStatus ?? "pending")
+              : null,
             category: escCategory,
             priority: escPriority,
             reason: escReason,
@@ -319,93 +472,107 @@ export const getScopedSLAMonitoringData = query({
             resolved: escResolved,
             resolvedAt: escResolvedAt,
             resolutionNotes: escResolutionNotes,
-            resolutionActions: enrichedActions,
+            resolutionActions: finalIsEscalated ? escalationActions : [],
             count: escCount,
           },
-          is_escalated: isEscalated,
+          is_escalated: finalIsEscalated,
           escalation_category: escCategory,
           escalation_priority: escPriority,
           escalation_reason: escReason,
           escalation_comments: escComments,
           escalated_at: escAt,
-          escalation_admin_review_status: escalationState.reviewStatus,
+          escalation_admin_review_status: finalIsEscalated
+            ? escalationState.reviewStatus
+            : null,
           escalation_resolved: escResolved,
           escalation_resolved_at: escResolvedAt,
           escalation_resolution_notes: escResolutionNotes,
-          escalation_resolution_actions: enrichedActions,
+          escalation_resolution_actions: finalIsEscalated
+            ? escalationActions
+            : [],
           escalation_count: escCount,
         };
       }),
     );
 
     // 6. Calculate summary metrics across full city dataset
-    // City-wide KPI cards are calculated from all eligible city-scoped issues and do not change with pagination.
     const scopedIssues = normalisedIssues;
-    const activeIssues = scopedIssues.filter(isActiveIssue);
+    const totalIssues = scopedIssues.length;
+    const activeIssuesList = scopedIssues.filter(isActiveIssue);
+    const activeIssues = activeIssuesList.length;
 
-    const classifiedActiveIssues = activeIssues.map((issue) => ({
+    const monitoredIssuesList = scopedIssues.filter(
+      (issue) =>
+        isActiveIssue(issue) &&
+        getTimestamp(issue.slaDeadline ?? issue.sla?.deadline) !== null,
+    );
+    const monitoredIssues = monitoredIssuesList.length;
+
+    const slaStates = scopedIssues.map((issue) => ({
       issue,
-      slaState: calculateIssueSlaState(issue, now),
+      state: getSlaState(issue, now),
     }));
 
-    const breachedCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status === "breached",
+    const breachedCount = slaStates.filter(
+      ({ state }) => state.status === "breached",
+    ).length;
+    const dueSoonCount = slaStates.filter(
+      ({ state }) => state.status === "due_soon",
+    ).length;
+    const atRiskCount = slaStates.filter(
+      ({ state }) => state.status === "at_risk",
+    ).length;
+    const onTrackCount = slaStates.filter(
+      ({ state }) => state.status === "on_track",
+    ).length;
+    const noDeadlineCount = slaStates.filter(
+      ({ state }) => state.status === "no_deadline",
+    ).length;
+    const completedCount = slaStates.filter(
+      ({ state }) => state.status === "completed",
     ).length;
 
-    const dueSoonCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status === "due_soon",
-    ).length;
-
-    const atRiskCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status === "at_risk",
-    ).length;
-
-    const onTrackCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status === "on_track",
-    ).length;
-
-    const noDeadlineCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status === "no_deadline",
-    ).length;
-
-    const monitoredIssueCount = classifiedActiveIssues.filter(
-      ({ slaState }) => slaState.status !== "no_deadline",
-    ).length;
-
-    const compliantActiveCount = onTrackCount + atRiskCount + dueSoonCount;
+    const activeMonitoredCount =
+      breachedCount + dueSoonCount + atRiskCount + onTrackCount;
+    const compliantActiveCount = dueSoonCount + atRiskCount + onTrackCount;
 
     const complianceRate =
-      monitoredIssueCount > 0
-        ? Math.round((compliantActiveCount / monitoredIssueCount) * 100)
-        : 0;
+      activeMonitoredCount > 0
+        ? Number(
+            ((compliantActiveCount / activeMonitoredCount) * 100).toFixed(1),
+          )
+        : null;
 
-    const activeEscalatedIssues = scopedIssues.filter((issue) => {
-      const state = getEscalationState(issue);
-      return state.isActive;
-    });
+    const escalationStates = scopedIssues.map((issue) =>
+      getEscalationState(issue),
+    );
 
-    const escalatedCount = activeEscalatedIssues.length;
-
-    const pendingReviewCount = activeEscalatedIssues.filter((issue) => {
-      const state = getEscalationState(issue);
-      return state.reviewStatus === "pending";
-    }).length;
-
-    const reviewedEscalationCount = activeEscalatedIssues.filter((issue) => {
-      const state = getEscalationState(issue);
-      return state.reviewStatus === "reviewed";
-    }).length;
-
-    const resolvedEscalationCount = scopedIssues.filter((issue) => {
-      const state = getEscalationState(issue);
-      return state.resolved;
-    }).length;
-
-    const criticalEscalations = activeEscalatedIssues.filter(
-      (i) => i.priority === "critical",
+    const escalatedCount = escalationStates.filter(
+      (state) => state.isEscalated,
+    ).length;
+    const activeEscalationCount = escalationStates.filter(
+      (state) => state.isActive,
+    ).length;
+    const pendingReviewCount = escalationStates.filter(
+      (state) => state.isActive && state.reviewStatus === "pending",
+    ).length;
+    const reviewedEscalationCount = escalationStates.filter(
+      (state) =>
+        state.isEscalated &&
+        ["reviewed", "action_required", "approved", "dismissed"].includes(
+          state.reviewStatus,
+        ),
+    ).length;
+    const resolvedEscalationCount = escalationStates.filter(
+      (state) => state.resolved,
     ).length;
 
-    const unassignedIssues = activeIssues.filter(
+    const criticalEscalations = scopedIssues.filter((i) => {
+      const state = getEscalationState(i);
+      return state.isActive && i.priority === "critical";
+    }).length;
+
+    const unassignedIssues = activeIssuesList.filter(
       (i) => !i.assignedUnitOfficer && !i.assignedFieldOfficer,
     ).length;
 
@@ -474,16 +641,16 @@ export const getScopedSLAMonitoringData = query({
       }),
     );
 
-    const monitoredIssuesList = normalisedIssues.filter(
-      (i) => !TERMINAL_ISSUE_STATUSES.has(i.status),
+    const activeMonitoredItems = normalisedIssues.filter(
+      (i) => !TERMINAL_ISSUE_STATUSES.has(normalizeStatus(i.status)),
     );
 
-    const mostDelayed = monitoredIssuesList
+    const mostDelayed = activeMonitoredItems
       .filter((i) => i.sla.status === "breached")
       .sort((a, b) => (b.sla.overdueHours || 0) - (a.sla.overdueHours || 0))
       .slice(0, 5);
 
-    const unresolvedCritical = monitoredIssuesList
+    const unresolvedCritical = activeMonitoredItems
       .filter(
         (i) =>
           i.priority === "critical" &&
@@ -493,7 +660,7 @@ export const getScopedSLAMonitoringData = query({
       )
       .slice(0, 5);
 
-    const repeatedEscalations = monitoredIssuesList
+    const repeatedEscalations = activeMonitoredItems
       .filter((i) => (i.escalation.count || 0) > 1)
       .slice(0, 5);
 
@@ -533,13 +700,27 @@ export const getScopedSLAMonitoringData = query({
 
     if (args.escalationStatus && args.escalationStatus !== "all") {
       filtered = filtered.filter((i) => {
-        if (args.escalationStatus === "escalated")
-          return i.escalation.isEscalated;
-        if (args.escalationStatus === "pending")
-          return i.escalation.isEscalated && i.escalation.status === "pending";
-        if (args.escalationStatus === "reviewed")
-          return i.escalation.isEscalated && i.escalation.status === "reviewed";
-        if (args.escalationStatus === "resolved") return i.escalation.resolved;
+        if (args.escalationStatus === "escalated") {
+          return i.escalation.isEscalated === true;
+        }
+        if (args.escalationStatus === "pending") {
+          return (
+            i.escalation.isEscalated === true &&
+            i.escalation.resolved !== true &&
+            i.escalation.status === "pending"
+          );
+        }
+        if (args.escalationStatus === "reviewed") {
+          return (
+            i.escalation.isEscalated === true &&
+            i.escalation.status === "reviewed"
+          );
+        }
+        if (args.escalationStatus === "resolved") {
+          return (
+            i.escalation.isEscalated === true && i.escalation.resolved === true
+          );
+        }
         return true;
       });
     }
@@ -608,9 +789,9 @@ export const getScopedSLAMonitoringData = query({
     };
 
     const metrics = {
-      totalIssues: scopedIssues.length,
-      activeIssues: activeIssues.length,
-      monitoredIssues: monitoredIssueCount,
+      totalIssues,
+      activeIssues,
+      monitoredIssues,
 
       complianceRate,
 
@@ -620,7 +801,8 @@ export const getScopedSLAMonitoringData = query({
       onTrackCount,
       noDeadlineCount,
 
-      escalatedCount,
+      escalatedCount: activeEscalationCount,
+      activeEscalationCount,
       pendingReviewCount,
       reviewedEscalationCount,
       resolvedEscalationCount,
@@ -631,6 +813,7 @@ export const getScopedSLAMonitoringData = query({
         due_soon: dueSoonCount,
         on_track: onTrackCount,
         no_deadline: noDeadlineCount,
+        completed: completedCount,
       },
     };
 
@@ -642,7 +825,7 @@ export const getScopedSLAMonitoringData = query({
       onTrack: onTrackCount,
       noDeadline: noDeadlineCount,
 
-      escalated: escalatedCount,
+      escalated: activeEscalationCount,
       pendingAdminReview: pendingReviewCount,
 
       reviewedEscalations: reviewedEscalationCount,
@@ -659,6 +842,7 @@ export const getScopedSLAMonitoringData = query({
         due_soon: dueSoonCount,
         on_track: onTrackCount,
         no_deadline: noDeadlineCount,
+        completed: completedCount,
       },
     };
 
@@ -672,6 +856,14 @@ export const getScopedSLAMonitoringData = query({
       metrics,
       summary,
       issues: paginated,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
       escalationAnalytics: {
         byCategory,
         byDepartment,
@@ -710,14 +902,11 @@ export const reviewEscalation = mutation({
     const now = Date.now();
 
     await ctx.db.patch(args.issueId, {
-      escalationAdminReviewStatus: "reviewed",
       escalationReviewedAt: now,
       escalationReviewedBy: args.cityAdminUserId,
       escalation: {
         ...(issue.escalation || {}),
         adminReviewStatus: "reviewed",
-        reviewedAt: now,
-        reviewedBy: args.cityAdminUserId,
       },
       updatedAt: now,
     });
@@ -937,78 +1126,6 @@ export const approveEscalation = mutation({
 });
 
 /**
- * Dismiss Escalation Mutation
- * Closes the escalation while preserving the civic issue status.
- */
-export const dismissEscalation = mutation({
-  args: {
-    cityAdminUserId: v.id("users"),
-    issueId: v.id("issues"),
-    reason: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const { city } = await requireCityAdmin(ctx, args.cityAdminUserId);
-    const issue = await ctx.db.get(args.issueId);
-    if (!issue || issue.city !== city) {
-      throw new Error("Issue not found or unauthorized for this city");
-    }
-
-    const now = Date.now();
-
-    await ctx.db.patch(args.issueId, {
-      escalatedToAdmin: false,
-      escalationResolved: true,
-      escalationResolvedAt: now,
-      escalationResolutionNotes: `Escalation dismissed: ${args.reason}`,
-      escalationAdminReviewStatus: "dismissed",
-      escalation: {
-        ...(issue.escalation || {}),
-        resolved: true,
-        resolvedAt: now,
-        resolutionNote: `Escalation dismissed: ${args.reason}`,
-        adminReviewStatus: "dismissed",
-      },
-      updatedAt: now,
-    });
-
-    await ctx.db.insert("escalationResolutionActions", {
-      issueId: args.issueId,
-      actionType: "dismiss_escalation",
-      performedBy: args.cityAdminUserId,
-      performedAt: now,
-      notes: `Escalation dismissed. Reason: ${args.reason}`,
-    });
-
-    await ctx.db.insert("issueUpdates", {
-      issueId: args.issueId,
-      status: issue.status,
-      comment: `Administrative escalation dismissed. Reason: ${args.reason}`,
-      updatedBy: args.cityAdminUserId,
-      role: "city_admin",
-      attachments: [],
-      scope: "officer_and_citizen",
-      createdAt: now,
-    });
-
-    await ctx.db.insert("cityAdminAuditLogs", {
-      action: "Escalation Dismissed",
-      performedByUserId: args.cityAdminUserId,
-      performerRole: "city_admin",
-      city,
-      affectedEntityType: "issue_escalation",
-      affectedEntityId: issue._id,
-      issueCode: issue.issueCode,
-      oldValue: "pending",
-      newValue: "dismissed",
-      reason: args.reason,
-      timestamp: now,
-    });
-
-    return { success: true };
-  },
-});
-
-/**
  * Reject Escalation Response Mutation
  * Formally rejects an officer's submitted corrective response as insufficient.
  * Keeps the escalation open and sets review status back to action_required.
@@ -1029,21 +1146,20 @@ export const rejectEscalationResponse = mutation({
     const now = Date.now();
 
     await ctx.db.patch(args.issueId, {
-      escalatedToAdmin: true,
-      escalationResolved: false,
-      escalationAdminReviewStatus: "action_required",
+      escalatedToAdmin: false,
       escalation: {
         ...(issue.escalation || {}),
-        resolved: false,
-        adminReviewStatus: "action_required",
-        lastRejectionReason: args.reason,
+        resolved: true,
+        adminReviewStatus: "resolved",
+        comments: args.reason,
+        resolvedAt: now,
+        resolutionNote: `The Escalation is being rejected as "${args.reason}".`,
       },
-      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
       issueId: args.issueId,
-      actionType: "reject_escalation_response",
+      actionType: "reject_escalation",
       performedBy: args.cityAdminUserId,
       performedAt: now,
       notes: `Escalation response rejected as insufficient. Reason: ${args.reason}`,
@@ -1056,7 +1172,7 @@ export const rejectEscalationResponse = mutation({
       updatedBy: args.cityAdminUserId,
       role: "city_admin",
       attachments: [],
-      scope: "officer_and_citizen",
+      scope: "officer",
       createdAt: now,
     });
 
@@ -1069,7 +1185,7 @@ export const rejectEscalationResponse = mutation({
       affectedEntityId: issue._id,
       issueCode: issue.issueCode,
       oldValue: "response_submitted",
-      newValue: "action_required",
+      newValue: "rejected",
       reason: args.reason,
       timestamp: now,
     });

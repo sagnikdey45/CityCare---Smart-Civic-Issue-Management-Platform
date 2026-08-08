@@ -469,44 +469,108 @@ export function CityAdminEscalationResolutionModal({
 
   const normalisedTimeline = useMemo(() => {
     const list = escalationTimeline
-      .map((event) => ({
-        id:
-          event.id ||
-          event._id ||
-          `${event.type || event.actionType}-${event.performedAt || event.performed_at}`,
-        type: event.type || event.actionType,
-        performedAt: event.performedAt || event.performed_at,
-        performedBy:
-          event.performedByName || event.performed_by || "Administrator",
-        performedByRole: event.performedByRole || event.role || "admin",
-        notes: event.notes || event.reason || event.comment,
-        oldValue: event.oldValue || event.old_value,
-        newValue: event.newValue || event.new_value,
-      }))
-      .filter((e) => e.type && e.performedAt);
+      .map((event) => {
+        const rawTs = event.performedAt || event.performed_at;
+        const parsedTs =
+          rawTs !== null && rawTs !== undefined && rawTs !== ""
+            ? typeof rawTs === "number"
+              ? rawTs
+              : new Date(rawTs).getTime()
+            : null;
+        const performedAt = Number.isFinite(parsedTs) ? parsedTs : null;
 
-    const escalationCreatedAt =
-      escalationData.escalatedAt || issue?.escalated_at;
+        return {
+          id:
+            event.id ||
+            event._id ||
+            `${event.type || event.actionType}-${performedAt}`,
+          type: event.type || event.actionType,
+          performedAt,
+          performedBy:
+            event.performedByName || event.performed_by || "Administrator",
+          performedByRole: event.performedByRole || event.role || "admin",
+          notes: event.notes || event.reason || event.comment,
+          oldValue: event.oldValue || event.old_value,
+          newValue: event.newValue || event.new_value,
+        };
+      })
+      .filter((e) => e.type && e.performedAt !== null);
+
+    const rawEscAt = isEscalated
+      ? (escalationData.escalatedAt ??
+        issue?.escalatedAt ??
+        issue?.escalated_at ??
+        null)
+      : null;
+
+    const parsedEscAt =
+      rawEscAt !== null && rawEscAt !== undefined && rawEscAt !== ""
+        ? typeof rawEscAt === "number"
+          ? rawEscAt
+          : new Date(rawEscAt).getTime()
+        : null;
+
+    const escAt = Number.isFinite(parsedEscAt) ? parsedEscAt : null;
+
     const hasEscalationEvent = list.some(
       (e) => e.type === "escalate" || e.type === "issue_escalated",
     );
 
-    if (escalationCreatedAt && !hasEscalationEvent) {
+    if (isEscalated && escAt !== null && !hasEscalationEvent) {
       list.unshift({
-        id: `escalated-${escalationCreatedAt}`,
+        id: `escalated-${escAt}`,
         type: "escalate",
-        performedAt: escalationCreatedAt,
+        performedAt: escAt,
         performedBy:
-          escalationData.escalatedByName || issue?.escalated_by || "Officer",
+          escalationData.escalatedByName ||
+          escalationData.escalatedBy ||
+          issue?.escalatedBy ||
+          issue?.escalated_by ||
+          "Officer",
         notes:
           escalationData.reason ||
+          issue?.escalationReason ||
           issue?.escalation_reason ||
           "Issue escalated to admin oversight.",
       });
     }
 
-    return list.sort((a, b) => a.performedAt - b.performedAt);
-  }, [escalationTimeline, issue, escalationData]);
+    const validTimelineEvents = list.filter((event) => {
+      if (!event) return false;
+      if (event.performedAt === null || event.performedAt === undefined)
+        return false;
+      if (
+        (event.type === "escalate" || event.type === "issue_escalated") &&
+        !isEscalated
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    validTimelineEvents.sort(
+      (a, b) => Number(a.performedAt) - Number(b.performedAt),
+    );
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[Escalation timeline input]", {
+        issueId: issue?.id || issue?._id,
+        isEscalated,
+        escalatedAt: escAt,
+        reviewStatus: escalationReviewStatus,
+        actionCount: (escalationTimeline || []).length,
+        timelineEventCount: validTimelineEvents.length,
+      });
+    }
+
+    return validTimelineEvents;
+  }, [
+    escalationTimeline,
+    issue,
+    escalationData,
+    isEscalated,
+    escalationReviewStatus,
+  ]);
 
   const getActionConfig = () => {
     switch (actionType) {
@@ -1387,7 +1451,7 @@ export function CityAdminEscalationResolutionModal({
           )}
 
           {/* 3. Persistent Escalation Timeline Section */}
-          {(hasEscalationData || normalisedTimeline.length > 0) && (
+          {normalisedTimeline.length > 0 ? (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/60">
               <div className="mb-5 flex items-center justify-between">
                 <div>
@@ -1399,87 +1463,84 @@ export function CityAdminEscalationResolutionModal({
                   </p>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {normalisedTimeline.length} Events
+                  {normalisedTimeline.length}{" "}
+                  {normalisedTimeline.length === 1 ? "Event" : "Events"}
                 </span>
               </div>
 
-              {normalisedTimeline.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-                  <Activity className="mx-auto h-7 w-7 text-slate-300 dark:text-slate-600" />
-                  <p className="mt-2 text-sm font-bold text-slate-600 dark:text-slate-300">
-                    No escalation timeline entries available
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-slate-400">
-                    Administrative actions will appear here as the escalation is
-                    processed.
-                  </p>
-                </div>
-              ) : (
-                <div className="relative space-y-0 pl-1">
-                  {normalisedTimeline.map((event, index) => {
-                    const isLast = index === normalisedTimeline.length - 1;
-                    return (
-                      <div key={event.id} className="relative flex gap-4 pb-6">
-                        {!isLast && (
-                          <div className="absolute bottom-0 left-[17px] top-9 w-px bg-slate-200 dark:bg-slate-700" />
+              <div className="relative space-y-0 pl-1">
+                {normalisedTimeline.map((event, index) => {
+                  const isLast = index === normalisedTimeline.length - 1;
+                  return (
+                    <div key={event.id} className="relative flex gap-4 pb-6">
+                      {!isLast && (
+                        <div className="absolute bottom-0 left-[17px] top-9 w-px bg-slate-200 dark:bg-slate-700" />
+                      )}
+
+                      <div className="relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-400 shadow-sm">
+                        <Activity className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                          <p className="text-xs font-black text-slate-900 dark:text-white">
+                            {formatTimelineAction(event.type)}
+                          </p>
+                          <time className="text-[10px] font-bold text-slate-400">
+                            {formatDateTime(event.performedAt)}
+                          </time>
+                        </div>
+
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                          Performed by {event.performedBy}
+                        </p>
+
+                        {event.notes && (
+                          <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
+                            {event.notes}
+                          </p>
                         )}
 
-                        <div className="relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-400 shadow-sm">
-                          <Activity className="h-4 w-4" />
-                        </div>
-
-                        <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                            <p className="text-xs font-black text-slate-900 dark:text-white">
-                              {formatTimelineAction(event.type)}
-                            </p>
-                            <time className="text-[10px] font-bold text-slate-400">
-                              {formatDateTime(event.performedAt)}
-                            </time>
+                        {(event.oldValue || event.newValue) && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {event.oldValue && (
+                              <div className="rounded-lg bg-rose-50 p-2.5 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                                <p className="text-[9px] font-black uppercase text-rose-500">
+                                  Previous Value
+                                </p>
+                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  {formatHistoryValue(event.oldValue)}
+                                </p>
+                              </div>
+                            )}
+                            {event.newValue && (
+                              <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                                <p className="text-[9px] font-black uppercase text-emerald-500">
+                                  Updated Value
+                                </p>
+                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  {formatHistoryValue(event.newValue)}
+                                </p>
+                              </div>
+                            )}
                           </div>
-
-                          <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                            Performed by {event.performedBy}
-                          </p>
-
-                          {event.notes && (
-                            <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
-                              {event.notes}
-                            </p>
-                          )}
-
-                          {(event.oldValue || event.newValue) && (
-                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                              {event.oldValue && (
-                                <div className="rounded-lg bg-rose-50 p-2.5 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
-                                  <p className="text-[9px] font-black uppercase text-rose-500">
-                                    Previous Value
-                                  </p>
-                                  <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                    {formatHistoryValue(event.oldValue)}
-                                  </p>
-                                </div>
-                              )}
-                              {event.newValue && (
-                                <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
-                                  <p className="text-[9px] font-black uppercase text-emerald-500">
-                                    Updated Value
-                                  </p>
-                                  <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                    {formatHistoryValue(event.newValue)}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+              </div>
             </section>
-          )}
+          ) : isEscalated ? (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/60">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                Escalation / Activity Timeline
+              </h3>
+              <p className="mt-2 text-xs font-medium text-slate-400">
+                No escalation activity has been recorded yet.
+              </p>
+            </section>
+          ) : null}
 
           {/* 4. Administrative Action Selector Section */}
           <div className="space-y-2">
