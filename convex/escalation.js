@@ -382,6 +382,25 @@ export const extendIssueSla = mutation({
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
+    const existingDeadline =
+      issue.slaDeadline !== null &&
+      issue.slaDeadline !== undefined &&
+      issue.slaDeadline !== ""
+        ? typeof issue.slaDeadline === "number"
+          ? issue.slaDeadline
+          : new Date(issue.slaDeadline).getTime()
+        : null;
+
+    if (!Number.isFinite(existingDeadline)) {
+      throw new Error("This issue does not have an SLA deadline to extend.");
+    }
+
+    if (args.newDeadline <= existingDeadline) {
+      throw new Error(
+        "The new SLA deadline must be later than the current deadline.",
+      );
+    }
+
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
@@ -397,9 +416,7 @@ export const extendIssueSla = mutation({
       });
     }
 
-    const oldDeadlineStr = issue.slaDeadline
-      ? new Date(issue.slaDeadline).toISOString()
-      : "None";
+    const oldDeadlineStr = new Date(existingDeadline).toISOString();
     const newDeadlineStr = new Date(args.newDeadline).toISOString();
 
     await ctx.db.patch(args.issueId, {
@@ -799,15 +816,18 @@ export const approveEscalation = mutation({
     await ctx.db.patch(args.issueId, {
       status: targetStatus,
       escalatedToAdmin: false,
-      escalation: issue.escalation
-        ? {
-            ...issue.escalation,
-            resolved: true,
-            resolvedAt: now,
-            resolutionNote: args.notes,
-            adminReviewStatus: "resolved",
-          }
-        : undefined,
+      escalationResolved: true,
+      escalationResolvedAt: now,
+      escalationResolutionNotes: args.notes,
+      escalationAdminReviewStatus: "resolved",
+      escalation: {
+        ...(issue.escalation || {}),
+        resolved: true,
+        resolvedAt: now,
+        resolutionNote: args.notes,
+        adminReviewStatus: "resolved",
+      },
+      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -858,29 +878,38 @@ export const rejectEscalation = mutation({
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found.");
-    if (!issue.escalation) {
+    if (!issue.escalation && !issue.escalatedToAdmin) {
       throw new Error("This issue does not have an active escalation.");
     }
 
     const reason = args.reason.trim();
     if (!reason) {
-      throw new Error(
-        "A reason for rejecting the escalation response is required.",
-      );
+      throw new Error("A reason for rejecting the escalation is required.");
     }
 
     const now = Date.now();
     const adminDbId = await resolveAdminUserId(ctx, args.adminId);
 
+    const targetStatus =
+      issue.status === "escalated"
+        ? issue.escalation?.prevIssueStatus || "in_progress"
+        : issue.status;
+
     await ctx.db.patch(args.issueId, {
+      status: targetStatus,
       escalatedToAdmin: false,
+      escalationResolved: true,
+      escalationResolvedAt: now,
+      escalationResolutionNotes: reason,
+      escalationAdminReviewStatus: "rejected",
       escalation: {
-        ...issue.escalation,
+        ...(issue.escalation || {}),
         resolved: true,
         resolvedAt: now,
-        resolutionNote: `The escalation has been rejected due to "${args.reason}".`,
-        adminReviewStatus: "resolved",
+        resolutionNote: reason,
+        adminReviewStatus: "rejected",
       },
+      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {

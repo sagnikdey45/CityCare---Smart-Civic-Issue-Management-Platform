@@ -756,7 +756,7 @@ export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
                             <Shield size={14} />
                             <span>
                               {hasActiveEscalation
-                                ? "Resolve Escalation"
+                                ? "Handle Escalation"
                                 : "Open SLA Controls"}
                             </span>
                           </button>
@@ -812,7 +812,7 @@ export function CityAdminSLAMonitoringDashboard({ cityAdminUserId }) {
                       <Shield size={14} />
                       <span>
                         {hasActiveEscalation
-                          ? "Resolve Escalation"
+                          ? "Handle Escalation"
                           : "Open SLA Controls"}
                       </span>
                     </button>

@@ -2037,10 +2037,18 @@ export const changeIssueClassification = mutation({
       }
     }
 
+    const normalizedSubcategories = [
+      ...new Set(
+        (args.subcategory || [])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+
     // Perform reclassification patch
     const updatePayload = {
       category: normalizedCategory,
-      subcategory: args.subcategory,
+      subcategory: normalizedSubcategories,
       department: expectedDepartment,
     };
     if (uoCleared) updatePayload.assignedUnitOfficer = null;
@@ -2359,11 +2367,43 @@ export const updateSlaDeadline = mutation({
       throw new Error("Issue not found or unauthorized");
     }
 
+    const existingDeadline =
+      issue.slaDeadline !== null &&
+      issue.slaDeadline !== undefined &&
+      issue.slaDeadline !== ""
+        ? typeof issue.slaDeadline === "number"
+          ? issue.slaDeadline
+          : new Date(issue.slaDeadline).getTime()
+        : null;
+
+    if (!Number.isFinite(existingDeadline)) {
+      throw new Error(
+        "SLA_EXTENSION_NOT_ALLOWED: This issue has no existing SLA deadline. The Unit Officer must assign the initial deadline first.",
+      );
+    }
+
+    if (args.newDeadline <= existingDeadline) {
+      throw new Error(
+        "The new SLA deadline must be later than the current deadline.",
+      );
+    }
+
     const now = Date.now();
-    const oldDeadlineStr = args.oldDeadline
-      ? new Date(args.oldDeadline).toISOString()
+    const oldDeadlineStr = existingDeadline
+      ? new Date(existingDeadline).toISOString()
       : "None";
     const newDeadlineStr = new Date(args.newDeadline).toISOString();
+
+    const escalationPatch = issue.escalation
+      ? {
+          ...issue.escalation,
+          adminReviewStatus:
+            issue.escalation.adminReviewStatus === "pending" ||
+            !issue.escalation.adminReviewStatus
+              ? "reviewed"
+              : issue.escalation.adminReviewStatus,
+        }
+      : undefined;
 
     await ctx.db.patch(issue._id, {
       slaDeadline: args.newDeadline,
@@ -2377,6 +2417,7 @@ export const updateSlaDeadline = mutation({
         extendedAt: now,
         newSlaDeadline: args.newDeadline,
       },
+      escalation: escalationPatch,
     });
 
     // Resolution action record

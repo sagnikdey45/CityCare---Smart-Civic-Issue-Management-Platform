@@ -111,6 +111,23 @@ function getEscalationState(issue) {
 
   const status = normalizeStatus(issue?.status);
 
+  const rawReviewStatus =
+    issue?.escalationAdminReviewStatus ??
+    nested?.adminReviewStatus ??
+    nested?.status ??
+    null;
+
+  const reviewStatus = hasNonEmptyValue(rawReviewStatus)
+    ? normalizeStatus(rawReviewStatus)
+    : null;
+
+  const terminalReviewStatuses = new Set(["resolved", "rejected", "dismissed"]);
+
+  const resolved =
+    issue?.escalationResolved === true ||
+    nested?.resolved === true ||
+    (reviewStatus !== null && terminalReviewStatuses.has(reviewStatus));
+
   const hasExplicitFlag =
     issue?.escalatedToAdmin === true ||
     issue?.is_escalated === true ||
@@ -143,7 +160,7 @@ function getEscalationState(issue) {
   const hasEscalationCount =
     Number(issue?.escalationCount ?? nested?.escalationCount ?? 0) > 0;
 
-  const isEscalated =
+  const hasHistory =
     status === "escalated" ||
     hasExplicitFlag ||
     hasEscalationTimestamp ||
@@ -154,30 +171,21 @@ function getEscalationState(issue) {
     hasReviewHistory ||
     hasEscalationCount;
 
-  const rawReviewStatus =
-    issue?.escalationAdminReviewStatus ??
-    nested?.adminReviewStatus ??
-    nested?.status ??
-    null;
+  const currentlyQueued =
+    issue?.escalatedToAdmin === true || status === "escalated";
 
-  const reviewStatus =
-    isEscalated && hasNonEmptyValue(rawReviewStatus)
-      ? normalizeStatus(rawReviewStatus)
-      : isEscalated
-        ? "pending"
-        : null;
-
-  const resolved =
-    isEscalated &&
-    (issue?.escalationResolved === true ||
-      nested?.resolved === true ||
-      reviewStatus === "resolved");
+  const isActive = currentlyQueued && !resolved;
 
   return {
-    isEscalated,
+    hasHistory,
+    isEscalated: currentlyQueued,
+    isActive,
     resolved,
-    isActive: isEscalated && !resolved,
-    reviewStatus,
+    reviewStatus: resolved
+      ? reviewStatus || "resolved"
+      : isActive
+        ? reviewStatus || "pending"
+        : reviewStatus,
     hasEscalationTimestamp,
     hasEscalationReason,
     hasReviewHistory,
@@ -340,9 +348,9 @@ export const getScopedSLAMonitoringData = query({
           ),
         );
         const hasEscalationActions = escalationActions.length > 0;
-
-        const isEscalatedBase = escalationState.isEscalated;
-        const finalIsEscalated = isEscalatedBase || hasEscalationActions;
+        const escHasHistory =
+          escalationState.hasHistory || hasEscalationActions;
+        const finalIsEscalated = escHasHistory;
 
         const escAt = finalIsEscalated
           ? getTimestamp(
@@ -456,34 +464,31 @@ export const getScopedSLAMonitoringData = query({
           overdue_hours: slaState.overdueHours,
 
           escalation: {
-            isEscalated: finalIsEscalated,
-            isActive: finalIsEscalated && !escResolved,
-            status: finalIsEscalated
-              ? (escalationState.reviewStatus ?? "pending")
-              : null,
-            category: escCategory,
-            priority: escPriority,
-            reason: escReason,
-            comments: escComments,
-            escalatedAt: escAt,
-            escalatedBy: escBy,
-            reviewedAt: escReviewedAt,
-            reviewedBy: escReviewedBy,
+            hasHistory: escHasHistory,
+            isEscalated: escalationState.isActive,
+            isActive: escalationState.isActive,
+            status: escalationState.reviewStatus,
+            category: escHasHistory ? escCategory : null,
+            priority: escHasHistory ? escPriority : null,
+            reason: escHasHistory ? escReason : null,
+            comments: escHasHistory ? escComments : null,
+            escalatedAt: escHasHistory ? escAt : null,
+            escalatedBy: escHasHistory ? escBy : null,
+            reviewedAt: escHasHistory ? escReviewedAt : null,
+            reviewedBy: escHasHistory ? escReviewedBy : null,
             resolved: escResolved,
-            resolvedAt: escResolvedAt,
-            resolutionNotes: escResolutionNotes,
-            resolutionActions: finalIsEscalated ? escalationActions : [],
-            count: escCount,
+            resolvedAt: escHasHistory ? escResolvedAt : null,
+            resolutionNotes: escHasHistory ? escResolutionNotes : null,
+            resolutionActions: escHasHistory ? escalationActions : [],
+            count: escHasHistory ? escCount : 0,
           },
-          is_escalated: finalIsEscalated,
-          escalation_category: escCategory,
-          escalation_priority: escPriority,
-          escalation_reason: escReason,
-          escalation_comments: escComments,
-          escalated_at: escAt,
-          escalation_admin_review_status: finalIsEscalated
-            ? escalationState.reviewStatus
-            : null,
+          is_escalated: escalationState.isActive,
+          escalation_category: escHasHistory ? escCategory : null,
+          escalation_priority: escHasHistory ? escPriority : null,
+          escalation_reason: escHasHistory ? escReason : null,
+          escalation_comments: escHasHistory ? escComments : null,
+          escalated_at: escHasHistory ? escAt : null,
+          escalation_admin_review_status: escalationState.reviewStatus,
           escalation_resolved: escResolved,
           escalation_resolved_at: escResolvedAt,
           escalation_resolution_notes: escResolutionNotes,
@@ -1058,10 +1063,7 @@ export const approveEscalation = mutation({
 
     await ctx.db.patch(args.issueId, {
       escalatedToAdmin: false,
-      escalationResolved: true,
-      escalationResolvedAt: now,
-      escalationResolutionNotes: args.notes,
-      escalationAdminReviewStatus: "resolved",
+      status: issue.escalation?.prevIssueStatus || "pending",
       escalation: {
         ...(issue.escalation || {}),
         resolved: true,
@@ -1069,7 +1071,6 @@ export const approveEscalation = mutation({
         resolutionNote: args.notes,
         adminReviewStatus: "resolved",
       },
-      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -1147,6 +1148,7 @@ export const rejectEscalationResponse = mutation({
 
     await ctx.db.patch(args.issueId, {
       escalatedToAdmin: false,
+      status: issue.escalation?.prevIssueStatus || "pending",
       escalation: {
         ...(issue.escalation || {}),
         resolved: true,

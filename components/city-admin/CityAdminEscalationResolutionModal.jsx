@@ -216,6 +216,16 @@ export function CityAdminEscalationResolutionModal({
     return () => setIsMounted(false);
   }, []);
 
+  // --- SLA Deadline Validation ---
+  const existingSlaDeadline =
+    issue?.sla?.deadline ?? issue?.sla_deadline ?? issue?.slaDeadline ?? null;
+
+  const existingSlaTimestamp = existingSlaDeadline
+    ? new Date(existingSlaDeadline).getTime()
+    : null;
+
+  const hasExistingSlaDeadline = Number.isFinite(existingSlaTimestamp);
+
   // --- Normalise Escalation State ---
   const escalationData = issue?.escalation || {};
 
@@ -234,7 +244,9 @@ export function CityAdminEscalationResolutionModal({
   const isEscalationResolved =
     escalationData.resolved === true ||
     issue?.escalation_resolved === true ||
-    escalationReviewStatus === "resolved";
+    escalationReviewStatus === "resolved" ||
+    escalationReviewStatus === "rejected" ||
+    escalationReviewStatus === "dismissed";
 
   const hasActiveUnresolvedEscalation = isEscalated && !isEscalationResolved;
 
@@ -260,13 +272,21 @@ export function CityAdminEscalationResolutionModal({
     Boolean(issue?.escalation_reason || escalationData.reason);
 
   // --- Action Visibility & Selection Logic ---
-  const escalationResolutionActions = [
-    { id: "approve", label: "Approve Resolution", icon: CheckCircle },
-    { id: "reject_response", label: "Reject Response", icon: XCircle },
+  const escalationDecisionActions = [
+    { id: "approve", label: "Approve Escalation", icon: CheckCircle },
+    { id: "reject_response", label: "Reject Escalation", icon: XCircle },
   ];
 
   const operationalActions = [
-    { id: "extend_sla", label: "Extend SLA", icon: Clock },
+    {
+      id: "extend_sla",
+      label: "Extend SLA",
+      icon: Clock,
+      disabled: !hasExistingSlaDeadline,
+      disabledReason: !hasExistingSlaDeadline
+        ? "No SLA deadline has been assigned by the Unit Officer."
+        : null,
+    },
     {
       id: "reassign_unit_officer",
       label: "Reassign Unit Officer",
@@ -283,12 +303,15 @@ export function CityAdminEscalationResolutionModal({
     { id: "request_action", label: "Request Action", icon: Activity },
   ];
 
+  const firstEnabledOperationalAction =
+    operationalActions.find((a) => !a.disabled)?.id ?? "reassign_unit_officer";
+
   const availableActions = hasActiveUnresolvedEscalation
-    ? escalationResolutionActions
+    ? [...operationalActions, ...escalationDecisionActions]
     : operationalActions;
 
   const [actionType, setActionType] = useState(
-    hasActiveUnresolvedEscalation ? "approve" : "extend_sla",
+    hasActiveUnresolvedEscalation ? "approve" : firstEnabledOperationalAction,
   );
 
   // Replacement selection state (initialised empty, NOT auto-selecting current officer)
@@ -297,7 +320,9 @@ export function CityAdminEscalationResolutionModal({
 
   // Reset selected action & replacement choices when switching tabs or issue
   useEffect(() => {
-    setActionType(hasActiveUnresolvedEscalation ? "approve" : "extend_sla");
+    setActionType(
+      hasActiveUnresolvedEscalation ? "approve" : firstEnabledOperationalAction,
+    );
     setSelectedUnitOfficerId("");
     setSelectedFieldOfficerId("");
     setModalError("");
@@ -395,20 +420,55 @@ export function CityAdminEscalationResolutionModal({
 
   const derivedDepartment = selectedCategory;
 
+  function normalizeSubcategoryInput(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  const handleCategoryChange = (newCategory) => {
+    setSelectedCategory(newCategory);
+    setSelectedSubcategories([]);
+    setCustomSubcategoryInput("");
+  };
+
   const handleToggleSubcategory = (sub) => {
-    if (selectedSubcategories.includes(sub)) {
-      setSelectedSubcategories(selectedSubcategories.filter((s) => s !== sub));
+    const trimmed = normalizeSubcategoryInput(sub);
+    if (!trimmed) return;
+    const exists = selectedSubcategories.some(
+      (s) =>
+        normalizeSubcategoryInput(s).toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (exists) {
+      setSelectedSubcategories(
+        selectedSubcategories.filter(
+          (s) =>
+            normalizeSubcategoryInput(s).toLowerCase() !==
+            trimmed.toLowerCase(),
+        ),
+      );
     } else {
-      setSelectedSubcategories([...selectedSubcategories, sub]);
+      setSelectedSubcategories([...selectedSubcategories, trimmed]);
     }
   };
 
   const handleAddCustomSubcategory = () => {
-    const trimmed = customSubcategoryInput.trim();
-    if (trimmed && !selectedSubcategories.includes(trimmed)) {
-      setSelectedSubcategories([...selectedSubcategories, trimmed]);
+    const trimmed = normalizeSubcategoryInput(customSubcategoryInput);
+    if (!trimmed) return;
+
+    const alreadyExists = selectedSubcategories.some(
+      (existing) =>
+        normalizeSubcategoryInput(existing).toLowerCase() ===
+        trimmed.toLowerCase(),
+    );
+
+    if (alreadyExists) {
       setCustomSubcategoryInput("");
+      return;
     }
+
+    setSelectedSubcategories((previous) => [...previous, trimmed]);
+    setCustomSubcategoryInput("");
   };
 
   // Defensive Candidate Sorting (Current Assignment at top, then Suitable with capacity, then others)
@@ -674,11 +734,30 @@ export function CityAdminEscalationResolutionModal({
     }
 
     if (actionType === "extend_sla") {
+      if (!hasExistingSlaDeadline) {
+        setModalError(
+          "This issue does not have an SLA deadline to extend. The Unit Officer must assign the initial SLA deadline first.",
+        );
+        return;
+      }
       if (!newSlaDeadline) {
         setFieldErrors({
           newSlaDeadline: "A valid new SLA deadline is required.",
         });
         setModalError("Please specify a valid new SLA deadline.");
+        return;
+      }
+      const newDeadlineTimestamp = new Date(newSlaDeadline).getTime();
+      if (!Number.isFinite(newDeadlineTimestamp)) {
+        setModalError("Enter a valid new SLA deadline.");
+        return;
+      }
+      if (newDeadlineTimestamp <= existingSlaTimestamp) {
+        setFieldErrors({
+          newSlaDeadline:
+            "The new deadline must be later than the current SLA deadline.",
+        });
+        setModalError("SLA extension must increase the existing deadline.");
         return;
       }
       if (!reason.trim()) {
@@ -940,8 +1019,15 @@ export function CityAdminEscalationResolutionModal({
         );
       }
 
+      const shouldCloseAfterAction =
+        actionType === "approve" || actionType === "reject_response";
+
       onResolved?.();
-      onClose();
+      if (shouldCloseAfterAction) {
+        onClose();
+      } else {
+        setReason("");
+      }
     } catch (err) {
       console.error(err);
       setModalError("Action failed: " + err.message);
@@ -1543,34 +1629,133 @@ export function CityAdminEscalationResolutionModal({
           ) : null}
 
           {/* 4. Administrative Action Selector Section */}
-          <div className="space-y-2">
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-              {hasActiveUnresolvedEscalation
-                ? "Resolve Active Escalation"
-                : "Operational Actions"}
-            </h3>
+          <div className="space-y-4">
+            {hasActiveUnresolvedEscalation && (
+              <div className="bg-gradient-to-r from-purple-900/30 via-slate-900 to-purple-950/40 p-4 rounded-2xl border border-purple-500/30 flex items-start gap-3">
+                <Shield className="h-5 w-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-white">
+                      Handle Escalation
+                    </h3>
+                    {escalationReviewStatus === "pending" && (
+                      <button
+                        type="button"
+                        onClick={handleAcknowledgeEscalation}
+                        disabled={loading}
+                        className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                      >
+                        <UserCheck size={12} />
+                        <span>Acknowledge & Start Handling</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs font-semibold text-slate-300 mt-0.5">
+                    Apply administrative corrective actions before approving or
+                    rejecting the escalation.
+                  </p>
+                </div>
+              </div>
+            )}
 
-            <div className="flex flex-wrap gap-2">
-              {availableActions.map((tab) => {
-                const TabIcon = tab.icon;
-                const active = actionType === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActionType(tab.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      active
-                        ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                    }`}
-                  >
-                    <TabIcon size={14} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {hasActiveUnresolvedEscalation ? (
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                    Corrective Actions
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {operationalActions.map((tab) => {
+                      const TabIcon = tab.icon;
+                      const active = actionType === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          disabled={tab.disabled}
+                          title={tab.disabled ? tab.disabledReason : undefined}
+                          onClick={() => {
+                            if (!tab.disabled) setActionType(tab.id);
+                          }}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                            tab.disabled
+                              ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
+                              : active
+                                ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20 cursor-pointer"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                          }`}
+                        >
+                          <TabIcon size={14} />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-purple-400 tracking-wider mb-2">
+                    Final Escalation Decision
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {escalationDecisionActions.map((tab) => {
+                      const TabIcon = tab.icon;
+                      const active = actionType === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActionType(tab.id)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            active
+                              ? tab.id === "approve"
+                                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                                : "bg-rose-600 text-white shadow-md shadow-rose-600/20"
+                              : "bg-purple-950/20 dark:bg-purple-950/40 border border-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-900/30"
+                          }`}
+                        >
+                          <TabIcon size={14} />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                  SLA / Administrative Controls
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {operationalActions.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const active = actionType === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        disabled={tab.disabled}
+                        title={tab.disabled ? tab.disabledReason : undefined}
+                        onClick={() => {
+                          if (!tab.disabled) setActionType(tab.id);
+                        }}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                          tab.disabled
+                            ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
+                            : active
+                              ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20 cursor-pointer"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                        }`}
+                      >
+                        <TabIcon size={14} />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 5. Selected Action Form */}
@@ -1587,8 +1772,20 @@ export function CityAdminEscalationResolutionModal({
             </div>
 
             {/* Extend SLA Form */}
-            {!hasActiveUnresolvedEscalation && actionType === "extend_sla" && (
+            {actionType === "extend_sla" && (
               <div className="space-y-4">
+                {!hasExistingSlaDeadline && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 text-xs">
+                    <p className="font-extrabold uppercase tracking-wider text-[10px]">
+                      SLA extension unavailable
+                    </p>
+                    <p className="mt-1 font-semibold leading-relaxed">
+                      The Unit Officer has not assigned an SLA deadline to this
+                      issue yet. An SLA must first be created through the Unit
+                      Officer workflow before the City Admin can extend it.
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
@@ -2100,137 +2297,465 @@ export function CityAdminEscalationResolutionModal({
                 </div>
               )}
 
-            {/* Change Classification Form */}
-            {!hasActiveUnresolvedEscalation &&
-              actionType === "change_classification" && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                        Proposed Category *
-                      </label>
-                      <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 capitalize cursor-pointer"
-                      >
-                        {ISSUE_CATEGORIES.map((c) => (
-                          <option key={c.value} value={c.value}>
-                            {c.label} ({c.value})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                        Responsible Department (Derived)
-                      </label>
-                      <div className="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-mono font-extrabold text-cyan-600 dark:text-cyan-400">
-                        {formatDepartmentLabel(derivedDepartment)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                      Select Subcategories *
-                    </label>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {(ISSUE_SUBCATEGORIES[selectedCategory] || []).map(
-                        (sub) => {
-                          const selected = selectedSubcategories.includes(sub);
-                          return (
-                            <button
-                              key={sub}
-                              type="button"
-                              onClick={() => handleToggleSubcategory(sub)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                selected
-                                  ? "bg-amber-500 text-white shadow-sm"
-                                  : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
-                              }`}
-                            >
-                              {sub}
-                            </button>
-                          );
-                        },
-                      )}
-                    </div>
-                  </div>
+            {/* Reassign Unit Officer Form */}
+            {actionType === "reassign_unit_officer" && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Required Issue Department
+                  </p>
+                  <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                    {formatDepartmentLabel(issueDepartment)}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Officers from this department are prioritised as suitable
+                    candidates.
+                  </p>
                 </div>
-              )}
 
-            {/* Update Priority Form */}
-            {!hasActiveUnresolvedEscalation &&
-              actionType === "update_priority" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
-                      Proposed Priority *
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {["low", "medium", "high", "critical"].map((p) => {
-                        const selected = selectedPriority === p;
+                <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Currently Assigned Unit Officer
+                  </p>
+                  <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                    {currentUnitOfficer?.name ||
+                      currentUnitOfficer?.fullName ||
+                      "No Unit Officer Assigned"}
+                  </p>
+                  {currentUnitOfficer && (
+                    <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Department:{" "}
+                      {formatDepartmentLabel(currentUnitOfficer.department)}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                    Select Unit Officer Candidate (City Admin Scope:{" "}
+                    {issue?.city || "Local"}) *
+                  </label>
+                  {isUnitOfficerLoading ? (
+                    <div className="flex items-center justify-center py-8 gap-2 text-cyan-500 font-bold">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Loading Unit Officer candidates...</span>
+                    </div>
+                  ) : sortedUnitOfficers.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                      No Unit Officers available in {issue?.city || "your city"}
+                      .
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {sortedUnitOfficers.map((uo) => {
+                        const isSelected =
+                          String(selectedUnitOfficerId) ===
+                          String(uo.profileId);
+                        const isCurrentlyAssigned =
+                          String(uo.profileId) ===
+                          String(currentUnitOfficerProfileId);
+                        const isDepartmentMatch =
+                          normalizeDepartment(uo.department) ===
+                          issueDepartment;
+                        const isCapacityFull = (uo.activeIssueCount || 0) >= 10;
+
                         return (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => setSelectedPriority(p)}
-                            className={`p-2.5 rounded-xl border text-center font-black uppercase text-xs transition-all cursor-pointer ${
-                              selected
-                                ? p === "critical"
-                                  ? "bg-red-500 text-white border-red-600"
-                                  : p === "high"
-                                    ? "bg-orange-500 text-white border-orange-600"
-                                    : p === "medium"
-                                      ? "bg-amber-500 text-white border-amber-600"
-                                      : "bg-emerald-500 text-white border-emerald-600"
-                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                          <div
+                            key={uo.profileId}
+                            onClick={() => {
+                              if (isCurrentlyAssigned || isCapacityFull) return;
+                              setSelectedUnitOfficerId(uo.profileId);
+                              setOfficerDepartmentWarning(null);
+                            }}
+                            className={`p-3 rounded-xl border transition-all ${
+                              isSelected
+                                ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-500 shadow-sm"
+                                : isCurrentlyAssigned
+                                  ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed"
+                                  : isCapacityFull
+                                    ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed"
+                                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
                             }`}
                           >
-                            {p}
-                          </button>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="radio"
+                                  name="selectedUnitOfficer"
+                                  checked={isSelected}
+                                  disabled={
+                                    isCurrentlyAssigned || isCapacityFull
+                                  }
+                                  onChange={() => {}}
+                                  className="h-4 w-4 text-cyan-600 cursor-pointer"
+                                />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                                      {uo.name || uo.fullName}
+                                    </span>
+                                    {isCurrentlyAssigned && (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                                        Currently Assigned
+                                      </span>
+                                    )}
+                                    {isDepartmentMatch ? (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        Suitable Match
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        Department Mismatch
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                    <span>
+                                      Department:{" "}
+                                      {formatDepartmentLabel(uo.department)}
+                                    </span>
+                                    <span>•</span>
+                                    <span>
+                                      Active Workload:{" "}
+                                      {uo.activeIssueCount || 0} / 10
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-            {/* Send Message Form */}
-            {!hasActiveUnresolvedEscalation &&
-              actionType === "send_message" && (
-                <div className="space-y-4">
+            {/* Reassign Field Officer Form */}
+            {actionType === "reassign_field_officer" && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Required Issue Department
+                  </p>
+                  <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                    {formatDepartmentLabel(issueDepartment)}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Officers from this department are prioritised as suitable
+                    candidates.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Currently Assigned Field Officer
+                  </p>
+                  <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                    {currentFieldOfficer?.name ||
+                      currentFieldOfficer?.fullName ||
+                      "No Field Officer Assigned"}
+                  </p>
+                  {currentFieldOfficer && (
+                    <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Department:{" "}
+                      {formatDepartmentLabel(currentFieldOfficer.department)}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                    Select Field Officer Candidate (City Admin Scope:{" "}
+                    {issue?.city || "Local"}) *
+                  </label>
+                  {isFieldOfficerLoading ? (
+                    <div className="flex items-center justify-center py-8 gap-2 text-cyan-500 font-bold">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Loading Field Officer candidates...</span>
+                    </div>
+                  ) : sortedFieldOfficers.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                      No Field Officers available in{" "}
+                      {issue?.city || "your city"}.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {sortedFieldOfficers.map((fo) => {
+                        const isSelected =
+                          String(selectedFieldOfficerId) ===
+                          String(fo.profileId);
+                        const isCurrentlyAssigned =
+                          String(fo.profileId) ===
+                          String(currentFieldOfficerProfileId);
+                        const isDepartmentMatch =
+                          normalizeDepartment(fo.department) ===
+                          issueDepartment;
+                        const isCapacityFull =
+                          (fo.activeIssueCount || 0) >= (fo.maxCapacity || 10);
+                        const hasReportingMismatch = Boolean(
+                          fo.hasReportingMismatch,
+                        );
+
+                        return (
+                          <div
+                            key={fo.profileId}
+                            onClick={() => {
+                              if (isCurrentlyAssigned || isCapacityFull) return;
+                              setSelectedFieldOfficerId(fo.profileId);
+                              setOfficerDepartmentWarning(null);
+                            }}
+                            className={`p-3 rounded-xl border transition-all ${
+                              isSelected
+                                ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-500 shadow-sm"
+                                : isCurrentlyAssigned
+                                  ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed"
+                                  : isCapacityFull
+                                    ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed"
+                                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="radio"
+                                  name="selectedFieldOfficer"
+                                  checked={isSelected}
+                                  disabled={
+                                    isCurrentlyAssigned || isCapacityFull
+                                  }
+                                  onChange={() => {}}
+                                  className="h-4 w-4 text-cyan-600 cursor-pointer"
+                                />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                                      {fo.name || fo.fullName}
+                                    </span>
+                                    {isCurrentlyAssigned && (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                                        Currently Assigned
+                                      </span>
+                                    )}
+                                    {isDepartmentMatch ? (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        Suitable Match
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        Department Mismatch
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                    <span>
+                                      Department:{" "}
+                                      {formatDepartmentLabel(fo.department)}
+                                    </span>
+                                    <span>•</span>
+                                    <span>
+                                      Active Workload:{" "}
+                                      {fo.activeIssueCount || 0} /{" "}
+                                      {fo.maxCapacity || 10}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Change Classification Form */}
+            {actionType === "change_classification" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                      Select Recipient *
+                      Proposed Category *
                     </label>
                     <select
-                      value={messageRecipient}
-                      onChange={(e) => setMessageRecipient(e.target.value)}
-                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                      value={selectedCategory}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 capitalize cursor-pointer"
                     >
-                      <option value="both">
-                        Both Unit Officer & Field Officer
-                      </option>
-                      <option value="unit_officer">Unit Officer Only</option>
-                      <option value="field_officer">Field Officer Only</option>
+                      {ISSUE_CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label} ({c.value})
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                      Message Content *
+                      Responsible Department (Derived)
                     </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Enter explicit operational instruction or clarification message..."
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
-                    />
+                    <div className="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-mono font-extrabold text-cyan-600 dark:text-cyan-400">
+                      {formatDepartmentLabel(derivedDepartment)}
+                    </div>
                   </div>
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Select Subcategories *
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {(ISSUE_SUBCATEGORIES[selectedCategory] || []).map(
+                      (sub) => {
+                        const selected = selectedSubcategories.some(
+                          (s) => s.toLowerCase() === sub.toLowerCase(),
+                        );
+                        return (
+                          <button
+                            key={sub}
+                            type="button"
+                            onClick={() => handleToggleSubcategory(sub)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              selected
+                                ? "bg-amber-500 text-white shadow-sm"
+                                : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                            }`}
+                          >
+                            {sub}
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Additional Custom Subcategories
+                  </label>
+                  <div className="flex items-center gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={customSubcategoryInput}
+                      onChange={(e) =>
+                        setCustomSubcategoryInput(e.target.value)
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomSubcategory();
+                        }
+                      }}
+                      placeholder="Type subcategory and press Enter"
+                      className="flex-1 p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSubcategory}
+                      className="px-3 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm"
+                    >
+                      <Plus size={14} />
+                      <span>Add</span>
+                    </button>
+                  </div>
+
+                  {selectedSubcategories.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Active Selected Subcategories Array
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedSubcategories.map((sub) => (
+                          <span
+                            key={sub}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20"
+                          >
+                            <span>{sub}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSubcategory(sub)}
+                              className="hover:text-rose-500 transition-colors cursor-pointer ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Update Priority Form */}
+            {actionType === "update_priority" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                    Proposed Priority *
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {["low", "medium", "high", "critical"].map((p) => {
+                      const selected = selectedPriority === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setSelectedPriority(p)}
+                          className={`p-2.5 rounded-xl border text-center font-black uppercase text-xs transition-all cursor-pointer ${
+                            selected
+                              ? p === "critical"
+                                ? "bg-red-500 text-white border-red-600"
+                                : p === "high"
+                                  ? "bg-orange-500 text-white border-orange-600"
+                                  : p === "medium"
+                                    ? "bg-amber-500 text-white border-amber-600"
+                                    : "bg-emerald-500 text-white border-emerald-600"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Send Message Form */}
+            {actionType === "send_message" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Select Recipient *
+                  </label>
+                  <select
+                    value={messageRecipient}
+                    onChange={(e) => setMessageRecipient(e.target.value)}
+                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                  >
+                    <option value="both">
+                      Both Unit Officer & Field Officer
+                    </option>
+                    <option value="unit_officer">Unit Officer Only</option>
+                    <option value="field_officer">Field Officer Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Message Content *
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Enter explicit operational instruction or clarification message..."
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Approve Escalation Resolution Form */}
             {hasActiveUnresolvedEscalation && actionType === "approve" && (
@@ -2254,53 +2779,52 @@ export function CityAdminEscalationResolutionModal({
               )}
 
             {/* Request Corrective Action Form */}
-            {!hasActiveUnresolvedEscalation &&
-              actionType === "request_action" && (
-                <div className="space-y-3">
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
-                    <Info size={14} className="inline mr-1 -mt-0.5" />
-                    This action sends an officer-only instruction. It does not
-                    change the issue status, SLA status, escalation review
-                    status, or escalation timeline.
-                  </div>
-
-                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20 space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
-                      Recipients (Officers Only)
-                    </p>
-                    {(issue?.assignedUnitOfficer?.name ||
-                      issue?.assigned_officer?.name) && (
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Unit Officer:{" "}
-                        {issue?.assignedUnitOfficer?.name ||
-                          issue?.assigned_officer?.name}
-                      </p>
-                    )}
-                    {(issue?.assignedFieldOfficer?.name ||
-                      issue?.field_officer?.name) && (
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Field Officer:{" "}
-                        {issue?.assignedFieldOfficer?.name ||
-                          issue?.field_officer?.name}
-                      </p>
-                    )}
-                    {!issue?.assignedUnitOfficer &&
-                      !issue?.assignedFieldOfficer &&
-                      !issue?.assigned_officer &&
-                      !issue?.field_officer && (
-                        <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                          No Unit Officer or Field Officer is currently
-                          assigned. Assign an officer before sending corrective
-                          instructions.
-                        </p>
-                      )}
-                    <p className="text-[10px] text-slate-500 font-medium pt-1">
-                      Visibility: Officers only (Citizen will not receive this
-                      notification)
-                    </p>
-                  </div>
+            {actionType === "request_action" && (
+              <div className="space-y-3">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
+                  <Info size={14} className="inline mr-1 -mt-0.5" />
+                  This action sends an officer-only instruction. It does not
+                  change the issue status, SLA status, escalation review status,
+                  or escalation timeline.
                 </div>
-              )}
+
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Recipients (Officers Only)
+                  </p>
+                  {(issue?.assignedUnitOfficer?.name ||
+                    issue?.assigned_officer?.name) && (
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Unit Officer:{" "}
+                      {issue?.assignedUnitOfficer?.name ||
+                        issue?.assigned_officer?.name}
+                    </p>
+                  )}
+                  {(issue?.assignedFieldOfficer?.name ||
+                    issue?.field_officer?.name) && (
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Field Officer:{" "}
+                      {issue?.assignedFieldOfficer?.name ||
+                        issue?.field_officer?.name}
+                    </p>
+                  )}
+                  {!issue?.assignedUnitOfficer &&
+                    !issue?.assignedFieldOfficer &&
+                    !issue?.assigned_officer &&
+                    !issue?.field_officer && (
+                      <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                        No Unit Officer or Field Officer is currently assigned.
+                        Assign an officer before sending corrective
+                        instructions.
+                      </p>
+                    )}
+                  <p className="text-[10px] text-slate-500 font-medium pt-1">
+                    Visibility: Officers only (Citizen will not receive this
+                    notification)
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Common Reason / Notes Textarea */}
             {actionType !== "send_message" && (
