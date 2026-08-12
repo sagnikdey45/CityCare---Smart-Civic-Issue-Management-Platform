@@ -107,72 +107,32 @@ function getEscalationState(issue) {
   const nested =
     issue?.escalation && typeof issue.escalation === "object"
       ? issue.escalation
-      : {};
+      : null;
 
-  const status = normalizeStatus(issue?.status);
+  if (!nested) {
+    return {
+      hasHistory: false,
+      isEscalated: false,
+      isActive: false,
+      resolved: false,
+      reviewStatus: null,
+    };
+  }
 
-  const rawReviewStatus =
-    issue?.escalationAdminReviewStatus ??
-    nested?.adminReviewStatus ??
-    nested?.status ??
-    null;
-
-  const reviewStatus = hasNonEmptyValue(rawReviewStatus)
-    ? normalizeStatus(rawReviewStatus)
-    : null;
+  const reviewStatus = String(nested.adminReviewStatus || "")
+    .trim()
+    .toLowerCase();
 
   const terminalReviewStatuses = new Set(["resolved", "rejected", "dismissed"]);
 
   const resolved =
-    issue?.escalationResolved === true ||
-    nested?.resolved === true ||
-    (reviewStatus !== null && terminalReviewStatuses.has(reviewStatus));
-
-  const hasExplicitFlag =
-    issue?.escalatedToAdmin === true ||
-    issue?.is_escalated === true ||
-    nested?.isEscalated === true;
-
-  const hasEscalationTimestamp =
-    getTimestamp(
-      issue?.escalatedAt ?? issue?.escalationAt ?? nested?.escalatedAt,
-    ) !== null;
-
-  const hasEscalationReason =
-    hasNonEmptyValue(issue?.escalationReason) ||
-    hasNonEmptyValue(nested?.reason);
-
-  const hasEscalationCategory =
-    hasNonEmptyValue(issue?.escalationCategory) ||
-    hasNonEmptyValue(nested?.category);
-
-  const hasEscalationActor = Boolean(issue?.escalatedBy ?? nested?.escalatedBy);
-
-  const hasResolutionHistory =
-    issue?.escalationResolved === true ||
-    nested?.resolved === true ||
-    getTimestamp(issue?.escalationResolvedAt ?? nested?.resolvedAt) !== null;
-
-  const hasReviewHistory =
-    getTimestamp(issue?.escalationReviewedAt ?? nested?.reviewedAt) !== null ||
-    Boolean(issue?.escalationReviewedBy ?? nested?.reviewedBy);
-
-  const hasEscalationCount =
-    Number(issue?.escalationCount ?? nested?.escalationCount ?? 0) > 0;
+    nested.resolved === true ||
+    (reviewStatus !== "" && terminalReviewStatuses.has(reviewStatus));
 
   const hasHistory =
-    status === "escalated" ||
-    hasExplicitFlag ||
-    hasEscalationTimestamp ||
-    hasEscalationReason ||
-    hasEscalationCategory ||
-    hasEscalationActor ||
-    hasResolutionHistory ||
-    hasReviewHistory ||
-    hasEscalationCount;
+    Boolean(nested.escalatedAt) || Number(nested.escalationCount ?? 0) > 0;
 
-  const currentlyQueued =
-    issue?.escalatedToAdmin === true || status === "escalated";
+  const currentlyQueued = issue.escalatedToAdmin === true;
 
   const isActive = currentlyQueued && !resolved;
 
@@ -181,15 +141,7 @@ function getEscalationState(issue) {
     isEscalated: currentlyQueued,
     isActive,
     resolved,
-    reviewStatus: resolved
-      ? reviewStatus || "resolved"
-      : isActive
-        ? reviewStatus || "pending"
-        : reviewStatus,
-    hasEscalationTimestamp,
-    hasEscalationReason,
-    hasReviewHistory,
-    hasResolutionHistory,
+    reviewStatus: hasHistory ? reviewStatus || "pending" : null,
   };
 }
 
@@ -286,11 +238,11 @@ export const getScopedSLAMonitoringData = query({
               id: a._id,
               issueId: a.issueId,
               type: a.actionType,
-              performed_by: perf ? perf.fullName : "City Admin",
-              performedByRole: "city_admin",
+              performed_by: perf?.fullName ?? "Administrator",
+              performedByRole: perf?.role ?? "admin",
               performed_at: a.performedAt,
               old_value: a.oldValue,
-              newValue: a.newValue,
+              new_value: a.newValue,
               notes: a.notes,
             };
           }),
@@ -329,13 +281,19 @@ export const getScopedSLAMonitoringData = query({
             : null;
 
         const ESCALATION_ACTION_TYPES = new Set([
+          "escalate",
+          "issue_escalated",
           "review_escalation",
-          "request_corrective_action",
+          "extend_sla",
           "reassign_unit_officer",
           "reassign_field_officer",
-          "extend_sla",
+          "reassign_officer",
+          "change_classification",
           "change_category",
-          "reject_issue",
+          "update_priority",
+          "request_corrective_action",
+          "approve_escalation",
+          "reject_escalation",
           "resolve_escalation",
           "dismiss_escalation",
         ]);

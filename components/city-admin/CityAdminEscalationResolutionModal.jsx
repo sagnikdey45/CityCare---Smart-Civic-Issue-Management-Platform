@@ -86,11 +86,14 @@ const ESCALATION_ACTION_LABELS = {
   reassign_field_officer: "Field Officer Reassigned",
   reassign_officer: "Officer Assignment Updated",
   change_classification: "Issue Classification Changed",
-  change_category: "Issue Category Changed",
+  change_category: "Issue Classification Changed",
   update_priority: "Issue Priority Updated",
   request_corrective_action: "Corrective Action Requested",
+  reject_escalation: "Escalation Rejected",
   reject_escalation_response: "Escalation Response Rejected",
-  approve_escalation: "Escalation Resolution Approved",
+  approve_escalation: "Escalation Approved",
+  resolve_escalation: "Escalation Resolved",
+  dismiss_escalation: "Escalation Dismissed",
   send_message: "Administrative Message Sent",
 };
 
@@ -102,6 +105,21 @@ function formatTimelineAction(value) {
       .replace(/_/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase())
   );
+}
+
+function formatPerformerRole(value) {
+  switch (String(value || "").toLowerCase()) {
+    case "city_admin":
+      return "City Admin";
+    case "admin":
+      return "System Admin";
+    case "unit_officer":
+      return "Unit Officer";
+    case "field_officer":
+      return "Field Officer";
+    default:
+      return "Administrator";
+  }
 }
 
 const ESCALATION_STATUS_STYLES = {
@@ -140,15 +158,57 @@ function formatDateTime(value) {
   });
 }
 
+function parseHistoryValue(value) {
+  if (!value) return value;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 function formatHistoryValue(value) {
   if (!value) return "N/A";
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
+
+  const parsed = parseHistoryValue(value);
+
+  if (typeof parsed === "object" && parsed !== null) {
+    if (parsed.category) {
+      const cat = String(parsed.category)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+      const subs = Array.isArray(parsed.subcategory)
+        ? parsed.subcategory
+        : parsed.subcategory
+          ? [parsed.subcategory]
+          : [];
+
+      return (
+        <span className="block space-y-1">
+          <span className="font-extrabold text-slate-900 dark:text-slate-100">
+            {cat}
+          </span>
+          {subs.length > 0 && (
+            <span className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+              {subs.map((s) => `• ${s}`).join(" ")}
+            </span>
+          )}
+        </span>
+      );
     }
+    return JSON.stringify(parsed);
   }
+
+  if (
+    typeof value === "string" &&
+    value.includes("T") &&
+    value.endsWith("Z") &&
+    !Number.isNaN(Date.parse(value))
+  ) {
+    return formatDateTime(value);
+  }
+
   return String(value);
 }
 
@@ -1578,7 +1638,10 @@ export function CityAdminEscalationResolutionModal({
                         </div>
 
                         <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                          Performed by {event.performedBy}
+                          Performed by {event.performedBy}{" "}
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            · {formatPerformerRole(event.performedByRole)}
+                          </span>
                         </p>
 
                         {event.notes && (

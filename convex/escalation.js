@@ -113,7 +113,8 @@ export const getSlaMonitoringIssues = query({
               id: a._id,
               issueId: a.issueId,
               type: a.actionType,
-              performed_by: performer ? performer.fullName : "System Admin",
+              performed_by: performer?.fullName ?? "Administrator",
+              performedByRole: performer?.role ?? "admin",
               performed_at: a.performedAt,
               old_value: a.oldValue,
               new_value: a.newValue,
@@ -816,10 +817,6 @@ export const approveEscalation = mutation({
     await ctx.db.patch(args.issueId, {
       status: targetStatus,
       escalatedToAdmin: false,
-      escalationResolved: true,
-      escalationResolvedAt: now,
-      escalationResolutionNotes: args.notes,
-      escalationAdminReviewStatus: "resolved",
       escalation: {
         ...(issue.escalation || {}),
         resolved: true,
@@ -827,7 +824,6 @@ export const approveEscalation = mutation({
         resolutionNote: args.notes,
         adminReviewStatus: "resolved",
       },
-      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -898,10 +894,6 @@ export const rejectEscalation = mutation({
     await ctx.db.patch(args.issueId, {
       status: targetStatus,
       escalatedToAdmin: false,
-      escalationResolved: true,
-      escalationResolvedAt: now,
-      escalationResolutionNotes: reason,
-      escalationAdminReviewStatus: "rejected",
       escalation: {
         ...(issue.escalation || {}),
         resolved: true,
@@ -909,7 +901,6 @@ export const rejectEscalation = mutation({
         resolutionNote: reason,
         adminReviewStatus: "rejected",
       },
-      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {

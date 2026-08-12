@@ -711,16 +711,7 @@ export default defineSchema({
 
   escalationResolutionActions: defineTable({
     issueId: v.id("issues"),
-    actionType: v.union(
-      v.literal("extend_sla"),
-      v.literal("reassign_officer"),
-      v.literal("approve_escalation"),
-      v.literal("reject_escalation"),
-      v.literal("change_category"),
-      v.literal("close_escalation"),
-      v.literal("review_escalation"),
-      v.literal("escalate"),
-    ),
+    actionType: v.string(),
     performedBy: v.id("users"),
     performedAt: v.number(),
     oldValue: v.optional(v.string()),

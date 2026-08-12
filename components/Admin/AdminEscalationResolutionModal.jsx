@@ -19,9 +19,122 @@ import {
   Loader2,
   Info,
   Building2,
+  Activity,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+
+const ESCALATION_ACTION_LABELS = {
+  escalate: "Issue Escalated",
+  issue_escalated: "Issue Escalated",
+  review_escalation: "Escalation Acknowledged",
+  extend_sla: "SLA Deadline Extended",
+  reassign_unit_officer: "Unit Officer Reassigned",
+  reassign_field_officer: "Field Officer Reassigned",
+  reassign_officer: "Officer Assignment Updated",
+  change_classification: "Issue Classification Changed",
+  change_category: "Issue Classification Changed",
+  update_priority: "Issue Priority Updated",
+  request_corrective_action: "Corrective Action Requested",
+  reject_escalation: "Escalation Rejected",
+  reject_escalation_response: "Escalation Response Rejected",
+  approve_escalation: "Escalation Approved",
+  resolve_escalation: "Escalation Resolved",
+  dismiss_escalation: "Escalation Dismissed",
+  send_message: "Administrative Message Sent",
+};
+
+function formatTimelineAction(value) {
+  if (!value) return "Action Performed";
+  return (
+    ESCALATION_ACTION_LABELS[value] ||
+    String(value)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+function formatPerformerRole(value) {
+  switch (String(value || "").toLowerCase()) {
+    case "city_admin":
+      return "City Admin";
+    case "admin":
+      return "System Admin";
+    case "unit_officer":
+      return "Unit Officer";
+    case "field_officer":
+      return "Field Officer";
+    default:
+      return "Administrator";
+  }
+}
+
+function formatDateTime(value) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function parseHistoryValue(value) {
+  if (!value) return value;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function formatHistoryValue(value) {
+  if (!value) return "N/A";
+
+  const parsed = parseHistoryValue(value);
+
+  if (typeof parsed === "object" && parsed !== null) {
+    if (parsed.category) {
+      const cat = String(parsed.category)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+      const subs = Array.isArray(parsed.subcategory)
+        ? parsed.subcategory
+        : parsed.subcategory
+          ? [parsed.subcategory]
+          : [];
+
+      return (
+        <span className="block space-y-1">
+          <span className="font-extrabold text-slate-900 dark:text-slate-100">
+            {cat}
+          </span>
+          {subs.length > 0 && (
+            <span className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+              {subs.map((s) => `• ${s}`).join(" ")}
+            </span>
+          )}
+        </span>
+      );
+    }
+    return JSON.stringify(parsed);
+  }
+
+  if (
+    typeof value === "string" &&
+    value.includes("T") &&
+    value.endsWith("Z") &&
+    !Number.isNaN(Date.parse(value))
+  ) {
+    return formatDateTime(value);
+  }
+
+  return String(value);
+}
 
 export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
   const adminUserId = "2"; // fallback local admin userId matching AdminDashboard context
@@ -33,6 +146,41 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
   // Incompatibility prompt states for System Admin
   const [crossCityPrompt, setCrossCityPrompt] = useState(null);
   const [deptMismatchPrompt, setDeptMismatchPrompt] = useState(null);
+
+  const rawTimeline =
+    issue.escalation_resolution_actions ||
+    issue.escalation?.resolutionActions ||
+    issue.escalationResolutionActions ||
+    [];
+
+  const normalisedTimeline = (rawTimeline || [])
+    .map((event) => {
+      const rawTs = event.performed_at || event.performedAt;
+      const parsedTs =
+        rawTs !== null && rawTs !== undefined && rawTs !== ""
+          ? typeof rawTs === "number"
+            ? rawTs
+            : new Date(rawTs).getTime()
+          : null;
+      const performedAt = Number.isFinite(parsedTs) ? parsedTs : null;
+
+      return {
+        id:
+          event.id ||
+          event._id ||
+          `${event.type || event.actionType}-${performedAt}`,
+        type: event.type || event.actionType,
+        performedAt,
+        performedBy:
+          event.performed_by || event.performedByName || "Administrator",
+        performedByRole: event.performedByRole || event.role || "admin",
+        notes: event.notes || event.reason || event.comment,
+        oldValue: event.old_value || event.oldValue,
+        newValue: event.new_value || event.newValue,
+      };
+    })
+    .filter((e) => e.type && e.performedAt !== null)
+    .sort((a, b) => Number(a.performedAt) - Number(b.performedAt));
 
   const currentActions = (
     issue.escalation_resolution_actions ||
@@ -855,6 +1003,92 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
               </div>
             )}
           </div>
+
+          {/* Escalation / Activity Timeline */}
+          {normalisedTimeline.length > 0 && (
+            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Escalation / Activity Timeline
+                  </h3>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Shared administrative action history log
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-200 px-3 py-1 text-[10px] font-black text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  {normalisedTimeline.length}{" "}
+                  {normalisedTimeline.length === 1 ? "Event" : "Events"}
+                </span>
+              </div>
+
+              <div className="relative space-y-0 pl-1">
+                {normalisedTimeline.map((event, index) => {
+                  const isLast = index === normalisedTimeline.length - 1;
+                  return (
+                    <div key={event.id} className="relative flex gap-4 pb-5">
+                      {!isLast && (
+                        <div className="absolute bottom-0 left-[17px] top-9 w-px bg-slate-200 dark:bg-slate-700" />
+                      )}
+
+                      <div className="relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-400 shadow-sm">
+                        <Activity className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                          <p className="text-xs font-black text-slate-900 dark:text-white">
+                            {formatTimelineAction(event.type)}
+                          </p>
+                          <time className="text-[10px] font-bold text-slate-400">
+                            {formatDateTime(event.performedAt)}
+                          </time>
+                        </div>
+
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                          Performed by {event.performedBy}{" "}
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            · {formatPerformerRole(event.performedByRole)}
+                          </span>
+                        </p>
+
+                        {event.notes && (
+                          <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
+                            {event.notes}
+                          </p>
+                        )}
+
+                        {(event.oldValue || event.newValue) && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {event.oldValue && (
+                              <div className="rounded-lg bg-rose-50 p-2.5 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                                <p className="text-[9px] font-black uppercase text-rose-500">
+                                  Previous Value
+                                </p>
+                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  {formatHistoryValue(event.oldValue)}
+                                </p>
+                              </div>
+                            )}
+                            {event.newValue && (
+                              <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                                <p className="text-[9px] font-black uppercase text-emerald-500">
+                                  Updated Value
+                                </p>
+                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  {formatHistoryValue(event.newValue)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

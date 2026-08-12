@@ -53,6 +53,58 @@ function normalizeStatus(value) {
     .toLowerCase();
 }
 
+export function hasActiveEscalation(issue) {
+  if (!issue) return false;
+  return issue.escalatedToAdmin === true && issue.escalation?.resolved !== true;
+}
+
+export function getActiveEscalationReviewPatch(issue) {
+  if (!hasActiveEscalation(issue) || !issue.escalation) {
+    return {};
+  }
+
+  const currentReviewStatus = issue.escalation.adminReviewStatus;
+
+  return {
+    escalation: {
+      ...issue.escalation,
+      adminReviewStatus:
+        currentReviewStatus === "pending" || !currentReviewStatus
+          ? "reviewed"
+          : currentReviewStatus,
+    },
+  };
+}
+
+async function logEscalationActionIfActive(
+  ctx,
+  { issue, actionType, performedBy, oldValue, newValue, notes, performedAt },
+) {
+  if (!hasActiveEscalation(issue)) {
+    return null;
+  }
+
+  return await ctx.db.insert("escalationResolutionActions", {
+    issueId: issue._id,
+    actionType,
+    performedBy,
+    performedAt: performedAt ?? Date.now(),
+    ...(oldValue !== undefined
+      ? {
+          oldValue:
+            typeof oldValue === "string" ? oldValue : JSON.stringify(oldValue),
+        }
+      : {}),
+    ...(newValue !== undefined
+      ? {
+          newValue:
+            typeof newValue === "string" ? newValue : JSON.stringify(newValue),
+        }
+      : {}),
+    ...(notes ? { notes } : {}),
+  });
+}
+
 function getOverviewRangeBounds(days, now = Date.now()) {
   const currentDate = new Date(now);
 
@@ -1729,6 +1781,12 @@ export const assignOrReassignUnitOfficer = mutation({
       }
     }
 
+    let oldUnitOfficerName = "Unassigned";
+    if (previousUnitOfficerUserId) {
+      const oldUser = await ctx.db.get(previousUnitOfficerUserId);
+      if (oldUser) oldUnitOfficerName = oldUser.fullName;
+    }
+
     // 1. Remove issue from previous Unit Officer's active list
     if (previousUnitOfficerUserId) {
       const prevOfficerProfile = await ctx.db
@@ -1759,9 +1817,21 @@ export const assignOrReassignUnitOfficer = mutation({
     await ctx.db.patch(issue._id, {
       assignedUnitOfficer: newOfficer.userId,
       status: nextStatus,
+      ...getActiveEscalationReviewPatch(issue),
     });
 
-    // 4. Create timeline entry
+    // 4. Log escalation action if active
+    await logEscalationActionIfActive(ctx, {
+      issue,
+      actionType: "reassign_unit_officer",
+      performedBy: args.cityAdminUserId,
+      performedAt: now,
+      oldValue: oldUnitOfficerName,
+      newValue: newOfficer.fullName,
+      notes: args.reason,
+    });
+
+    // 5. Create timeline entry
     await ctx.db.insert("issueUpdates", {
       issueId: issue._id,
       status: nextStatus,
@@ -1773,7 +1843,7 @@ export const assignOrReassignUnitOfficer = mutation({
       createdAt: now,
     });
 
-    // 5. Create audit log
+    // 6. Create audit log
     await ctx.db.insert("cityAdminAuditLogs", {
       action: "assign_unit_officer",
       performedByUserId: args.cityAdminUserId,
@@ -1847,6 +1917,12 @@ export const assignOrReassignFieldOfficer = mutation({
     const previousFieldOfficerUserId = issue.assignedFieldOfficer;
     const now = Date.now();
 
+    let oldFieldOfficerName = "Unassigned";
+    if (previousFieldOfficerUserId) {
+      const oldUser = await ctx.db.get(previousFieldOfficerUserId);
+      if (oldUser) oldFieldOfficerName = oldUser.fullName;
+    }
+
     // 1. Remove issue from previous Field Officer's active list
     if (previousFieldOfficerUserId) {
       const prevOfficerProfile = await ctx.db
@@ -1882,9 +1958,21 @@ export const assignOrReassignFieldOfficer = mutation({
     await ctx.db.patch(issue._id, {
       assignedFieldOfficer: newOfficer.userId,
       status: nextStatus,
+      ...getActiveEscalationReviewPatch(issue),
     });
 
-    // 4. Create timeline entry
+    // 4. Log escalation action if active
+    await logEscalationActionIfActive(ctx, {
+      issue,
+      actionType: "reassign_field_officer",
+      performedBy: args.cityAdminUserId,
+      performedAt: now,
+      oldValue: oldFieldOfficerName,
+      newValue: newOfficer.fullName,
+      notes: args.reason,
+    });
+
+    // 5. Create timeline entry
     await ctx.db.insert("issueUpdates", {
       issueId: issue._id,
       status: nextStatus,
@@ -2037,6 +2125,16 @@ export const changeIssueClassification = mutation({
       }
     }
 
+    const oldClassification = {
+      category: issue.category,
+      department: issue.department || issue.category,
+      subcategory: Array.isArray(issue.subcategory)
+        ? issue.subcategory
+        : issue.subcategory
+          ? [issue.subcategory]
+          : [],
+    };
+
     const normalizedSubcategories = [
       ...new Set(
         (args.subcategory || [])
@@ -2050,11 +2148,28 @@ export const changeIssueClassification = mutation({
       category: normalizedCategory,
       subcategory: normalizedSubcategories,
       department: expectedDepartment,
+      ...getActiveEscalationReviewPatch(issue),
     };
     if (uoCleared) updatePayload.assignedUnitOfficer = null;
     if (foCleared) updatePayload.assignedFieldOfficer = null;
 
     await ctx.db.patch(issue._id, updatePayload);
+
+    const newClassification = {
+      category: normalizedCategory,
+      department: expectedDepartment,
+      subcategory: normalizedSubcategories,
+    };
+
+    await logEscalationActionIfActive(ctx, {
+      issue,
+      actionType: "change_classification",
+      performedBy: args.cityAdminUserId,
+      performedAt: now,
+      oldValue: oldClassification,
+      newValue: newClassification,
+      notes: args.reason,
+    });
 
     // Timeline comment
     let comment = `Issue classification updated by City Admin.\nNew Category: ${normalizedCategory}\nNew Department: ${expectedDepartment}\nReason: ${args.reason}`;
@@ -2120,6 +2235,17 @@ export const updateIssuePriority = mutation({
 
     await ctx.db.patch(issue._id, {
       priority: args.priority,
+      ...getActiveEscalationReviewPatch(issue),
+    });
+
+    await logEscalationActionIfActive(ctx, {
+      issue,
+      actionType: "update_priority",
+      performedBy: args.cityAdminUserId,
+      performedAt: now,
+      oldValue: oldPriority,
+      newValue: args.priority,
+      notes: args.reason,
     });
 
     // Timeline entry
@@ -2394,17 +2520,6 @@ export const updateSlaDeadline = mutation({
       : "None";
     const newDeadlineStr = new Date(args.newDeadline).toISOString();
 
-    const escalationPatch = issue.escalation
-      ? {
-          ...issue.escalation,
-          adminReviewStatus:
-            issue.escalation.adminReviewStatus === "pending" ||
-            !issue.escalation.adminReviewStatus
-              ? "reviewed"
-              : issue.escalation.adminReviewStatus,
-        }
-      : undefined;
-
     await ctx.db.patch(issue._id, {
       slaDeadline: args.newDeadline,
       slaBreached: false,
@@ -2417,12 +2532,12 @@ export const updateSlaDeadline = mutation({
         extendedAt: now,
         newSlaDeadline: args.newDeadline,
       },
-      escalation: escalationPatch,
+      ...getActiveEscalationReviewPatch(issue),
     });
 
-    // Resolution action record
-    await ctx.db.insert("escalationResolutionActions", {
-      issueId: issue._id,
+    // Resolution action record (only if issue has active escalation)
+    await logEscalationActionIfActive(ctx, {
+      issue,
       actionType: "extend_sla",
       performedBy: args.cityAdminUserId,
       performedAt: now,
