@@ -2,46 +2,94 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
 // Helper function to resolve the admin's database user ID (v.id("users"))
-// even if a mock or invalid ID (like "2") is passed from the client.
 async function resolveAdminUserId(ctx, adminUserIdStr) {
-  if (adminUserIdStr) {
-    try {
-      const user = await ctx.db.get(adminUserIdStr);
-      if (user && user.role === "admin") {
-        return user._id;
-      }
-    } catch (e) {
-      // Not a valid ID format or not found
+  if (!adminUserIdStr) {
+    throw new Error("System Admin authentication is required.");
+  }
+  try {
+    const user = await ctx.db.get(adminUserIdStr);
+    if (user && user.role === "admin") {
+      return user._id;
     }
+  } catch (e) {
+    // Invalid ID format
   }
+  throw new Error("Unauthorized. Valid System Admin user ID is required.");
+}
 
-  // Fallback 1: search for first admin in users table
-  const firstAdmin = await ctx.db
-    .query("users")
-    .withIndex("by_role", (q) => q.eq("role", "admin"))
-    .first();
-  if (firstAdmin) {
-    return firstAdmin._id;
-  }
+const DEPARTMENT_CATEGORY_MAP = {
+  road: "road",
+  roads: "road",
+  road_infrastructure: "road",
+  road_and_infrastructure: "road",
+  "road_&_infrastructure": "road",
 
-  // Fallback 2: filter query for admin role
-  const anyAdmin = await ctx.db
-    .query("users")
-    .filter((q) => q.eq(q.field("role"), "admin"))
-    .first();
-  if (anyAdmin) {
-    return anyAdmin._id;
-  }
+  electricity: "electricity",
+  lighting: "electricity",
+  street_lighting: "electricity",
+  electricity_lighting: "electricity",
+  electricity_and_lighting: "electricity",
+  "electricity_&_lighting": "electricity",
 
-  // Fallback 3: create a mock admin user if none exists
-  const newAdminId = await ctx.db.insert("users", {
-    fullName: "System Admin",
-    email: "admin@citycare.gov",
-    password: "hashedpassword",
-    role: "admin",
-    createdAt: new Date().toISOString(),
-  });
-  return newAdminId;
+  water: "water",
+  water_supply: "water",
+
+  sanitation: "sanitation",
+  sanitation_hygiene: "sanitation",
+  sanitation_and_hygiene: "sanitation",
+  "sanitation_&_hygiene": "sanitation",
+
+  drainage: "drainage",
+  drainage_sewerage: "drainage",
+  drainage_and_sewerage: "drainage",
+  "drainage_&_sewerage": "drainage",
+
+  solid_waste: "solid_waste",
+  waste: "solid_waste",
+  solid_waste_management: "solid_waste",
+  waste_management: "solid_waste",
+
+  public_health: "public_health",
+  health: "public_health",
+
+  other: "other",
+};
+
+function normalizeDepartment(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return DEPARTMENT_CATEGORY_MAP[raw] || raw;
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeLocation(value) {
+  return normalizeText(value);
+}
+
+function isOfficerCompatible({ issue, profile }) {
+  const issueCity = normalizeText(issue?.city);
+  const officerCity = normalizeText(profile?.city);
+
+  const issueDepartment = normalizeDepartment(
+    issue?.department || issue?.category,
+  );
+  const officerDepartment = normalizeDepartment(profile?.department);
+
+  return (
+    Boolean(issueCity) &&
+    Boolean(officerCity) &&
+    issueCity === officerCity &&
+    Boolean(issueDepartment) &&
+    Boolean(officerDepartment) &&
+    issueDepartment === officerDepartment
+  );
 }
 // Helper functions for safe analytics calculations
 function toArray(value) {
@@ -1044,18 +1092,6 @@ export const getOfficerCommandCenterData = query({
   },
 });
 
-function normalizeDepartment(dept) {
-  if (!dept) return "";
-  const d = dept.toLowerCase().trim();
-  if (d.includes("road")) return "road";
-  if (d.includes("light") || d.includes("electr")) return "electricity";
-  if (d.includes("water")) return "water";
-  if (d.includes("waste") || d.includes("sanitat")) return "sanitation";
-  if (d.includes("drain")) return "drainage";
-  if (d.includes("health")) return "public_health";
-  return d;
-}
-
 export const getAssignableOfficers = query({
   args: {
     issueId: v.optional(v.id("issues")),
@@ -1069,30 +1105,35 @@ export const getAssignableOfficers = query({
 
     const unitOfficers = await Promise.all(
       rawUnitOfficers.map(async (officer) => {
+        const user = await ctx.db.get(officer.userId).catch(() => null);
         const profilePictureUrl = officer.profilePicture
-          ? await ctx.storage.getUrl(officer.profilePicture)
+          ? await ctx.storage.getUrl(officer.profilePicture).catch(() => null)
           : null;
+        const currentWorkload = Array.isArray(officer.activeIssueIds)
+          ? officer.activeIssueIds.length
+          : 0;
+        const maximumCapacity = 50;
+
         return {
           _id: officer._id,
           profileId: officer._id,
           userId: officer.userId ?? "",
-          fullName: officer.fullName ?? "",
-          name: officer.fullName ?? "",
-          email: officer.email ?? "",
+          fullName: officer.fullName ?? user?.fullName ?? "Unit Officer",
+          name: officer.fullName ?? user?.fullName ?? "Unit Officer",
+          email: officer.email ?? user?.email ?? "",
           phone: officer.phone ?? "",
           city: officer.city ?? "",
           state: officer.state ?? "",
           district: officer.district ?? "",
-          department: officer.department ?? "",
+          department: officer.department ?? "General",
           rating: officer.rating ?? 0,
           efficiencyScore: officer.efficiencyScore ?? 80,
-          activeIssueCount: officer.activeIssueIds?.length ?? 0,
-          currentWorkload: officer.activeIssueIds?.length ?? 0,
-          maximumCapacity: 50,
-          availableCapacity: Math.max(
-            0,
-            50 - (officer.activeIssueIds?.length ?? 0),
-          ),
+          activeIssueCount: currentWorkload,
+          currentWorkload,
+          maximumCapacity,
+          availableCapacity: Math.max(0, maximumCapacity - currentWorkload),
+          isAtCapacity: currentWorkload >= maximumCapacity,
+          accountApproved: officer.accountApproved,
           profilePictureUrl,
         };
       }),
@@ -1100,32 +1141,36 @@ export const getAssignableOfficers = query({
 
     const fieldOfficers = await Promise.all(
       rawFieldOfficers.map(async (officer) => {
+        const user = await ctx.db.get(officer.userId).catch(() => null);
         const profilePictureUrl = officer.profilePicture
-          ? await ctx.storage.getUrl(officer.profilePicture)
+          ? await ctx.storage.getUrl(officer.profilePicture).catch(() => null)
           : null;
-        const activeCount = officer.currentActiveIssues ?? 0;
-        const limit = officer.maxIssueCapacity ?? 10;
+        const currentWorkload = officer.currentActiveIssues ?? 0;
+        const maximumCapacity = officer.maxIssueCapacity ?? 10;
+
         return {
           _id: officer._id,
           profileId: officer._id,
           userId: officer.userId ?? "",
-          fullName: officer.fullName ?? "",
-          name: officer.fullName ?? "",
-          email: officer.email ?? "",
+          fullName: officer.fullName ?? user?.fullName ?? "Field Officer",
+          name: officer.fullName ?? user?.fullName ?? "Field Officer",
+          email: officer.email ?? user?.email ?? "",
           phone: officer.phone ?? "",
           city: officer.city ?? "",
           state: officer.state ?? "",
           district: officer.district ?? "",
-          department: officer.department ?? "",
+          department: officer.department ?? "General",
           specialisations: officer.specialisations ?? [],
-          currentActiveIssues: activeCount,
-          activeIssueCount: activeCount,
-          currentWorkload: activeCount,
-          maxIssueCapacity: limit,
-          maximumCapacity: limit,
-          availableCapacity: Math.max(0, limit - activeCount),
+          currentActiveIssues: currentWorkload,
+          activeIssueCount: currentWorkload,
+          currentWorkload,
+          maxIssueCapacity: maximumCapacity,
+          maximumCapacity,
+          availableCapacity: Math.max(0, maximumCapacity - currentWorkload),
+          isAtCapacity: currentWorkload >= maximumCapacity,
           rating: officer.rating ?? 0,
           efficiencyScore: officer.efficiencyScore ?? 80,
+          accountApproved: officer.accountApproved,
           profilePictureUrl,
         };
       }),
@@ -1134,6 +1179,56 @@ export const getAssignableOfficers = query({
     let issue = null;
     if (args.issueId) {
       issue = await ctx.db.get(args.issueId);
+      if (!issue) {
+        throw new Error("Issue not found.");
+      }
+    }
+
+    const requestedType = args.officerType || "unit_officer";
+
+    let currentOfficerUserId = null;
+    if (issue) {
+      currentOfficerUserId =
+        requestedType === "unit_officer"
+          ? issue.assignedUnitOfficer
+          : issue.assignedFieldOfficer;
+    }
+
+    let currentOfficer = null;
+    if (currentOfficerUserId) {
+      const sourceList =
+        requestedType === "unit_officer" ? unitOfficers : fieldOfficers;
+      const found = sourceList.find(
+        (o) => String(o.userId) === String(currentOfficerUserId),
+      );
+      if (found) {
+        currentOfficer = {
+          ...found,
+          role: requestedType,
+          isCurrentOfficer: true,
+        };
+      } else {
+        const user = await ctx.db.get(currentOfficerUserId);
+        if (user) {
+          currentOfficer = {
+            userId: user._id,
+            profileId: null,
+            name: user.fullName || "Officer",
+            fullName: user.fullName || "Officer",
+            email: user.email || null,
+            phone: null,
+            department: issue?.department || issue?.category || "General",
+            city: issue?.city || "",
+            state: issue?.state || "",
+            rating: 0,
+            efficiencyScore: 80,
+            currentWorkload: 0,
+            maximumCapacity: null,
+            role: requestedType,
+            isCurrentOfficer: true,
+          };
+        }
+      }
     }
 
     let candidates = [];
@@ -1143,62 +1238,71 @@ export const getAssignableOfficers = query({
       const targetCity = issue?.city || "";
       const targetDept = issue ? issue.department || issue.category : "";
 
-      candidates = sourceList.map((o) => {
-        const isSameCity = Boolean(
-          targetCity &&
+      const rawCandidates = sourceList.filter((o) => {
+        if (o.accountApproved === false) return false;
+        if (
+          currentOfficerUserId &&
+          String(o.userId) === String(currentOfficerUserId)
+        ) {
+          return false;
+        }
+
+        if (targetCity) {
+          const cityMatch = Boolean(
             o.city &&
-            o.city.toLowerCase().trim() === targetCity.toLowerCase().trim(),
-        );
-        const isSameDepartment = Boolean(
-          targetDept &&
+              normalizeLocation(o.city) === normalizeLocation(targetCity),
+          );
+          if (!cityMatch) return false;
+        }
+
+        if (targetDept) {
+          const departmentMatch = Boolean(
             o.department &&
-            normalizeDepartment(o.department) ===
-              normalizeDepartment(targetDept),
-        );
-        const isRecommended =
-          isSameCity && isSameDepartment && o.availableCapacity > 0;
+              normalizeDepartment(o.department) ===
+                normalizeDepartment(targetDept),
+          );
+          if (!departmentMatch) return false;
+        }
+
+        return true;
+      });
+
+      candidates = rawCandidates.map((o) => {
+        const cityMatch = true;
+        const departmentMatch = true;
+        const isAtCapacity = o.isAtCapacity;
+        const isRecommended = !isAtCapacity;
+
+        let matchTier = isAtCapacity ? 5 : 1;
 
         const compatibilityWarnings = [];
-        if (!isSameCity)
-          compatibilityWarnings.push("Different City Assignment");
-        if (!isSameDepartment)
-          compatibilityWarnings.push("Department Mismatch");
-        if (o.availableCapacity <= 0)
-          compatibilityWarnings.push("Capacity Reached");
-
-        let recommendationReason = "Available capacity";
-        if (isSameCity && isSameDepartment) {
-          recommendationReason =
-            "Same city & department with available capacity";
-        } else if (isSameCity) {
-          recommendationReason = "Same city with available capacity";
-        } else if (isSameDepartment) {
-          recommendationReason = "Same department in another city";
-        }
+        if (isAtCapacity) compatibilityWarnings.push("Capacity Reached");
 
         return {
           ...o,
           role: args.officerType,
           performanceScore: o.efficiencyScore || 80,
-          isSameCity,
-          isSameDepartment,
+          cityMatch: true,
+          departmentMatch: true,
+          isSameCity: true,
+          isSameDepartment: true,
           isRecommended,
-          recommendationReason,
+          recommendationReason: isAtCapacity
+            ? "Capacity Reached"
+            : "Same city & department with available capacity",
           compatibilityWarnings,
+          isCurrentOfficer: false,
+          matchTier,
         };
       });
 
-      // Candidate priority sorting order
       candidates.sort((a, b) => {
-        const scoreA =
-          (a.isSameCity ? 100 : 0) +
-          (a.isSameDepartment ? 50 : 0) +
-          (a.availableCapacity > 0 ? 25 : 0);
-        const scoreB =
-          (b.isSameCity ? 100 : 0) +
-          (b.isSameDepartment ? 50 : 0) +
-          (b.availableCapacity > 0 ? 25 : 0);
-        return scoreB - scoreA || a.currentWorkload - b.currentWorkload;
+        if (a.matchTier !== b.matchTier) return a.matchTier - b.matchTier;
+        if (a.currentWorkload !== b.currentWorkload)
+          return a.currentWorkload - b.currentWorkload;
+        if (b.efficiencyScore !== a.efficiencyScore)
+          return b.efficiencyScore - a.efficiencyScore;
+        return b.rating - a.rating;
       });
     }
 
@@ -1212,6 +1316,7 @@ export const getAssignableOfficers = query({
             department: issue.department || issue.category,
           }
         : null,
+      currentOfficer,
       candidates,
       unitOfficers,
       fieldOfficers,
@@ -1247,6 +1352,25 @@ export const adminAssignIssue = mutation({
         .withIndex("by_user", (q) => q.eq("userId", args.officerUserId))
         .unique();
       if (!uo) throw new Error("Unit Officer profile not found");
+
+      if (uo.accountApproved === false) {
+        throw new Error("Selected Unit Officer account is not approved.");
+      }
+
+      if (!isOfficerCompatible({ issue, profile: uo })) {
+        throw new Error(
+          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+        );
+      }
+
+      const currentWorkload = Array.isArray(uo.activeIssueIds)
+        ? uo.activeIssueIds.length
+        : 0;
+      if (currentWorkload >= 50) {
+        throw new Error(
+          "Selected Unit Officer is currently at maximum workload capacity.",
+        );
+      }
 
       await ctx.db.patch(args.issueId, {
         assignedUnitOfficer: args.officerUserId,
@@ -1299,6 +1423,24 @@ export const adminAssignIssue = mutation({
         .withIndex("by_user", (q) => q.eq("userId", args.officerUserId))
         .unique();
       if (!fo) throw new Error("Field Officer profile not found");
+
+      if (fo.accountApproved === false) {
+        throw new Error("Selected Field Officer account is not approved.");
+      }
+
+      if (!isOfficerCompatible({ issue, profile: fo })) {
+        throw new Error(
+          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+        );
+      }
+
+      const currentWorkload = fo.currentActiveIssues ?? 0;
+      const maxCap = fo.maxIssueCapacity ?? 10;
+      if (currentWorkload >= maxCap) {
+        throw new Error(
+          "Selected Field Officer is currently at maximum workload capacity.",
+        );
+      }
 
       await ctx.db.patch(args.issueId, {
         assignedFieldOfficer: args.officerUserId,
@@ -1372,11 +1514,35 @@ export const adminReassignIssue = mutation({
 
     if (args.role === "unit_officer") {
       const oldOfficerUserId = issue.assignedUnitOfficer;
+      if (String(oldOfficerUserId || "") === String(args.newOfficerUserId)) {
+        throw new Error(
+          "The selected Unit Officer is already assigned to this issue.",
+        );
+      }
       const newUO = await ctx.db
         .query("unitOfficers")
         .withIndex("by_user", (q) => q.eq("userId", args.newOfficerUserId))
         .unique();
-      if (!newUO) throw new Error("New Unit Officer profile not found");
+      if (!newUO) throw new Error("Selected user is not a valid Unit Officer.");
+
+      if (newUO.accountApproved === false) {
+        throw new Error("Selected Unit Officer account is not approved.");
+      }
+
+      if (!isOfficerCompatible({ issue, profile: newUO })) {
+        throw new Error(
+          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+        );
+      }
+
+      const currentWorkload = Array.isArray(newUO.activeIssueIds)
+        ? newUO.activeIssueIds.length
+        : 0;
+      if (currentWorkload >= 50) {
+        throw new Error(
+          "Selected Unit Officer is currently at maximum workload capacity.",
+        );
+      }
 
       // Revoke old officer
       if (oldOfficerUserId) {
@@ -1405,9 +1571,34 @@ export const adminReassignIssue = mutation({
         }
       }
 
+      // Check if current Field Officer is still valid under issue department and city
+      let keepFieldOfficer = issue.assignedFieldOfficer;
+      if (issue.assignedFieldOfficer) {
+        const currentFoProfile = await ctx.db
+          .query("fieldOfficers")
+          .withIndex("by_user", (q) =>
+            q.eq("userId", issue.assignedFieldOfficer),
+          )
+          .unique();
+        if (
+          currentFoProfile &&
+          !isOfficerCompatible({ issue, profile: currentFoProfile })
+        ) {
+          keepFieldOfficer = null;
+          const assigned = (currentFoProfile.assignedIssueIds || []).filter(
+            (id) => String(id) !== String(args.issueId),
+          );
+          await ctx.db.patch(currentFoProfile._id, {
+            assignedIssueIds: assigned,
+            currentActiveIssues: Math.max(0, assigned.length),
+          });
+        }
+      }
+
       // Assign new officer
       await ctx.db.patch(args.issueId, {
         assignedUnitOfficer: args.newOfficerUserId,
+        assignedFieldOfficer: keepFieldOfficer,
       });
 
       const activeIssues = newUO.activeIssueIds || [];
@@ -1450,11 +1641,35 @@ export const adminReassignIssue = mutation({
     } else {
       // field_officer
       const oldOfficerUserId = issue.assignedFieldOfficer;
+      if (String(oldOfficerUserId || "") === String(args.newOfficerUserId)) {
+        throw new Error(
+          "The selected Field Officer is already assigned to this issue.",
+        );
+      }
       const newFO = await ctx.db
         .query("fieldOfficers")
         .withIndex("by_user", (q) => q.eq("userId", args.newOfficerUserId))
         .unique();
-      if (!newFO) throw new Error("New Field Officer profile not found");
+      if (!newFO)
+        throw new Error("Selected user is not a valid Field Officer.");
+
+      if (newFO.accountApproved === false) {
+        throw new Error("Selected Field Officer account is not approved.");
+      }
+
+      if (!isOfficerCompatible({ issue, profile: newFO })) {
+        throw new Error(
+          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+        );
+      }
+
+      const currentWorkload = newFO.currentActiveIssues ?? 0;
+      const maxCap = newFO.maxIssueCapacity ?? 10;
+      if (currentWorkload >= maxCap) {
+        throw new Error(
+          "Selected Field Officer is currently at maximum workload capacity.",
+        );
+      }
 
       // Revoke old officer
       if (oldOfficerUserId) {
@@ -2057,6 +2272,7 @@ export const adminEscalateIssue = mutation({
         resolved: false,
         adminReviewStatus: "pending",
         escalationCount: (issue.escalation?.escalationCount || 0) + 1,
+        prevIssueStatus: issue.status,
       },
     });
 

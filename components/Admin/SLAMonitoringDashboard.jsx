@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import {
   AlertTriangle,
   Clock,
+  Shield,
   Filter,
   Search,
   CheckCircle,
@@ -34,6 +35,26 @@ import {
 import { calculateSLAStatus, formatTimeRemaining } from "@/lib/slaConfig";
 import { AdminEscalationResolutionModal } from "./AdminEscalationResolutionModal";
 
+const ESCALATION_CATEGORIES = [
+  "all",
+  "sla_breach",
+  "resource_shortage",
+  "technical_complexity",
+  "public_safety_risk",
+  "legal_or_regulatory",
+  "citizen_escalation",
+  "repeat_failure",
+  "cross_department_dependency",
+  "budget_approval_required",
+  "emergency_response",
+  "officer_non_responsiveness",
+  "technical_dependency",
+  "third_party_dependency",
+  "environmental_risk",
+  "administrative_approval_pending",
+  "other",
+];
+
 // Helper functions
 
 function getEscalationPriorityColor(priority) {
@@ -49,24 +70,46 @@ function getEscalationPriorityColor(priority) {
   }
 }
 
-function getEscalationCategoryLabel(cat) {
-  const map = {
+function getEscalationCategoryLabel(category) {
+  const labels = {
+    sla_breach: "SLA Breach",
     resource_shortage: "Resource Shortage",
+    technical_complexity: "Technical Complexity",
+    public_safety_risk: "Public Safety Risk",
+    legal_or_regulatory: "Legal / Regulatory",
+    citizen_escalation: "Citizen Escalation",
+    repeat_failure: "Repeat Failure",
+    cross_department_dependency: "Cross-Department Dependency",
+    budget_approval_required: "Budget Approval Required",
+    emergency_response: "Emergency Response",
     officer_non_responsiveness: "Officer Non-Responsiveness",
     technical_dependency: "Technical Dependency",
-    third_party_dependency: "Third Party Dependency",
-    public_safety_risk: "Public Safety Risk",
+    third_party_dependency: "Third-Party Dependency",
     environmental_risk: "Environmental Risk",
-    citizen_escalation: "Citizen Escalation",
-    sla_breach: "SLA Breach",
     administrative_approval_pending: "Administrative Approval Pending",
     other: "Other",
   };
+
+  if (!category) {
+    return "Unknown";
+  }
+
   return (
-    map[cat ?? ""] ??
-    cat?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ??
-    "Unknown"
+    labels[category] ??
+    String(category)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
   );
+}
+
+function formatDepartmentLabel(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getIssueDelayHours(issue) {
@@ -75,17 +118,55 @@ function getIssueDelayHours(issue) {
   return sla.status === "breached" ? sla.hoursRemaining : 0;
 }
 
+function hasEscalationHistory(issue) {
+  return (
+    issue?.escalation?.hasHistory === true ||
+    Boolean(issue?.escalation_resolution_actions?.length) ||
+    Boolean(issue?.escalated_at)
+  );
+}
+
+function hasActiveEscalation(issue) {
+  return (
+    issue?.escalation?.isActive === true ||
+    (issue?.is_escalated === true && issue?.escalation_resolved !== true)
+  );
+}
+
+function isResolvedEscalation(issue) {
+  return (
+    issue?.escalation?.resolved === true || issue?.escalation_resolved === true
+  );
+}
+
+function getEscalationReviewStatus(issue) {
+  return String(
+    issue?.escalation?.status ?? issue?.escalation_admin_review_status ?? "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
 function getAdminReviewStatus(issue) {
-  if (!issue.is_escalated) return "N/A";
-  switch (issue.escalation_admin_review_status) {
+  if (!hasEscalationHistory(issue)) {
+    return "N/A";
+  }
+
+  const status = getEscalationReviewStatus(issue);
+
+  switch (status) {
+    case "pending":
+      return "Pending Review";
     case "reviewed":
       return "Reviewed";
     case "resolved":
       return "Resolved";
-    case "pending":
-      return "Pending Review";
+    case "rejected":
+      return "Rejected";
+    case "dismissed":
+      return "Dismissed";
     default:
-      return "Pending Review";
+      return "N/A";
   }
 }
 
@@ -113,531 +194,6 @@ function getSeverityColor(severity) {
     default:
       return "bg-slate-500 text-white";
   }
-}
-
-// Action modal
-
-function ActionModal({ issue, action, onClose, onActionConfirmed }) {
-  const adminUserId = "2"; // fallback local admin userId matching AdminDashboard context
-  const [loading, setLoading] = useState(false);
-  const [notes, setNotes] = useState("");
-  const [escalationCategory, setEscalationCategory] =
-    useState("resource_shortage");
-  const [escalationPriority, setEscalationPriority] = useState("medium");
-  const [newSlaDeadline, setNewSlaDeadline] = useState("");
-  const [selectedWardOfficer, setSelectedWardOfficer] = useState("");
-  const [selectedFieldOfficer, setSelectedFieldOfficer] = useState("");
-
-  const currentActions =
-    issue.escalation_resolution_actions?.filter(
-      (a) => a.performed_at >= (issue.escalated_at || 0),
-    ) || [];
-  const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation",
-  );
-  const hasResolutionAction = resolutionActions.length > 0;
-
-  const [resolutionType, setResolutionType] = useState("approve"); // approve or reject
-
-  const assignable = useQuery(api.admin.getAssignableOfficers);
-  const wardOfficers = assignable?.unitOfficers || [];
-  const fieldOfficers = assignable?.fieldOfficers || [];
-
-  const escalateMut = useMutation(api.escalation.escalateIssue);
-  const reviewMut = useMutation(api.escalation.reviewEscalation);
-  const extendSlaMut = useMutation(api.escalation.extendIssueSla);
-  const reassignMut = useMutation(api.escalation.reassignIssueOfficer);
-  const approveMut = useMutation(api.escalation.approveEscalation);
-  const rejectMut = useMutation(api.escalation.rejectEscalation);
-
-  useEffect(() => {
-    if (issue.sla_deadline) {
-      const deadline = new Date(issue.sla_deadline);
-      const formatted = deadline.toISOString().slice(0, 16);
-      setNewSlaDeadline(formatted);
-    }
-    const currentUoId =
-      issue.assigned_officer?.id ||
-      issue.assignedUnitOfficer ||
-      issue.ward_officer_id;
-    const currentFoId =
-      issue.field_officer?.id ||
-      issue.assignedFieldOfficer ||
-      issue.field_officer_id;
-    if (currentUoId) setSelectedWardOfficer(currentUoId);
-    if (currentFoId) setSelectedFieldOfficer(currentFoId);
-  }, [issue]);
-
-  const titles = {
-    escalate: issue.escalated_at ? "Re-escalate Issue" : "Escalate Issue",
-    review_escalation: "Review Escalation",
-    resolve_escalation: "Resolve Escalation",
-    extend_sla: "Extend SLA Deadline",
-    reassign: "Reassign Officer",
-    view_resolution: "View Resolution",
-  };
-
-  const icons = {
-    escalate: <ArrowUpCircle className="text-purple-500" size={24} />,
-    review_escalation: <Eye className="text-blue-500" size={24} />,
-    resolve_escalation: <CheckCircle className="text-emerald-500" size={24} />,
-    extend_sla: <Timer className="text-amber-500" size={24} />,
-    reassign: <Users className="text-cyan-500" size={24} />,
-    view_resolution: <Flag className="text-teal-500" size={24} />,
-  };
-
-  const sla = calculateSLAStatus(issue.sla_deadline);
-
-  const handleConfirm = async () => {
-    if (action === "view_resolution") {
-      onClose();
-      return;
-    }
-
-    if (action === "escalate" && !notes.trim()) {
-      alert("Please enter a reason for escalation");
-      return;
-    }
-    if (action === "resolve_escalation" && !notes.trim()) {
-      alert("Please enter notes/reason");
-      return;
-    }
-    if (action === "extend_sla") {
-      if (!newSlaDeadline) {
-        alert("Please select a new SLA deadline");
-        return;
-      }
-      if (!notes.trim()) {
-        alert("Please enter a reason for extension");
-        return;
-      }
-    }
-    if (action === "reassign") {
-      if (!selectedWardOfficer && !selectedFieldOfficer) {
-        alert("Please select at least one officer to reassign");
-        return;
-      }
-      if (!notes.trim()) {
-        alert("Please enter reassignment notes");
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      if (action === "escalate") {
-        await escalateMut({
-          issueId: issue.id,
-          escalationCategory,
-          escalationPriority,
-          escalationReason: notes,
-          adminUserId,
-        });
-      } else if (action === "review_escalation") {
-        await reviewMut({
-          issueId: issue.id,
-          reviewedBy: adminUserId,
-        });
-      } else if (action === "resolve_escalation") {
-        if (resolutionType === "approve") {
-          await approveMut({
-            issueId: issue.id,
-            notes,
-            adminId: adminUserId,
-          });
-        } else {
-          await rejectMut({
-            issueId: issue.id,
-            reason: notes,
-            adminId: adminUserId,
-          });
-        }
-      } else if (action === "extend_sla") {
-        await extendSlaMut({
-          issueId: issue.id,
-          newDeadline: new Date(newSlaDeadline).getTime(),
-          notes,
-          adminId: adminUserId,
-        });
-      } else if (action === "reassign") {
-        await reassignMut({
-          issueId: issue.id,
-          newUnitOfficerId: selectedWardOfficer || undefined,
-          newFieldOfficerId: selectedFieldOfficer || undefined,
-          notes,
-          adminId: adminUserId,
-        });
-      }
-
-      onActionConfirmed();
-      onClose();
-    } catch (e) {
-      console.error(e);
-      alert("Action failed: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center">
-              {icons[action]}
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-white">
-                {titles[action]}
-              </h3>
-              <p className="text-slate-400 text-xs font-medium">
-                {issue.ticket_id}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-colors"
-          >
-            <X size={16} className="text-white" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Issue Summary */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 space-y-2">
-            <p className="font-bold text-slate-900 dark:text-white text-sm">
-              {issue.title}
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className={`text-[11px] font-black px-2 py-0.5 rounded-lg ${getSeverityColor(issue.severity)}`}
-              >
-                {issue.severity?.toUpperCase()}
-              </span>
-              <span
-                className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${
-                  sla.status === "breached"
-                    ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
-                    : sla.status === "at_risk"
-                      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-                      : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
-                }`}
-              >
-                SLA: {sla.status.replace("_", " ").toUpperCase()}
-              </span>
-              {issue.is_escalated && (
-                <span className="text-[11px] font-black px-2 py-0.5 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                  ESCALATED
-                </span>
-              )}
-            </div>
-            {issue.is_escalated && (
-              <div className="pt-1 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                <div>
-                  Priority:{" "}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {issue.escalation_priority?.toUpperCase() ?? "—"}
-                  </span>
-                </div>
-                <div>
-                  Category:{" "}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {getEscalationCategoryLabel(issue.escalation_category)}
-                  </span>
-                </div>
-                <div>
-                  Escalated:{" "}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {formatDateTime(issue.escalated_at)}
-                  </span>
-                </div>
-                <div>
-                  Review Status:{" "}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {getAdminReviewStatus(issue)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Interactive Form Controls */}
-          {action === "escalate" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Escalation Category
-                </label>
-                <select
-                  value={escalationCategory}
-                  onChange={(e) => setEscalationCategory(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="resource_shortage">Resource Shortage</option>
-                  <option value="officer_non_responsiveness">
-                    Officer Non-Responsiveness
-                  </option>
-                  <option value="technical_dependency">
-                    Technical Dependency
-                  </option>
-                  <option value="third_party_dependency">
-                    Third Party Dependency
-                  </option>
-                  <option value="public_safety_risk">Public Safety Risk</option>
-                  <option value="environmental_risk">Environmental Risk</option>
-                  <option value="citizen_escalation">Citizen Escalation</option>
-                  <option value="sla_breach">SLA Breach</option>
-                  <option value="administrative_approval_pending">
-                    Administrative Approval Pending
-                  </option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Escalation Priority
-                </label>
-                <select
-                  value={escalationPriority}
-                  onChange={(e) => setEscalationPriority(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Reason for Escalation *
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Provide a detailed reason for escalating this issue..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          {action === "review_escalation" && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 rounded-xl p-4">
-              <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-                You are marking this escalation as reviewed. This will update
-                the admin review status and notify the assigned officers that
-                the escalation is under active consideration.
-              </p>
-            </div>
-          )}
-
-          {action === "resolve_escalation" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Resolution Action
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={resolutionType === "approve"}
-                      onChange={() => setResolutionType("approve")}
-                      className="text-emerald-500 focus:ring-emerald-500"
-                    />
-                    Approve & Resolve
-                  </label>
-                  {!hasResolutionAction && (
-                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={resolutionType === "reject"}
-                        onChange={() => setResolutionType("reject")}
-                        className="text-red-500 focus:ring-red-500"
-                      />
-                      Reject Escalation Response
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              {resolutionType === "reject" && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-semibold mb-3">
-                  This action does not reject or close the civic issue. The
-                  issue will keep its current operational status, and the
-                  escalation will remain open for further corrective action.
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {resolutionType === "approve"
-                    ? "Resolution Notes *"
-                    : "Reason for Rejecting the Escalation Response *"}
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder={
-                    resolutionType === "approve"
-                      ? "Provide details on how the escalation was resolved..."
-                      : "Explain why the submitted corrective action or escalation response is insufficient and what further action is required."
-                  }
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          {action === "extend_sla" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  New SLA Deadline *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={newSlaDeadline}
-                  onChange={(e) => setNewSlaDeadline(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Reason for Extension *
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Provide notes/reason for extending the SLA deadline..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          {action === "reassign" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Ward Officer (Unit Verification)
-                </label>
-                <select
-                  value={selectedWardOfficer}
-                  onChange={(e) => setSelectedWardOfficer(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  <option value="">
-                    -- No Change / Select Ward Officer --
-                  </option>
-                  {wardOfficers.map((o) => (
-                    <option key={o.userId} value={o.userId}>
-                      {o.fullName} {o.department ? `(${o.department})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Field Officer (Issue Resolution)
-                </label>
-                <select
-                  value={selectedFieldOfficer}
-                  onChange={(e) => setSelectedFieldOfficer(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  <option value="">
-                    -- No Change / Select Field Officer --
-                  </option>
-                  {fieldOfficers.map((o) => (
-                    <option key={o.userId} value={o.userId}>
-                      {o.fullName} {o.department ? `(${o.department})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Reassignment Notes *
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Provide notes/reason for this officer reassignment..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-950 dark:text-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          {action === "view_resolution" && (
-            <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/40 rounded-xl p-4 space-y-2">
-              <div>
-                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">
-                  Resolution Date:
-                </span>
-                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">
-                  {formatDateTime(issue.escalation_resolved_at)}
-                </p>
-              </div>
-              <div>
-                <span className="text-xs font-bold text-teal-800 dark:text-teal-400">
-                  Resolution Notes:
-                </span>
-                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">
-                  {issue.escalation_resolution_notes ||
-                    "No resolution notes provided."}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-            >
-              Close
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={loading || action === "view_resolution"}
-              className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-slate-700 to-slate-900 text-white font-bold hover:from-slate-600 hover:to-slate-800 transition-all shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Processing...
-                </>
-              ) : action === "view_resolution" ? (
-                "View Only"
-              ) : (
-                "Confirm Action"
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // Escalation Analytics
@@ -1283,11 +839,18 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 Extend SLA
               </ActionBtn>
               <ActionBtn
-                onClick={() => onAction(issue, "reassign")}
+                onClick={() => onAction(issue, "reassign_unit_officer")}
                 variant="cyan"
-                icon={<Users size={12} />}
+                icon={<Shield size={12} />}
               >
-                Reassign
+                Reassign UO
+              </ActionBtn>
+              <ActionBtn
+                onClick={() => onAction(issue, "reassign_field_officer")}
+                variant="emerald"
+                icon={<Zap size={12} />}
+              >
+                Reassign FO
               </ActionBtn>
             </>
           )}
@@ -1308,11 +871,18 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
                 Extend SLA
               </ActionBtn>
               <ActionBtn
-                onClick={() => onAction(issue, "reassign")}
+                onClick={() => onAction(issue, "reassign_unit_officer")}
                 variant="cyan"
-                icon={<Users size={12} />}
+                icon={<Shield size={12} />}
               >
-                Reassign
+                Reassign UO
+              </ActionBtn>
+              <ActionBtn
+                onClick={() => onAction(issue, "reassign_field_officer")}
+                variant="emerald"
+                icon={<Zap size={12} />}
+              >
+                Reassign FO
               </ActionBtn>
             </>
           )}
@@ -1327,7 +897,7 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               </ActionBtn>
 
               <ActionBtn
-                onClick={() => onAction(issue, "resolve_escalation")}
+                onClick={() => onAction(issue, "approve")}
                 variant="emerald"
                 icon={<CheckCircle size={12} />}
               >
@@ -1335,13 +905,22 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
               </ActionBtn>
 
               {canTakeSlaAction && (
-                <ActionBtn
-                  onClick={() => onAction(issue, "reassign")}
-                  variant="cyan"
-                  icon={<Users size={12} />}
-                >
-                  Reassign
-                </ActionBtn>
+                <>
+                  <ActionBtn
+                    onClick={() => onAction(issue, "reassign_unit_officer")}
+                    variant="cyan"
+                    icon={<Shield size={12} />}
+                  >
+                    Reassign UO
+                  </ActionBtn>
+                  <ActionBtn
+                    onClick={() => onAction(issue, "reassign_field_officer")}
+                    variant="emerald"
+                    icon={<Zap size={12} />}
+                  >
+                    Reassign FO
+                  </ActionBtn>
+                </>
               )}
 
               {canTakeSlaAction && (
@@ -1484,11 +1063,20 @@ function EmptyState({ icon, title, description }) {
 
 // KPI card
 
-function KpiCard({ icon, label, value, sublabel, gradient, border, onClick }) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  sublabel,
+  gradient,
+  border,
+  onClick,
+  active,
+}) {
   return (
     <div
       onClick={onClick}
-      className={`group relative overflow-hidden bg-white dark:bg-slate-800 rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 border-2 ${border} ${onClick ? "cursor-pointer hover:-translate-y-1" : ""} p-5`}
+      className={`group relative overflow-hidden bg-white dark:bg-slate-800 rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 border-2 ${active ? "border-purple-500 ring-2 ring-purple-500/20" : border} ${onClick ? "cursor-pointer hover:-translate-y-1" : ""} p-5`}
     >
       <div
         className={`absolute -top-6 -right-6 w-24 h-24 bg-gradient-to-br ${gradient} opacity-10 group-hover:opacity-20 rounded-full transition-opacity duration-300`}
@@ -1519,23 +1107,36 @@ function KpiCard({ icon, label, value, sublabel, gradient, border, onClick }) {
 
 // Main component
 
-export default function SLAMonitoringDashboard({ onViewIssue }) {
+export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [slaFilter, setSlaFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortBy, setSortBy] = useState("deadline");
-  const [escalatedFilter, setEscalatedFilter] = useState("all");
+  const [escalationStatusFilter, setEscalationStatusFilter] = useState("all");
   const [escalationPriorityFilter, setEscalationPriorityFilter] =
     useState("all");
   const [escalationCategoryFilter, setEscalationCategoryFilter] =
     useState("all");
-  const [selectedEscalation, setSelectedEscalation] = useState(null);
-  const [actionModal, setActionModal] = useState(null);
+  const [resolutionModalState, setResolutionModalState] = useState(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   const queryIssues = useQuery(api.escalation.getSlaMonitoringIssues);
+
+  const departmentOptions = useMemo(() => {
+    const values = new Set();
+    const source = Array.isArray(issues) ? issues : [];
+
+    for (const issue of source) {
+      const department = issue?.department ?? issue?.category ?? null;
+      if (typeof department === "string" && department.trim()) {
+        values.add(department.trim());
+      }
+    }
+
+    return ["all", ...Array.from(values).sort((a, b) => a.localeCompare(b))];
+  }, [issues]);
 
   useEffect(() => {
     if (queryIssues !== undefined) {
@@ -1543,10 +1144,6 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
       setLoading(false);
     }
   }, [queryIssues]);
-
-  const fetchIssues = () => {
-    // Convex query updates automatically on mutation completion.
-  };
 
   const stats = useMemo(() => {
     const onTrack = issues.filter(
@@ -1558,20 +1155,25 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
     const breached = issues.filter(
       (i) => calculateSLAStatus(i.sla_deadline).status === "breached",
     ).length;
-    const escalated = issues.filter((i) => i.is_escalated === true).length;
+    const escalated = issues.filter((i) => hasActiveEscalation(i)).length;
     const criticalEsc = issues.filter(
-      (i) => i.is_escalated && i.escalation_priority === "critical",
+      (i) =>
+        hasActiveEscalation(i) &&
+        (i.escalation?.priority === "critical" ||
+          i.escalation_priority === "critical"),
     ).length;
     const pendingReview = issues.filter(
       (i) =>
-        i.is_escalated &&
-        (i.escalation_admin_review_status === "pending" ||
-          !i.escalation_admin_review_status),
+        hasActiveEscalation(i) &&
+        (getEscalationReviewStatus(i) === "pending" ||
+          !getEscalationReviewStatus(i)),
     ).length;
     const resolvedEsc = issues.filter(
-      (i) => !!i.escalated_at && i.escalation_resolved === true,
+      (i) => hasEscalationHistory(i) && isResolvedEscalation(i),
     ).length;
-    const repeated = issues.filter((i) => (i.escalation_count ?? 0) > 1).length;
+    const repeated = issues.filter(
+      (i) => (i.escalation?.escalationCount ?? i.escalation_count ?? 0) > 1,
+    ).length;
     const delayedIssues = issues.filter((i) => getIssueDelayHours(i) > 0);
     const avgDelay = delayedIssues.length
       ? Math.round(
@@ -1593,22 +1195,17 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
     };
   }, [issues]);
 
-  const categories = useMemo(
-    () => ["all", ...Array.from(new Set(issues.map((i) => i.category)))],
-    [issues],
-  );
-
   const filteredIssues = useMemo(() => {
-    let filtered = [...issues];
+    let filtered = Array.isArray(issues) ? [...issues] : [];
 
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
       filtered = filtered.filter(
         (i) =>
-          i.title.toLowerCase().includes(q) ||
-          i.ticket_id.toLowerCase().includes(q) ||
-          i.category.toLowerCase().includes(q) ||
-          (i.location ?? "").toLowerCase().includes(q),
+          (i.title || "").toLowerCase().includes(q) ||
+          (i.ticket_id || i.code || "").toLowerCase().includes(q) ||
+          (i.category || "").toLowerCase().includes(q) ||
+          (i.location || i.address || "").toLowerCase().includes(q),
       );
     }
 
@@ -1619,35 +1216,62 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
     }
 
     if (categoryFilter !== "all") {
-      filtered = filtered.filter((i) => i.category === categoryFilter);
+      filtered = filtered.filter((i) => {
+        const dept = String(i.department ?? i.category ?? "")
+          .trim()
+          .toLowerCase();
+        return dept === String(categoryFilter).trim().toLowerCase();
+      });
     }
 
-    if (escalatedFilter === "escalated") {
-      filtered = filtered.filter((i) => i.is_escalated === true);
-    } else if (escalatedFilter === "normal") {
-      filtered = filtered.filter((i) => !i.is_escalated);
-    } else if (escalatedFilter === "pending_review") {
+    if (
+      escalationStatusFilter === "active" ||
+      escalationStatusFilter === "escalated"
+    ) {
+      filtered = filtered.filter((issue) => hasActiveEscalation(issue));
+    } else if (
+      escalationStatusFilter === "normal" ||
+      escalationStatusFilter === "not_escalated"
+    ) {
+      filtered = filtered.filter((issue) => !hasActiveEscalation(issue));
+    } else if (
+      escalationStatusFilter === "pending" ||
+      escalationStatusFilter === "pending_review"
+    ) {
       filtered = filtered.filter(
-        (i) =>
-          i.is_escalated &&
-          (i.escalation_admin_review_status === "pending" ||
-            !i.escalation_admin_review_status),
+        (issue) =>
+          hasActiveEscalation(issue) &&
+          (getEscalationReviewStatus(issue) === "pending" ||
+            !getEscalationReviewStatus(issue)),
       );
-    } else if (escalatedFilter === "escalation_resolved") {
+    } else if (escalationStatusFilter === "reviewed") {
       filtered = filtered.filter(
-        (i) => !!i.escalated_at && i.escalation_resolved === true,
+        (issue) =>
+          hasActiveEscalation(issue) &&
+          getEscalationReviewStatus(issue) === "reviewed",
+      );
+    } else if (
+      escalationStatusFilter === "resolved" ||
+      escalationStatusFilter === "escalation_resolved"
+    ) {
+      filtered = filtered.filter(
+        (issue) => hasEscalationHistory(issue) && isResolvedEscalation(issue),
       );
     }
 
     if (escalationPriorityFilter !== "all") {
       filtered = filtered.filter(
-        (i) => i.escalation_priority === escalationPriorityFilter,
+        (i) =>
+          i.escalation?.priority === escalationPriorityFilter ||
+          i.escalation_priority === escalationPriorityFilter,
       );
     }
 
     if (escalationCategoryFilter !== "all") {
       filtered = filtered.filter(
-        (i) => i.escalation_category === escalationCategoryFilter,
+        (i) =>
+          i.escalation?.category === escalationCategoryFilter ||
+          i.escalation_category === escalationCategoryFilter,
       );
     }
 
@@ -1668,15 +1292,19 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
           return getIssueDelayHours(b) - getIssueDelayHours(a);
         case "escalation_priority": {
           const p = { critical: 0, high: 1, medium: 2 };
-          return (
-            (p[a.escalation_priority] ?? 3) - (p[b.escalation_priority] ?? 3)
-          );
+          const prioA = a.escalation?.priority || a.escalation_priority;
+          const prioB = b.escalation?.priority || b.escalation_priority;
+          return (p[prioA] ?? 3) - (p[prioB] ?? 3);
         }
         case "escalation_count":
-          return (b.escalation_count ?? 0) - (a.escalation_count ?? 0);
+          return (
+            (b.escalation?.escalationCount ?? b.escalation_count ?? 0) -
+            (a.escalation?.escalationCount ?? a.escalation_count ?? 0)
+          );
         case "newest":
           return (
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            new Date(b.created_at || b.createdAt).getTime() -
+            new Date(a.created_at || a.createdAt).getTime()
           );
         default:
           return 0;
@@ -1689,76 +1317,19 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
     searchTerm,
     slaFilter,
     categoryFilter,
-    escalatedFilter,
+    escalationStatusFilter,
     escalationPriorityFilter,
     escalationCategoryFilter,
     sortBy,
   ]);
 
-  // Quick-filter handlers for alert banner buttons
-  const handleShowBreached = () => {
-    setSlaFilter("breached");
-    setEscalatedFilter("all");
+  // Action modal opener for all actions
+  const openIssueAction = (issue, initialAction = null) => {
+    setResolutionModalState({
+      issue,
+      initialAction,
+    });
   };
-  const handleShowEscalated = () => {
-    setEscalatedFilter("escalated");
-    setSlaFilter("all");
-  };
-  const handleShowCritical = () => {
-    setEscalationPriorityFilter("critical");
-    setEscalatedFilter("escalated");
-  };
-
-  // Placeholder action handlers
-  const handleEscalate = (i) =>
-    setActionModal({ issue: i, action: "escalate" });
-  const handleReviewEscalation = (i) =>
-    setActionModal({ issue: i, action: "review_escalation" });
-  const handleResolveEscalation = (i) =>
-    setActionModal({ issue: i, action: "resolve_escalation" });
-  const handleExtendSLA = (i) =>
-    setActionModal({ issue: i, action: "extend_sla" });
-  const handleReassignOfficer = (i) =>
-    setActionModal({ issue: i, action: "reassign" });
-  const handleViewResolution = (i) =>
-    setActionModal({ issue: i, action: "view_resolution" });
-
-  const handleCardAction = (issue, action) => {
-    switch (action) {
-      case "escalate":
-        handleEscalate(issue);
-        break;
-      case "review_escalation":
-        handleReviewEscalation(issue);
-        break;
-      case "resolve_escalation":
-        handleResolveEscalation(issue);
-        break;
-      case "extend_sla":
-        handleExtendSLA(issue);
-        break;
-      case "reassign":
-        handleReassignOfficer(issue);
-        break;
-      case "view_resolution":
-        handleViewResolution(issue);
-        break;
-    }
-  };
-
-  const escalationCategories = [
-    "all",
-    "resource_shortage",
-    "officer_non_responsiveness",
-    "technical_dependency",
-    "third_party_dependency",
-    "public_safety_risk",
-    "environmental_risk",
-    "citizen_escalation",
-    "sla_breach",
-    "administrative_approval_pending",
-    "other",
-  ];
 
   return (
     <div className="space-y-7">
@@ -1819,42 +1390,6 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                {stats.breached > 0 && (
-                  <button
-                    onClick={handleShowBreached}
-                    className="flex items-center gap-2 bg-white text-red-700 font-black text-xs px-4 py-2.5 rounded-2xl hover:bg-red-50 transition-colors shadow-lg"
-                  >
-                    <XCircle size={13} />
-                    Show Breached
-                  </button>
-                )}
-                {stats.escalated > 0 && (
-                  <button
-                    onClick={handleShowEscalated}
-                    className="flex items-center gap-2 bg-purple-700 text-white font-black text-xs px-4 py-2.5 rounded-2xl hover:bg-purple-600 transition-colors shadow-lg border border-purple-500"
-                  >
-                    <ArrowUpCircle size={13} />
-                    Show Escalated
-                  </button>
-                )}
-                {stats.criticalEsc > 0 && (
-                  <button
-                    onClick={handleShowCritical}
-                    className="flex items-center gap-2 bg-orange-500 text-white font-black text-xs px-4 py-2.5 rounded-2xl hover:bg-orange-400 transition-colors shadow-lg"
-                  >
-                    <ShieldAlert size={13} />
-                    Show Critical
-                  </button>
-                )}
-                <button
-                  onClick={fetchIssues}
-                  className="flex items-center gap-2 bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-2xl hover:bg-white/30 transition-colors"
-                >
-                  <RefreshCw size={13} />
-                  Refresh
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1876,13 +1411,19 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
               </p>
             </div>
           </div>
-          <button
-            onClick={fetchIssues}
-            className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-2.5 hover:shadow-md transition-all"
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {loading ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <Activity size={14} className="text-emerald-500" />
+                <span>Live Convex Data</span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -1893,6 +1434,20 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="All open issues"
             gradient="from-blue-500 to-cyan-600"
             border="border-blue-200 dark:border-blue-800/60"
+            onClick={() => {
+              setSearchTerm("");
+              setSlaFilter("all");
+              setCategoryFilter("all");
+              setEscalationStatusFilter("all");
+              setEscalationPriorityFilter("all");
+              setEscalationCategoryFilter("all");
+            }}
+            active={
+              slaFilter === "all" &&
+              escalationStatusFilter === "all" &&
+              categoryFilter === "all" &&
+              escalationPriorityFilter === "all"
+            }
           />
           <KpiCard
             icon={<CheckCircle size={20} />}
@@ -1901,7 +1456,11 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Within deadline"
             gradient="from-emerald-500 to-teal-600"
             border="border-emerald-200 dark:border-emerald-800/60"
-            onClick={() => setSlaFilter("on_track")}
+            onClick={() => {
+              setSlaFilter("on_track");
+              setEscalationStatusFilter("all");
+            }}
+            active={slaFilter === "on_track"}
           />
           <KpiCard
             icon={<AlertCircle size={20} />}
@@ -1910,7 +1469,11 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Approaching deadline"
             gradient="from-amber-500 to-orange-500"
             border="border-amber-200 dark:border-amber-800/60"
-            onClick={() => setSlaFilter("at_risk")}
+            onClick={() => {
+              setSlaFilter("at_risk");
+              setEscalationStatusFilter("all");
+            }}
+            active={slaFilter === "at_risk"}
           />
           <KpiCard
             icon={<XCircle size={20} />}
@@ -1919,7 +1482,11 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Deadline exceeded"
             gradient="from-red-500 to-rose-600"
             border="border-red-200 dark:border-red-800/60"
-            onClick={handleShowBreached}
+            onClick={() => {
+              setSlaFilter("breached");
+              setEscalationStatusFilter("all");
+            }}
+            active={slaFilter === "breached"}
           />
           <KpiCard
             icon={<ArrowUpCircle size={20} />}
@@ -1928,7 +1495,11 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Admin action needed"
             gradient="from-purple-500 to-indigo-600"
             border="border-purple-200 dark:border-purple-800/60"
-            onClick={handleShowEscalated}
+            onClick={() => {
+              setEscalationStatusFilter("active");
+              setSlaFilter("all");
+            }}
+            active={escalationStatusFilter === "active"}
           />
         </div>
 
@@ -1940,7 +1511,14 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Priority: Critical"
             gradient="from-red-600 to-orange-600"
             border="border-red-300 dark:border-red-700/60"
-            onClick={handleShowCritical}
+            onClick={() => {
+              setEscalationPriorityFilter("critical");
+              setEscalationStatusFilter("active");
+            }}
+            active={
+              escalationPriorityFilter === "critical" &&
+              escalationStatusFilter === "active"
+            }
           />
           <KpiCard
             icon={<Eye size={20} />}
@@ -1949,7 +1527,8 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Awaiting review"
             gradient="from-violet-500 to-purple-600"
             border="border-violet-200 dark:border-violet-800/60"
-            onClick={() => setEscalatedFilter("pending_review")}
+            onClick={() => setEscalationStatusFilter("pending")}
+            active={escalationStatusFilter === "pending"}
           />
           <KpiCard
             icon={<Flag size={20} />}
@@ -1958,7 +1537,8 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
             sublabel="Successfully closed"
             gradient="from-teal-500 to-cyan-600"
             border="border-teal-200 dark:border-teal-800/60"
-            onClick={() => setEscalatedFilter("escalation_resolved")}
+            onClick={() => setEscalationStatusFilter("resolved")}
+            active={escalationStatusFilter === "resolved"}
           />
           <KpiCard
             icon={<Timer size={20} />}
@@ -1989,7 +1569,7 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
           {(searchTerm ||
             slaFilter !== "all" ||
             categoryFilter !== "all" ||
-            escalatedFilter !== "all" ||
+            escalationStatusFilter !== "all" ||
             escalationPriorityFilter !== "all" ||
             escalationCategoryFilter !== "all") && (
             <button
@@ -1997,7 +1577,7 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
                 setSearchTerm("");
                 setSlaFilter("all");
                 setCategoryFilter("all");
-                setEscalatedFilter("all");
+                setEscalationStatusFilter("all");
                 setEscalationPriorityFilter("all");
                 setEscalationCategoryFilter("all");
               }}
@@ -2031,15 +1611,16 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
               Escalation Status
             </label>
             <select
-              value={escalatedFilter}
-              onChange={(e) => setEscalatedFilter(e.target.value)}
+              value={escalationStatusFilter}
+              onChange={(e) => setEscalationStatusFilter(e.target.value)}
               className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
             >
-              <option value="all">All</option>
+              <option value="all">All Escalation States</option>
               <option value="normal">Not Escalated</option>
-              <option value="escalated">Escalated</option>
-              <option value="pending_review">Pending Review</option>
-              <option value="escalation_resolved">Escalation Resolved</option>
+              <option value="active">Active Escalations</option>
+              <option value="pending">Pending Review</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="resolved">Resolved Escalations</option>
             </select>
           </div>
 
@@ -2068,7 +1649,7 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
               onChange={(e) => setEscalationCategoryFilter(e.target.value)}
               className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
             >
-              {escalationCategories.map((c) => (
+              {ESCALATION_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {c === "all"
                     ? "All Categories"
@@ -2103,9 +1684,9 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c === "all" ? "All Departments" : c}
+              {departmentOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d === "all" ? "All Departments" : formatDepartmentLabel(d)}
                 </option>
               ))}
             </select>
@@ -2194,7 +1775,8 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
                 title="No SLA Breaches"
                 description="All active issues are within their SLA deadlines. Great operational performance."
               />
-            ) : escalatedFilter === "escalated" ? (
+            ) : escalationStatusFilter === "active" ||
+              escalationStatusFilter === "escalated" ? (
               <EmptyState
                 icon={
                   <ShieldAlert
@@ -2224,9 +1806,9 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
               <IssueCard
                 key={issue.id}
                 issue={issue}
-                onAction={handleCardAction}
+                onAction={(i, act) => openIssueAction(i, act)}
                 onViewIssue={onViewIssue}
-                onOpenEscalation={(i) => setSelectedEscalation(i)}
+                onOpenEscalation={(i) => openIssueAction(i, null)}
               />
             ))}
           </div>
@@ -2234,23 +1816,15 @@ export default function SLAMonitoringDashboard({ onViewIssue }) {
       </div>
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
-      {selectedEscalation && (
+      {resolutionModalState && (
         <AdminEscalationResolutionModal
-          issue={selectedEscalation}
-          onClose={() => setSelectedEscalation(null)}
+          issue={resolutionModalState.issue}
+          initialAction={resolutionModalState.initialAction}
+          adminUserId={adminUserId}
+          onClose={() => setResolutionModalState(null)}
           onResolved={() => {
-            setSelectedEscalation(null);
-            fetchIssues();
+            // Live Convex queries automatically update reactive state.
           }}
-        />
-      )}
-
-      {actionModal && (
-        <ActionModal
-          issue={actionModal.issue}
-          action={actionModal.action}
-          onClose={() => setActionModal(null)}
-          onActionConfirmed={fetchIssues}
         />
       )}
     </div>

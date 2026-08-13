@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   X,
   Clock,
@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Calendar,
   User,
   Sparkles,
   Zap,
@@ -17,12 +16,24 @@ import {
   Tag,
   MapPin,
   Loader2,
-  Info,
   Building2,
   Activity,
+  Plus,
+  Search,
+  Filter,
+  Check,
+  Flame,
+  ArrowRight,
+  TrendingUp,
+  Star,
+  Layers,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import {
+  ISSUE_CATEGORIES,
+  ISSUE_SUBCATEGORIES,
+} from "@/lib/issueClassificationConfig";
 
 const ESCALATION_ACTION_LABELS = {
   escalate: "Issue Escalated",
@@ -36,12 +47,10 @@ const ESCALATION_ACTION_LABELS = {
   change_category: "Issue Classification Changed",
   update_priority: "Issue Priority Updated",
   request_corrective_action: "Corrective Action Requested",
-  reject_escalation: "Escalation Rejected",
-  reject_escalation_response: "Escalation Response Rejected",
-  approve_escalation: "Escalation Approved",
+  reject_escalation: "Escalation Response Rejected",
+  approve_escalation: "Escalation Approved & Resolved",
   resolve_escalation: "Escalation Resolved",
   dismiss_escalation: "Escalation Dismissed",
-  send_message: "Administrative Message Sent",
 };
 
 function formatTimelineAction(value) {
@@ -136,17 +145,431 @@ function formatHistoryValue(value) {
   return String(value);
 }
 
-export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
-  const adminUserId = "2"; // fallback local admin userId matching AdminDashboard context
+export function AdminEscalationResolutionModal({
+  issue,
+  adminUserId,
+  initialAction = null,
+  onClose,
+  onResolved,
+}) {
   const [loading, setLoading] = useState(false);
   const [modalError, setModalError] = useState("");
+  const [modalSuccess, setModalSuccess] = useState("");
 
   const issueId = issue?.id || issue?._id;
 
-  // Incompatibility prompt states for System Admin
-  const [crossCityPrompt, setCrossCityPrompt] = useState(null);
-  const [deptMismatchPrompt, setDeptMismatchPrompt] = useState(null);
+  // Existing SLA state validation
+  const existingSlaDeadline =
+    issue?.sla?.deadline ?? issue?.sla_deadline ?? issue?.slaDeadline ?? null;
+  const existingSlaTimestamp = existingSlaDeadline
+    ? typeof existingSlaDeadline === "number"
+      ? existingSlaDeadline
+      : new Date(existingSlaDeadline).getTime()
+    : null;
+  const hasExistingSlaDeadline =
+    existingSlaTimestamp !== null && Number.isFinite(existingSlaTimestamp);
 
+  // Active escalation state
+  const isEscalationActive =
+    issue?.escalation?.isActive === true ||
+    issue?.escalatedToAdmin === true ||
+    issue?.is_escalated === true;
+
+  // Action options definition
+  const actionOptions = useMemo(() => {
+    return [
+      {
+        id: "extend_sla",
+        label: "Extend SLA",
+        category: "corrective",
+        icon: Clock,
+        disabled: !hasExistingSlaDeadline,
+        disabledReason:
+          "No SLA deadline has been assigned to this issue. An SLA must exist before System Admin can extend it.",
+      },
+      {
+        id: "reassign_unit_officer",
+        label: "Reassign Unit Officer",
+        category: "corrective",
+        icon: Shield,
+        disabled: false,
+      },
+      {
+        id: "reassign_field_officer",
+        label: "Reassign Field Officer",
+        category: "corrective",
+        icon: Zap,
+        disabled: false,
+      },
+      {
+        id: "change_classification",
+        label: "Change Classification",
+        category: "corrective",
+        icon: Tag,
+        disabled: false,
+      },
+      {
+        id: "update_priority",
+        label: "Update Priority",
+        category: "corrective",
+        icon: Flame,
+        disabled: false,
+      },
+      {
+        id: "approve",
+        label: "Approve Escalation",
+        category: "decision",
+        icon: CheckCircle,
+        disabled: !isEscalationActive,
+        disabledReason:
+          "This issue does not currently have an active escalation.",
+      },
+      {
+        id: "reject",
+        label: "Reject Escalation",
+        category: "decision",
+        icon: XCircle,
+        disabled: !isEscalationActive,
+        disabledReason:
+          "This issue does not currently have an active escalation.",
+      },
+    ];
+  }, [hasExistingSlaDeadline, isEscalationActive]);
+
+  // Pick first enabled action or initialAction
+  const getDefaultAction = () => {
+    if (
+      initialAction &&
+      actionOptions.some(
+        (action) => action.id === initialAction && !action.disabled,
+      )
+    ) {
+      return initialAction;
+    }
+    const firstEnabled = actionOptions.find((action) => !action.disabled);
+    return firstEnabled?.id ?? "reassign_unit_officer";
+  };
+  const [actionType, setActionType] = useState(getDefaultAction);
+
+  useEffect(() => {
+    if (
+      initialAction &&
+      actionOptions.some(
+        (action) => action.id === initialAction && !action.disabled,
+      )
+    ) {
+      setActionType(initialAction);
+      return;
+    }
+
+    const firstEnabled = actionOptions.find((action) => !action.disabled);
+    setActionType(firstEnabled?.id ?? "reassign_unit_officer");
+  }, [issueId, initialAction, actionOptions]);
+
+  // Incompatible officer confirmation state
+  const [incompatibleOfficerPrompt, setIncompatibleOfficerPrompt] =
+    useState(null);
+
+  // Dynamic form state
+  const [newSlaDeadline, setNewSlaDeadline] = useState("");
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [officerSearch, setOfficerSearch] = useState("");
+  const [officerFilter, setOfficerFilter] = useState("all");
+
+  // Classification state
+  const [selectedCategory, setSelectedCategory] = useState(
+    issue?.category || "road",
+  );
+  const [selectedSubcategories, setSelectedSubcategories] = useState(
+    Array.isArray(issue?.subcategory)
+      ? issue.subcategory
+      : issue?.subcategory
+        ? [issue.subcategory]
+        : [],
+  );
+  const [customSubcategoryInput, setCustomSubcategoryInput] = useState("");
+
+  // Priority state
+  const [selectedPriority, setSelectedPriority] = useState(
+    issue?.priority || issue?.severity || "medium",
+  );
+
+  // Common notes / reason
+  const [resolutionNotes, setResolutionNotes] = useState("");
+
+  // Candidate query for Unit / Field Officer
+  const isUnitReassignment = actionType === "reassign_unit_officer";
+  const isFieldReassignment = actionType === "reassign_field_officer";
+  const isReassignmentActive = isUnitReassignment || isFieldReassignment;
+
+  const candidateQuery = useQuery(
+    api.admin.getAssignableOfficers,
+    issueId && isReassignmentActive
+      ? {
+          issueId,
+          officerType: isUnitReassignment ? "unit_officer" : "field_officer",
+        }
+      : "skip",
+  );
+
+  const rawCandidates = candidateQuery?.candidates ?? [];
+  const currentAssignedOfficer = candidateQuery?.currentOfficer ?? null;
+  const isCandidatesLoading =
+    isReassignmentActive && candidateQuery === undefined;
+
+  // Filter candidates client-side
+  const filteredCandidates = useMemo(() => {
+    let list = [...rawCandidates];
+
+    if (officerSearch.trim()) {
+      const q = officerSearch.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.department.toLowerCase().includes(q) ||
+          c.city.toLowerCase().includes(q),
+      );
+    }
+
+    if (officerFilter === "recommended") {
+      list = list.filter((c) => c.isRecommended);
+    } else if (officerFilter === "available") {
+      list = list.filter((c) => !c.isAtCapacity);
+    }
+
+    return list;
+  }, [rawCandidates, officerSearch, officerFilter]);
+
+  // Reset form states on action change or issue change
+  useEffect(() => {
+    setSelectedCandidate(null);
+    setIncompatibleOfficerPrompt(null);
+    setModalError("");
+    setModalSuccess("");
+    setOfficerSearch("");
+    setOfficerFilter("all");
+  }, [actionType, issueId]);
+
+  // Mutations
+  const extendSla = useMutation(api.escalation.extendIssueSla);
+  const reassignOfficer = useMutation(api.escalation.reassignIssueOfficer);
+  const changeClassification = useMutation(
+    api.escalation.changeIssueClassification,
+  );
+  const updatePriority = useMutation(api.escalation.updateIssuePriority);
+  const approveEscalation = useMutation(api.escalation.approveEscalation);
+  const rejectEscalation = useMutation(api.escalation.rejectEscalation);
+
+  // Subcategory management handlers
+  const handleToggleSubcategory = (subName) => {
+    setSelectedSubcategories((prev) =>
+      prev.includes(subName)
+        ? prev.filter((s) => s !== subName)
+        : [...prev, subName],
+    );
+  };
+
+  const handleAddCustomSubcategory = () => {
+    const trimmed = customSubcategoryInput.trim();
+    if (!trimmed) return;
+    if (
+      !selectedSubcategories.some(
+        (s) => s.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
+      setSelectedSubcategories((prev) => [...prev, trimmed]);
+    }
+    setCustomSubcategoryInput("");
+  };
+
+  // Submit Handler
+  const handleSubmitAction = async () => {
+    setModalError("");
+    setModalSuccess("");
+
+    if (!adminUserId) {
+      setModalError("Authenticated System Admin user ID is missing.");
+      return;
+    }
+
+    if (resolutionNotes.trim().length < 5) {
+      setModalError(
+        "Please provide a meaningful reason/note (at least 5 characters).",
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (actionType === "extend_sla") {
+        if (!newSlaDeadline) {
+          throw new Error("Please select a valid new SLA deadline.");
+        }
+        const newDeadlineTime = new Date(newSlaDeadline).getTime();
+        if (Number.isNaN(newDeadlineTime)) {
+          throw new Error("Invalid SLA deadline date selection.");
+        }
+        if (hasExistingSlaDeadline && newDeadlineTime <= existingSlaTimestamp) {
+          throw new Error(
+            "The new SLA deadline must be later than the current deadline.",
+          );
+        }
+
+        await extendSla({
+          issueId,
+          newDeadline: newDeadlineTime,
+          notes: resolutionNotes.trim(),
+          adminUserId,
+        });
+        setModalSuccess("SLA deadline extended successfully.");
+      } else if (actionType === "reassign_unit_officer") {
+        if (!selectedCandidate) {
+          throw new Error(
+            "Please select a candidate Unit Officer for reassignment.",
+          );
+        }
+
+        await reassignOfficer({
+          issueId,
+          officerType: "unit_officer",
+          newUnitOfficerProfileId: selectedCandidate.profileId,
+          notes: resolutionNotes.trim(),
+          adminUserId,
+        });
+
+        setModalSuccess("Unit Officer reassigned successfully.");
+      } else if (actionType === "reassign_field_officer") {
+        if (!selectedCandidate) {
+          throw new Error(
+            "Please select a candidate Field Officer for reassignment.",
+          );
+        }
+
+        await reassignOfficer({
+          issueId,
+          officerType: "field_officer",
+          newFieldOfficerProfileId: selectedCandidate.profileId,
+          notes: resolutionNotes.trim(),
+          adminUserId,
+        });
+
+        setModalSuccess("Field Officer reassigned successfully.");
+      } else if (actionType === "change_classification") {
+        const res = await changeClassification({
+          issueId,
+          newCategory: selectedCategory,
+          category: selectedCategory,
+          newSubcategories: selectedSubcategories,
+          subcategory: selectedSubcategories,
+          department: selectedCategory,
+          notes: resolutionNotes.trim(),
+          reason: resolutionNotes.trim(),
+          adminUserId,
+        });
+
+        if (res?.code === "INCOMPATIBLE_OFFICERS_CONFIRMATION_REQUIRED") {
+          setIncompatibleOfficerPrompt(res);
+          setLoading(false);
+          return;
+        }
+
+        const clearedCount = res?.clearedOfficers?.length ?? 0;
+        if (clearedCount > 0) {
+          setModalSuccess(
+            `Classification updated successfully. ${clearedCount} incompatible officer assignment${clearedCount > 1 ? "s were" : " was"} cleared.`,
+          );
+        } else {
+          setModalSuccess(
+            "Classification updated successfully. All existing officer assignments remain compatible.",
+          );
+        }
+      } else if (actionType === "update_priority") {
+        await updatePriority({
+          issueId,
+          priority: selectedPriority,
+          notes: resolutionNotes.trim(),
+          adminUserId,
+        });
+        setModalSuccess("Issue priority updated successfully.");
+      } else if (actionType === "approve") {
+        await approveEscalation({
+          issueId,
+          notes: resolutionNotes.trim(),
+          adminUserId,
+        });
+        setModalSuccess("Escalation approved and resolved.");
+      } else if (actionType === "reject") {
+        await rejectEscalation({
+          issueId,
+          reason: resolutionNotes.trim(),
+          adminUserId,
+        });
+        setModalSuccess("Escalation response rejected.");
+      }
+
+      if (onResolved) onResolved();
+
+      const isFinalDecision =
+        actionType === "approve" || actionType === "reject";
+      if (isFinalDecision) {
+        setTimeout(() => {
+          onClose();
+        }, 1000);
+      } else {
+        setResolutionNotes("");
+        setSelectedCandidate(null);
+      }
+    } catch (err) {
+      setModalError(err.message || "Action failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmClearIncompatibleOfficers = async () => {
+    if (!incompatibleOfficerPrompt) return;
+    setModalError("");
+    setModalSuccess("");
+    setLoading(true);
+
+    try {
+      const res = await changeClassification({
+        issueId,
+        newCategory: selectedCategory,
+        category: selectedCategory,
+        newSubcategories: selectedSubcategories,
+        subcategory: selectedSubcategories,
+        department: selectedCategory,
+        notes: resolutionNotes.trim(),
+        reason: resolutionNotes.trim(),
+        adminUserId,
+        confirmClearIncompatibleOfficers: true,
+      });
+
+      setIncompatibleOfficerPrompt(null);
+      const clearedCount = res?.clearedOfficers?.length ?? 0;
+      if (clearedCount > 0) {
+        setModalSuccess(
+          `Classification updated successfully. ${clearedCount} incompatible officer assignment${clearedCount > 1 ? "s were" : " was"} cleared.`,
+        );
+      } else {
+        setModalSuccess(
+          "Classification updated successfully. All existing officer assignments remain compatible.",
+        );
+      }
+
+      if (onResolved) onResolved();
+      setResolutionNotes("");
+      setSelectedCandidate(null);
+    } catch (err) {
+      setModalError(err.message || "Failed to update classification.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Timeline preparation
   const rawTimeline =
     issue.escalation_resolution_actions ||
     issue.escalation?.resolutionActions ||
@@ -182,946 +605,815 @@ export function AdminEscalationResolutionModal({ issue, onClose, onResolved }) {
     .filter((e) => e.type && e.performedAt !== null)
     .sort((a, b) => Number(a.performedAt) - Number(b.performedAt));
 
-  const currentActions = (
-    issue.escalation_resolution_actions ||
-    issue.escalation?.resolutionActions ||
-    []
-  ).filter(
-    (a) =>
-      a.performed_at >=
-      (issue.escalated_at || issue.escalation?.escalatedAt || 0),
-  );
-  const resolutionActions = currentActions.filter(
-    (a) =>
-      a.type !== "escalate" &&
-      a.type !== "review_escalation" &&
-      a.actionType !== "review_escalation",
-  );
-  const hasResolutionAction = resolutionActions.length > 0;
-
-  const isSlaBreached =
-    issue.sla_status === "breached" ||
-    issue.sla?.status === "breached" ||
-    (issue.sla_deadline &&
-      new Date(issue.sla_deadline).getTime() < Date.now()) ||
-    (issue.sla?.deadline && issue.sla.deadline < Date.now());
-
-  const isSlaAtRisk =
-    issue.sla_status === "at_risk" || issue.sla?.status === "at_risk";
-  const escalationResolved = Boolean(
-    issue.escalation_resolved || issue.escalation?.resolved,
-  );
-
-  const shouldAllowFreshSlaActions =
-    isSlaBreached || isSlaAtRisk || (escalationResolved && isSlaBreached);
-
-  const [actionType, setActionType] = useState(
-    shouldAllowFreshSlaActions
-      ? "extend_sla"
-      : hasResolutionAction
-        ? "approve"
-        : "extend_sla",
-  );
-
-  useEffect(() => {
-    if (shouldAllowFreshSlaActions) {
-      setActionType("extend_sla");
-    } else if (hasResolutionAction) {
-      setActionType("approve");
-    } else {
-      setActionType("extend_sla");
-    }
-  }, [issueId, shouldAllowFreshSlaActions, hasResolutionAction]);
-
-  const [newSlaDeadline, setNewSlaDeadline] = useState("");
-  const [selectedUnitOfficerProfileId, setSelectedUnitOfficerProfileId] =
-    useState("");
-  const [selectedFieldOfficerProfileId, setSelectedFieldOfficerProfileId] =
-    useState("");
-  const [newCategory, setNewCategory] = useState(issue.category || "road");
-  const [resolutionNotes, setResolutionNotes] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
-
-  // Candidate queries for System Admin with explicit officerType
-  const isUnitReassignment = actionType === "reassign_unit_officer";
-  const isFieldReassignment = actionType === "reassign_field_officer";
-
-  const candidateQuery = useQuery(
-    api.admin.getAssignableOfficers,
-    issueId && (isUnitReassignment || isFieldReassignment)
-      ? {
-          issueId,
-          officerType: isUnitReassignment ? "unit_officer" : "field_officer",
-        }
-      : "skip",
-  );
-
-  const candidates = candidateQuery?.candidates ?? [];
-  const isCandidatesLoading =
-    (isUnitReassignment || isFieldReassignment) && candidateQuery === undefined;
-
-  const extendSla = useMutation(api.escalation.extendIssueSla);
-  const reassignOfficer = useMutation(api.escalation.reassignIssueOfficer);
-  const changeCategory = useMutation(api.escalation.changeIssueCategory);
-  const approveEscalation = useMutation(api.escalation.approveEscalation);
-  const rejectEscalation = useMutation(api.escalation.rejectEscalation);
-
-  // Initialize selected officer profile IDs from current issue assignments
-  useEffect(() => {
-    if (issue) {
-      setSelectedUnitOfficerProfileId(
-        issue.assignedUnitOfficer?.profileId ||
-          issue.assigned_officer?.id ||
-          issue.assignedUnitOfficer ||
-          "",
-      );
-      setSelectedFieldOfficerProfileId(
-        issue.assignedFieldOfficer?.profileId ||
-          issue.field_officer?.id ||
-          issue.assignedFieldOfficer ||
-          "",
-      );
-    }
-  }, [issue]);
-
-  // Set default SLA deadline string
-  useEffect(() => {
-    const d = issue.sla_deadline || issue.sla?.deadline;
-    if (d) {
-      const formatted = new Date(d).toISOString().slice(0, 16);
-      setNewSlaDeadline(formatted);
-    }
-  }, [issue]);
-
-  const handleExecuteResolution = async (overrides = {}) => {
-    setModalError("");
-
-    if (actionType === "extend_sla") {
-      if (!newSlaDeadline) {
-        setModalError("Please select a valid new SLA deadline.");
-        return;
-      }
-      if (!resolutionNotes.trim()) {
-        setModalError("Please provide resolution notes for the SLA extension.");
-        return;
-      }
-    } else if (actionType === "reassign_unit_officer") {
-      if (!selectedUnitOfficerProfileId) {
-        setModalError("Please select a Unit Officer candidate.");
-        return;
-      }
-      if (!resolutionNotes.trim()) {
-        setModalError("Please provide resolution notes for reassignment.");
-        return;
-      }
-    } else if (actionType === "reassign_field_officer") {
-      if (!selectedFieldOfficerProfileId) {
-        setModalError("Please select a Field Officer candidate.");
-        return;
-      }
-      if (!resolutionNotes.trim()) {
-        setModalError("Please provide resolution notes for reassignment.");
-        return;
-      }
-    } else if (actionType === "change_category") {
-      if (newCategory === issue.category) {
-        setModalError("Please select a different category.");
-        return;
-      }
-      if (!resolutionNotes.trim()) {
-        setModalError("Please provide resolution notes for category change.");
-        return;
-      }
-    } else if (actionType === "reject_response") {
-      if (!rejectionReason.trim()) {
-        setModalError(
-          "Please provide a reason for rejecting the escalation response.",
-        );
-        return;
-      }
-    } else if (actionType === "approve") {
-      if (!resolutionNotes.trim()) {
-        setModalError("Please provide resolution notes to approve resolution.");
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      if (actionType === "extend_sla") {
-        await extendSla({
-          issueId,
-          newDeadline: new Date(newSlaDeadline).getTime(),
-          notes: resolutionNotes,
-          adminId: adminUserId,
-        });
-      } else if (actionType === "reassign_unit_officer") {
-        const res = await reassignOfficer({
-          issueId,
-          officerType: "unit_officer",
-          newOfficerProfileId: selectedUnitOfficerProfileId,
-          notes: resolutionNotes,
-          adminId: adminUserId,
-          confirmCrossCity: overrides.confirmCrossCity,
-          confirmDepartmentMismatch: overrides.confirmDepartmentMismatch,
-        });
-        if (res?.code === "CROSS_CITY_CONFIRMATION_REQUIRED") {
-          setCrossCityPrompt({
-            message: res.message,
-            officerCity: res.officerCity,
-            issueCity: res.issueCity,
-          });
-          setLoading(false);
-          return;
-        }
-        if (res?.code === "DEPARTMENT_MISMATCH_CONFIRMATION_REQUIRED") {
-          setDeptMismatchPrompt({
-            message: res.message,
-            officerDept: res.officerDept,
-            issueDept: res.issueDept,
-          });
-          setLoading(false);
-          return;
-        }
-      } else if (actionType === "reassign_field_officer") {
-        const res = await reassignOfficer({
-          issueId,
-          officerType: "field_officer",
-          newOfficerProfileId: selectedFieldOfficerProfileId,
-          notes: resolutionNotes,
-          adminId: adminUserId,
-          confirmCrossCity: overrides.confirmCrossCity,
-          confirmDepartmentMismatch: overrides.confirmDepartmentMismatch,
-        });
-        if (res?.code === "CROSS_CITY_CONFIRMATION_REQUIRED") {
-          setCrossCityPrompt({
-            message: res.message,
-            officerCity: res.officerCity,
-            issueCity: res.issueCity,
-          });
-          setLoading(false);
-          return;
-        }
-        if (res?.code === "DEPARTMENT_MISMATCH_CONFIRMATION_REQUIRED") {
-          setDeptMismatchPrompt({
-            message: res.message,
-            officerDept: res.officerDept,
-            issueDept: res.issueDept,
-          });
-          setLoading(false);
-          return;
-        }
-      } else if (actionType === "change_category") {
-        await changeCategory({
-          issueId,
-          newCategory,
-          notes: resolutionNotes,
-          adminId: adminUserId,
-        });
-      } else if (actionType === "reject_response") {
-        await rejectEscalation({
-          issueId,
-          reason: rejectionReason,
-          adminId: adminUserId,
-        });
-      } else if (actionType === "approve") {
-        await approveEscalation({
-          issueId,
-          notes: resolutionNotes,
-          adminId: adminUserId,
-        });
-      }
-
-      onResolved?.();
-      onClose();
-    } catch (error) {
-      console.error("Error resolving escalation:", error);
-      setModalError("Failed to execute action: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getActionConfig = () => {
-    switch (actionType) {
-      case "extend_sla":
-        return {
-          icon: Clock,
-          gradient: "from-blue-500 to-cyan-500",
-          bgGradient:
-            "from-blue-50 to-cyan-50 dark:from-slate-900 dark:to-cyan-950/30",
-          borderColor: "border-blue-500",
-          title: "Extend SLA Deadline",
-          description:
-            "Grant additional time for issue resolution and log history",
-        };
-      case "reassign_unit_officer":
-        return {
-          icon: Shield,
-          gradient: "from-purple-500 to-pink-500",
-          bgGradient:
-            "from-purple-50 to-pink-50 dark:from-slate-900 dark:to-purple-950/30",
-          borderColor: "border-purple-500",
-          title: "Reassign Unit Officer",
-          description: "Transfer unit oversight to a candidate officer",
-        };
-      case "reassign_field_officer":
-        return {
-          icon: Users,
-          gradient: "from-indigo-500 to-purple-500",
-          bgGradient:
-            "from-indigo-50 to-purple-50 dark:from-slate-900 dark:to-indigo-950/30",
-          borderColor: "border-indigo-500",
-          title: "Reassign Field Officer",
-          description: "Assign a candidate field officer to ground execution",
-        };
-      case "change_category":
-        return {
-          icon: Tag,
-          gradient: "from-amber-500 to-orange-500",
-          bgGradient:
-            "from-amber-50 to-orange-50 dark:from-slate-900 dark:to-amber-950/30",
-          borderColor: "border-amber-500",
-          title: "Change Category & Department",
-          description: "Reclassify issue category and derived department",
-        };
-      case "approve":
-        return {
-          icon: CheckCircle,
-          gradient: "from-green-500 to-emerald-500",
-          bgGradient:
-            "from-green-50 to-emerald-50 dark:from-slate-900 dark:to-emerald-950/30",
-          borderColor: "border-green-500",
-          title: "Approve Escalation Resolution",
-          description:
-            "Resolves administrative escalation while keeping civic issue open",
-        };
-      case "reject_response":
-        return {
-          icon: XCircle,
-          gradient: "from-red-500 to-rose-500",
-          bgGradient:
-            "from-red-50 to-rose-50 dark:from-slate-900 dark:to-rose-950/30",
-          borderColor: "border-red-500",
-          title: "Reject Escalation Response",
-          description:
-            "Mark response as insufficient and require further corrective action",
-        };
-      default:
-        return {
-          icon: Shield,
-          gradient: "from-blue-500 to-cyan-500",
-          bgGradient: "from-blue-50 to-cyan-50",
-          borderColor: "border-blue-500",
-          title: "Resolution Action",
-          description: "Perform administrative resolution",
-        };
-    }
-  };
-
-  const config = getActionConfig();
-  const ActionIcon = config.icon;
+  const configuredSubcategoriesForCat =
+    ISSUE_SUBCATEGORIES[selectedCategory] || [];
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-hidden border-2 border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-300 flex flex-col text-xs font-semibold">
-        {/* Header */}
-        <div className="relative bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 overflow-hidden flex-shrink-0 border-b border-slate-800">
-          <div className="relative flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/20">
-                <AlertTriangle
-                  size={28}
-                  className="text-yellow-400 animate-pulse"
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <h2 className="text-2xl font-black tracking-tight">
-                    System Admin Escalation Control
-                  </h2>
-                  <Sparkles
-                    size={20}
-                    className="text-yellow-300 animate-pulse"
-                  />
-                </div>
-                <p className="text-slate-300 text-xs font-medium flex items-center gap-2">
-                  <code className="bg-white/10 px-2.5 py-0.5 rounded-lg font-mono text-xs backdrop-blur-sm text-cyan-300">
-                    {issue.ticket_id || issue.code}
-                  </code>
-                  <span>•</span>
-                  <span>{issue.title}</span>
-                  <span>•</span>
-                  <span className="capitalize">
-                    {issue.city}, {issue.state}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative flex flex-col w-full max-w-6xl max-h-[94vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md">
+              <Shield size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <code className="text-xs font-black text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 px-2.5 py-0.5 rounded-lg border border-purple-200 dark:border-purple-800">
+                  {issue.ticket_id || issue.code || issue.issueCode}
+                </code>
+                {isEscalationActive ? (
+                  <span className="inline-flex items-center gap-1 bg-rose-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                    <Flame size={11} /> Active Escalation
                   </span>
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all border border-white/20 text-white"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Content Body */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
-          {/* Error Banner */}
-          {modalError && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 p-4 rounded-2xl font-bold flex items-center gap-3">
-              <AlertTriangle className="flex-shrink-0" size={18} />
-              <p>{modalError}</p>
-            </div>
-          )}
-
-          {/* Cross-City Confirmation Card */}
-          {crossCityPrompt && (
-            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm">
-                <Building2 size={18} />
-                <span>Cross-City Officer Reassignment Warning</span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-normal">
-                The selected officer belongs to{" "}
-                <strong>{crossCityPrompt.officerCity}</strong>, while this issue
-                belongs to <strong>{crossCityPrompt.issueCity}</strong>. This
-                cross-city assignment will shift workload ownership across
-                municipal boundaries.
-              </p>
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCrossCityPrompt(null)}
-                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCrossCityPrompt(null);
-                    handleExecuteResolution({ confirmCrossCity: true });
-                  }}
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
-                >
-                  Confirm Cross-City Reassignment
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Department Mismatch Confirmation Card */}
-          {deptMismatchPrompt && (
-            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm">
-                <AlertTriangle size={18} />
-                <span>Department Compatibility Warning</span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold leading-normal">
-                Issue Department:{" "}
-                <strong>{deptMismatchPrompt.issueDept}</strong>. Selected
-                Officer Department:{" "}
-                <strong>{deptMismatchPrompt.officerDept}</strong>. This officer
-                may not be operationally suitable for this issue category.
-              </p>
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDeptMismatchPrompt(null)}
-                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeptMismatchPrompt(null);
-                    handleExecuteResolution({
-                      confirmDepartmentMismatch: true,
-                    });
-                  }}
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
-                >
-                  Confirm Department Mismatch & Reassign
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Issue Context Card */}
-          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-              Issue Context Overview
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase">
-                  Category
-                </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
-                  {issue.category}
-                </span>
-              </div>
-              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase">
-                  Department
-                </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
-                  {issue.department || issue.category}
-                </span>
-              </div>
-              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase">
-                  Status
-                </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
-                  {issue.status}
-                </span>
-              </div>
-              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase">
-                  SLA Target
-                </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {issue.sla_deadline
-                    ? new Date(issue.sla_deadline).toLocaleString()
-                    : "No deadline"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Selector Grid */}
-          <div>
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-3">
-              Choose Resolution Action
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
-              {[
-                { id: "extend_sla", label: "Extend SLA", icon: Clock },
-                {
-                  id: "reassign_unit_officer",
-                  label: "Unit Officer",
-                  icon: Shield,
-                },
-                {
-                  id: "reassign_field_officer",
-                  label: "Field Officer",
-                  icon: Users,
-                },
-                { id: "change_category", label: "Category", icon: Tag },
-                {
-                  id: "approve",
-                  label: "Approve Resolution",
-                  icon: CheckCircle,
-                },
-                {
-                  id: "reject_response",
-                  label: "Reject Response",
-                  icon: XCircle,
-                },
-              ].map((tab) => {
-                const TabIcon = tab.icon;
-                const active = actionType === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActionType(tab.id)}
-                    className={`p-3 rounded-2xl text-center font-extrabold transition-all border cursor-pointer flex flex-col items-center gap-1.5 ${
-                      active
-                        ? "bg-cyan-500 text-white border-cyan-600 shadow-md shadow-cyan-500/20"
-                        : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
-                    }`}
-                  >
-                    <TabIcon size={18} />
-                    <span className="text-[11px] leading-tight">
-                      {tab.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Selected Action Form */}
-          <div
-            className={`bg-slate-50 dark:bg-slate-950/80 border-2 ${config.borderColor} rounded-2xl p-5 space-y-4`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 bg-gradient-to-br ${config.gradient} rounded-xl flex items-center justify-center text-white shadow-md`}
-              >
-                <ActionIcon size={20} />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                  {config.title}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  {config.description}
-                </p>
-              </div>
-            </div>
-
-            {/* Extend SLA */}
-            {actionType === "extend_sla" && (
-              <div className="space-y-3">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Proposed New SLA Deadline *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={newSlaDeadline}
-                  onChange={(e) => setNewSlaDeadline(e.target.value)}
-                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100"
-                />
-              </div>
-            )}
-
-            {/* Reassign Officer Candidate Cards UI */}
-            {(isUnitReassignment || isFieldReassignment) && (
-              <div className="space-y-3">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Select {isUnitReassignment ? "Unit Officer" : "Field Officer"}{" "}
-                  Candidate *
-                </label>
-
-                {isCandidatesLoading ? (
-                  <div className="flex items-center justify-center py-8 gap-2 text-cyan-500 font-bold">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Loading candidate officers...</span>
-                  </div>
-                ) : candidates.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                    No matching officers found across platform.
-                  </p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                    {candidates.map((cand) => {
-                      const selectedId = isUnitReassignment
-                        ? selectedUnitOfficerProfileId
-                        : selectedFieldOfficerProfileId;
-                      const isSelected = selectedId === cand.profileId;
-                      const isCapacityFull = cand.availableCapacity <= 0;
-
-                      return (
-                        <div
-                          key={cand.profileId}
-                          onClick={() => {
-                            if (!isCapacityFull) {
-                              if (isUnitReassignment)
-                                setSelectedUnitOfficerProfileId(cand.profileId);
-                              else
-                                setSelectedFieldOfficerProfileId(
-                                  cand.profileId,
-                                );
-                            }
-                          }}
-                          className={`p-3.5 rounded-2xl border flex flex-col justify-between cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-500 ring-2 ring-cyan-500/20 shadow-md"
-                              : isCapacityFull
-                                ? "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed"
-                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300"
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="radio"
-                                    name="candidate_officer"
-                                    checked={isSelected}
-                                    onChange={() => {
-                                      if (isUnitReassignment)
-                                        setSelectedUnitOfficerProfileId(
-                                          cand.profileId,
-                                        );
-                                      else
-                                        setSelectedFieldOfficerProfileId(
-                                          cand.profileId,
-                                        );
-                                    }}
-                                    disabled={isCapacityFull}
-                                    className="accent-cyan-500 cursor-pointer"
-                                  />
-                                  <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                                    {cand.name || cand.fullName}
-                                  </span>
-                                </div>
-                                <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">
-                                  {isUnitReassignment
-                                    ? "Unit Officer"
-                                    : "Field Officer"}
-                                </span>
-                              </div>
-                              {cand.isRecommended && (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300">
-                                  Recommended
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Location & Dept Badges */}
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold ${
-                                  cand.isSameCity
-                                    ? "bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300"
-                                    : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
-                                }`}
-                              >
-                                {cand.city}, {cand.state} (
-                                {cand.isSameCity ? "Same City" : "Cross-City"})
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold ${
-                                  cand.isSameDepartment
-                                    ? "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
-                                    : "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300"
-                                }`}
-                              >
-                                {cand.department} (
-                                {cand.isSameDepartment
-                                  ? "Dept Match"
-                                  : "Dept Mismatch"}
-                                )
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Workload Progress */}
-                          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                            <div className="flex justify-between text-[10px] font-bold text-slate-500">
-                              <span>
-                                Workload: {cand.currentWorkload}/
-                                {cand.maximumCapacity}
-                              </span>
-                              <span>
-                                Avail: {cand.availableCapacity} | Score:{" "}
-                                {cand.performanceScore}%
-                              </span>
-                            </div>
-                            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${
-                                  cand.currentWorkload >= cand.maximumCapacity
-                                    ? "bg-red-500"
-                                    : cand.currentWorkload /
-                                          cand.maximumCapacity >=
-                                        0.7
-                                      ? "bg-amber-500"
-                                      : "bg-emerald-500"
-                                }`}
-                                style={{
-                                  width: `${Math.min(100, (cand.currentWorkload / cand.maximumCapacity) * 100)}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Standard Administrative View
+                  </span>
                 )}
               </div>
-            )}
+              <h2 className="text-base font-black text-slate-900 dark:text-white mt-0.5 line-clamp-1">
+                {issue.title}
+              </h2>
+            </div>
+          </div>
 
-            {/* Change Category */}
-            {actionType === "change_category" && (
-              <div className="space-y-3">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Proposed New Category *
-                </label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-800 dark:text-slate-100 capitalize cursor-pointer"
-                >
-                  <option value="road">Road</option>
-                  <option value="electricity">Electricity / Lighting</option>
-                  <option value="waste">Waste Management</option>
-                  <option value="water">Water Supply</option>
-                  <option value="drainage">Drainage</option>
-                  <option value="sanitation">Sanitation</option>
-                  <option value="public_health">Public Health</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            )}
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-            {/* Reject Escalation Response */}
-            {actionType === "reject_response" && (
-              <div className="space-y-3">
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300 font-semibold">
-                  <Info size={14} className="inline mr-1 -mt-0.5" />
-                  This action does not reject or close the civic issue. The
-                  issue will keep its current operational status, and the
-                  escalation will remain open for further corrective action.
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Alerts / Error messages */}
+          {modalError && (
+            <div className="flex items-center gap-2 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-200 text-xs font-bold animate-in fade-in">
+              <AlertTriangle size={16} className="shrink-0 text-rose-500" />
+              <span>{modalError}</span>
+            </div>
+          )}
+
+          {modalSuccess && (
+            <div className="flex items-center gap-2 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-200 text-xs font-bold animate-in fade-in">
+              <CheckCircle size={16} className="shrink-0 text-emerald-500" />
+              <span>{modalSuccess}</span>
+            </div>
+          )}
+
+          {/* Incompatible Officer Confirmation Card */}
+          {incompatibleOfficerPrompt && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 rounded-2xl space-y-3 animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <AlertTriangle
+                  size={20}
+                  className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+                />
+                <div className="space-y-1.5 flex-1">
+                  <h4 className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                    Officer Compatibility Check
+                  </h4>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                    The new classification changes this issue to{" "}
+                    <strong className="font-extrabold text-amber-950 dark:text-amber-100">
+                      {incompatibleOfficerPrompt.newDepartment ||
+                        incompatibleOfficerPrompt.newCategory}
+                    </strong>
+                    . The following currently assigned officer(s) are no longer
+                    compatible:
+                  </p>
+                  <div className="space-y-2 pt-1">
+                    {incompatibleOfficerPrompt.incompatibleOfficers?.map(
+                      (off, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-amber-200 dark:border-amber-800/60 text-xs"
+                        >
+                          <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 block">
+                            {off.type === "unit_officer"
+                              ? "Unit Officer"
+                              : "Field Officer"}
+                          </span>
+                          <p className="font-extrabold text-slate-900 dark:text-white">
+                            {off.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Department: {off.department || "Unknown"} • City:{" "}
+                            {off.city || "Unknown"}
+                          </p>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  <p className="text-[11px] font-bold text-amber-900 dark:text-amber-200 pt-1">
+                    Changing the classification will remove these officer(s)
+                    from the issue.
+                  </p>
                 </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-amber-200/60 dark:border-amber-800/40">
+                <button
+                  type="button"
+                  onClick={() => setIncompatibleOfficerPrompt(null)}
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmClearIncompatibleOfficers}
+                  className="px-4 py-1.5 text-xs font-black text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition-all"
+                >
+                  Change Classification & Clear Officers
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 2-Column Grid for Form & Context */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column (2/3): Action Selection & Dynamic Form */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Action Tabs Header */}
+              <div className="space-y-3">
+                <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  Administrative Action Selection
+                </p>
+
+                <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                  {actionOptions.map((act) => {
+                    const Icon = act.icon;
+                    const isSelected = actionType === act.id;
+                    return (
+                      <button
+                        key={act.id}
+                        type="button"
+                        onClick={() => !act.disabled && setActionType(act.id)}
+                        disabled={act.disabled}
+                        title={act.disabledReason || ""}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl transition-all ${
+                          isSelected
+                            ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-md border border-purple-200 dark:border-purple-800"
+                            : act.disabled
+                              ? "opacity-40 cursor-not-allowed text-slate-400"
+                              : "text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-700/50"
+                        }`}
+                      >
+                        <Icon size={14} />
+                        <span>{act.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Form Container */}
+              <div className="bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 space-y-5">
+                {/* 1. EXTEND SLA FORM */}
+                {actionType === "extend_sla" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="text-amber-500" size={18} />
+                      <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Extend Target SLA Deadline
+                      </h3>
+                    </div>
+
+                    {!hasExistingSlaDeadline ? (
+                      <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-800 dark:text-amber-300 text-xs font-medium">
+                        No SLA deadline has been assigned to this issue. An SLA
+                        must exist before System Admin can extend it.
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                            New SLA Target Date & Time *
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={newSlaDeadline}
+                            onChange={(e) => setNewSlaDeadline(e.target.value)}
+                            min={
+                              existingSlaTimestamp
+                                ? new Date(existingSlaTimestamp + 60000)
+                                    .toISOString()
+                                    .slice(0, 16)
+                                : undefined
+                            }
+                            className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. REASSIGN OFFICERS FORM (UO & FO) */}
+                {isReassignmentActive && (
+                  <div className="space-y-4">
+                    {/* Current Assignment Card */}
+                    <div className="p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                        Current{" "}
+                        {isUnitReassignment ? "Unit Officer" : "Field Officer"}
+                      </p>
+                      {currentAssignedOfficer ? (
+                        <div className="flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-black text-slate-900 dark:text-white">
+                              {currentAssignedOfficer.name ||
+                                currentAssignedOfficer.fullName}
+                            </p>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {currentAssignedOfficer.department} •{" "}
+                              {currentAssignedOfficer.city}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-slate-400">
+                              Workload
+                            </span>
+                            <p className="font-black text-slate-800 dark:text-slate-200">
+                              {currentAssignedOfficer.currentWorkload ?? 0}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 italic">
+                          No{" "}
+                          {isUnitReassignment
+                            ? "Unit Officer"
+                            : "Field Officer"}{" "}
+                          currently assigned
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {isUnitReassignment ? (
+                          <Shield className="text-cyan-500" size={18} />
+                        ) : (
+                          <Zap className="text-emerald-500" size={18} />
+                        )}
+                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                          Eligible Replacement Officers (
+                          {isUnitReassignment
+                            ? "Unit Officers"
+                            : "Field Officers"}
+                          )
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Search & Quick Filters */}
+                    <div className="space-y-2.5">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+                        <input
+                          type="text"
+                          value={officerSearch}
+                          onChange={(e) => setOfficerSearch(e.target.value)}
+                          placeholder="Search eligible officers by name or email..."
+                          className="w-full pl-9 pr-3 py-2 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { id: "all", label: "All Candidates" },
+                          { id: "recommended", label: "Recommended" },
+                          { id: "available", label: "Available Capacity" },
+                        ].map((flt) => (
+                          <button
+                            key={flt.id}
+                            type="button"
+                            onClick={() => setOfficerFilter(flt.id)}
+                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                              officerFilter === flt.id
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                            }`}
+                          >
+                            {flt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Candidate Selectable Cards */}
+                    {isCandidatesLoading ? (
+                      <div className="py-8 text-center space-y-2">
+                        <Loader2
+                          size={24}
+                          className="animate-spin text-purple-600 mx-auto"
+                        />
+                        <p className="text-xs text-slate-500 font-medium">
+                          Loading eligible officer candidates...
+                        </p>
+                      </div>
+                    ) : filteredCandidates.length === 0 ? (
+                      <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
+                        <p className="text-xs font-bold text-slate-500">
+                          No eligible{" "}
+                          {isUnitReassignment
+                            ? "Unit Officer"
+                            : "Field Officer"}{" "}
+                          candidates found.
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Only officers matching the issue's city and exact
+                          department are eligible.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
+                        {filteredCandidates.map((candidate) => {
+                          const isSelected =
+                            selectedCandidate?.profileId ===
+                            candidate.profileId;
+
+                          return (
+                            <button
+                              key={candidate.profileId}
+                              type="button"
+                              onClick={() => setSelectedCandidate(candidate)}
+                              className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all ${
+                                isSelected
+                                  ? "bg-purple-50/80 dark:bg-purple-950/40 border-purple-600 ring-2 ring-purple-500/20"
+                                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-800"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="font-black text-xs text-slate-900 dark:text-white">
+                                      {candidate.name}
+                                    </p>
+
+                                    {candidate.isRecommended && (
+                                      <span className="bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded">
+                                        Recommended
+                                      </span>
+                                    )}
+
+                                    {candidate.isAtCapacity && (
+                                      <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded">
+                                        At Capacity
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {candidate.department} • {candidate.city},{" "}
+                                    {candidate.state}
+                                  </p>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    Workload
+                                  </span>
+                                  <p className="text-xs font-black text-slate-900 dark:text-white">
+                                    {candidate.currentWorkload}
+                                    {candidate.maximumCapacity !== null
+                                      ? ` / ${candidate.maximumCapacity}`
+                                      : " active"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-3 gap-2 text-[10px]">
+                                <div>
+                                  <span className="text-slate-400">
+                                    Rating:
+                                  </span>{" "}
+                                  <span className="font-bold text-amber-500">
+                                    ★ {candidate.rating || "N/A"}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">
+                                    Efficiency:
+                                  </span>{" "}
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                    {candidate.efficiencyScore}%
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">
+                                    Available:
+                                  </span>{" "}
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    {candidate.availableCapacity !== null
+                                      ? candidate.availableCapacity
+                                      : "Unlimited"}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Selection Summary */}
+                    {selectedCandidate && (
+                      <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-2xl text-xs space-y-1">
+                        <p className="font-bold text-purple-900 dark:text-purple-200">
+                          Selected Candidate: {selectedCandidate.name} (
+                          {selectedCandidate.department})
+                        </p>
+                        <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                          Location: {selectedCandidate.city},{" "}
+                          {selectedCandidate.state} • Workload:{" "}
+                          {selectedCandidate.currentWorkload} active issues
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. CHANGE CLASSIFICATION FORM */}
+                {actionType === "change_classification" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Tag className="text-purple-500" size={18} />
+                      <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Update Issue Classification
+                      </h3>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        Category & Department *
+                      </label>
+                      <select
+                        value={selectedCategory}
+                        onChange={(e) => {
+                          setSelectedCategory(e.target.value);
+                          setSelectedSubcategories([]);
+                        }}
+                        className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                      >
+                        {ISSUE_CATEGORIES.map((cat) => (
+                          <option key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Subcategories */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400">
+                        Subcategories
+                      </label>
+
+                      {configuredSubcategoriesForCat.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {configuredSubcategoriesForCat.map((subName) => {
+                            const isChecked =
+                              selectedSubcategories.includes(subName);
+                            return (
+                              <button
+                                key={subName}
+                                type="button"
+                                onClick={() => handleToggleSubcategory(subName)}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-xl transition-all border ${
+                                  isChecked
+                                    ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-300"
+                                }`}
+                              >
+                                {subName}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Custom subcategory input */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customSubcategoryInput}
+                          onChange={(e) =>
+                            setCustomSubcategoryInput(e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddCustomSubcategory();
+                            }
+                          }}
+                          placeholder="Type custom subcategory & press Enter..."
+                          className="flex-1 px-3 py-2 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomSubcategory}
+                          className="px-3 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 flex items-center gap-1"
+                        >
+                          <Plus size={14} /> Add
+                        </button>
+                      </div>
+
+                      {/* Selected subcategory chips */}
+                      {selectedSubcategories.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {selectedSubcategories.map((sub) => (
+                            <span
+                              key={sub}
+                              className="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-200 text-xs font-bold px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800"
+                            >
+                              <span>{sub}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSubcategory(sub)}
+                                className="text-purple-500 hover:text-purple-700"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. UPDATE PRIORITY FORM */}
+                {actionType === "update_priority" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Flame className="text-rose-500" size={18} />
+                      <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Update Issue Priority
+                      </h3>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        Select New Priority Level *
+                      </label>
+                      <select
+                        value={selectedPriority}
+                        onChange={(e) => setSelectedPriority(e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="low">Low Priority</option>
+                        <option value="medium">Medium Priority</option>
+                        <option value="high">High Priority</option>
+                        <option value="critical">Critical Priority</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. APPROVE / REJECT DECISION CONFIRMATIONS */}
+                {actionType === "approve" && (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+                    <p className="font-bold">
+                      Approving this escalation will mark the administrative
+                      escalation as resolved and return the issue to its
+                      operational status.
+                    </p>
+                  </div>
+                )}
+
+                {actionType === "reject" && (
+                  <div className="p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs text-rose-900 dark:text-rose-200 space-y-1">
+                    <p className="font-bold">
+                      Rejecting the escalation will close the administrative
+                      escalation review as rejected and restore normal
+                      operational status.
+                    </p>
+                  </div>
+                )}
+
+                {/* Notes / Reason Textarea for All Actions */}
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    Reason for Rejecting the Escalation Response *
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Administrative Reason / Action Notes *
                   </label>
                   <textarea
                     rows={3}
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Explain why the submitted corrective action or escalation response is insufficient and what further action is required."
-                    className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                    value={resolutionNotes}
+                    onChange={(e) => setResolutionNotes(e.target.value)}
+                    placeholder="Provide detailed administrative notes/justification for this action..."
+                    className="w-full px-3.5 py-2.5 text-xs font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
-              </div>
-            )}
 
-            {/* Approve Escalation Resolution */}
-            {actionType === "approve" && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
-                Approving this escalation resolves the administrative review.
-                The civic issue maintains its operational resolution workflow.
+                {/* Submit Button */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSubmitAction()}
+                    disabled={loading}
+                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Processing Action...</span>
+                      </>
+                    ) : (
+                      <span>Execute Action</span>
+                    )}
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
 
-            {/* Resolution Notes */}
-            {actionType !== "reject_response" && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Resolution Notes *
-                </label>
-                <textarea
-                  rows={3}
-                  value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                  placeholder="Provide detailed administrative notes regarding your resolution decision for audit records..."
-                  className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
-                />
+            {/* Right Column (1/3): Sidebar Overview & Current Assignments */}
+            <div className="space-y-6">
+              {/* Current Assignment Card */}
+              <div className="bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 space-y-4">
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Users size={14} className="text-purple-500" />
+                  Current Assignment
+                </h3>
+
+                {/* Unit Officer */}
+                <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Unit Officer
+                    </span>
+                    {issue.assignedUnitOfficer && (
+                      <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">
+                        CURRENT
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-black text-xs text-slate-900 dark:text-white">
+                    {issue.assignedUnitOfficer?.name ||
+                      issue.assignedUnitOfficer?.fullName ||
+                      "No Unit Officer Assigned"}
+                  </p>
+                  {issue.assignedUnitOfficer && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {issue.assignedUnitOfficer.department} •{" "}
+                      {issue.assignedUnitOfficer.city}
+                    </p>
+                  )}
+                </div>
+
+                {/* Field Officer */}
+                <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Field Officer
+                    </span>
+                    {issue.assignedFieldOfficer && (
+                      <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">
+                        CURRENT
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-black text-xs text-slate-900 dark:text-white">
+                    {issue.assignedFieldOfficer?.name ||
+                      issue.assignedFieldOfficer?.fullName ||
+                      "No Field Officer Assigned"}
+                  </p>
+                  {issue.assignedFieldOfficer && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {issue.assignedFieldOfficer.department} •{" "}
+                      {issue.assignedFieldOfficer.city}
+                    </p>
+                  )}
+                </div>
               </div>
-            )}
+
+              {/* Escalation Context Summary */}
+              {isEscalationActive && issue.escalation && (
+                <div className="bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/60 rounded-3xl p-5 space-y-3">
+                  <h3 className="text-xs font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider flex items-center gap-2">
+                    <Flame size={14} className="text-rose-500" />
+                    Escalation Details
+                  </h3>
+
+                  <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                    <div>
+                      <span className="text-slate-400 font-bold block text-[10px]">
+                        Category:
+                      </span>
+                      <span className="font-black capitalize">
+                        {issue.escalation.category}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 font-bold block text-[10px]">
+                        Priority:
+                      </span>
+                      <span className="font-black capitalize text-rose-600 dark:text-rose-400">
+                        {issue.escalation.priority}
+                      </span>
+                    </div>
+
+                    {issue.escalation.reason && (
+                      <div>
+                        <span className="text-slate-400 font-bold block text-[10px]">
+                          Reason:
+                        </span>
+                        <p className="font-medium text-slate-800 dark:text-slate-200 mt-0.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-rose-100 dark:border-rose-900/40 text-[11px]">
+                          {issue.escalation.reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Escalation / Activity Timeline */}
-          {normalisedTimeline.length > 0 && (
-            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    Escalation / Activity Timeline
-                  </h3>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Shared administrative action history log
-                  </p>
-                </div>
-                <span className="rounded-full bg-slate-200 px-3 py-1 text-[10px] font-black text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  {normalisedTimeline.length}{" "}
-                  {normalisedTimeline.length === 1 ? "Event" : "Events"}
-                </span>
+          {/* Full Width Bottom: Shared Escalation / Activity Timeline */}
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center gap-2">
+              <Activity size={18} className="text-purple-600" />
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                Shared Administrative Timeline
+              </h3>
+            </div>
+
+            {normalisedTimeline.length === 0 ? (
+              <div className="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl text-center text-xs font-medium text-slate-500">
+                No administrative history recorded for this issue.
               </div>
+            ) : (
+              <div className="space-y-3">
+                {normalisedTimeline.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-black text-slate-900 dark:text-white">
+                        {formatTimelineAction(item.type)}
+                      </span>
+                      <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400">
+                        Performed by {item.performedBy} ·{" "}
+                        {formatPerformerRole(item.performedByRole)}
+                      </span>
+                    </div>
 
-              <div className="relative space-y-0 pl-1">
-                {normalisedTimeline.map((event, index) => {
-                  const isLast = index === normalisedTimeline.length - 1;
-                  return (
-                    <div key={event.id} className="relative flex gap-4 pb-5">
-                      {!isLast && (
-                        <div className="absolute bottom-0 left-[17px] top-9 w-px bg-slate-200 dark:bg-slate-700" />
-                      )}
+                    <div className="text-[11px] text-slate-400">
+                      {formatDateTime(item.performedAt)}
+                    </div>
 
-                      <div className="relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-400 shadow-sm">
-                        <Activity className="h-4 w-4" />
-                      </div>
-
-                      <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                          <p className="text-xs font-black text-slate-900 dark:text-white">
-                            {formatTimelineAction(event.type)}
-                          </p>
-                          <time className="text-[10px] font-bold text-slate-400">
-                            {formatDateTime(event.performedAt)}
-                          </time>
-                        </div>
-
-                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                          Performed by {event.performedBy}{" "}
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            · {formatPerformerRole(event.performedByRole)}
-                          </span>
-                        </p>
-
-                        {event.notes && (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
-                            {event.notes}
-                          </p>
+                    {(item.oldValue || item.newValue) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px]">
+                        {item.oldValue && (
+                          <div>
+                            <span className="text-slate-400 block font-bold">
+                              Previous:
+                            </span>
+                            {formatHistoryValue(item.oldValue)}
+                          </div>
                         )}
-
-                        {(event.oldValue || event.newValue) && (
-                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {event.oldValue && (
-                              <div className="rounded-lg bg-rose-50 p-2.5 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
-                                <p className="text-[9px] font-black uppercase text-rose-500">
-                                  Previous Value
-                                </p>
-                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                  {formatHistoryValue(event.oldValue)}
-                                </p>
-                              </div>
-                            )}
-                            {event.newValue && (
-                              <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
-                                <p className="text-[9px] font-black uppercase text-emerald-500">
-                                  Updated Value
-                                </p>
-                                <p className="mt-0.5 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                  {formatHistoryValue(event.newValue)}
-                                </p>
-                              </div>
-                            )}
+                        {item.newValue && (
+                          <div>
+                            <span className="text-slate-400 block font-bold">
+                              New:
+                            </span>
+                            {formatHistoryValue(item.newValue)}
                           </div>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+
+                    {item.notes && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium italic">
+                        "{item.notes}"
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="bg-slate-900 p-4 border-t border-slate-800 flex items-center justify-end gap-3 flex-shrink-0">
+        {/* Sticky Footer */}
+        <div className="sticky bottom-0 z-20 flex justify-end px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs cursor-pointer"
+            className="px-6 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleExecuteResolution()}
-            disabled={loading}
-            className={`px-6 py-2.5 rounded-xl font-black text-white text-xs shadow-lg transition-all cursor-pointer ${
-              loading
-                ? "bg-slate-600 cursor-not-allowed"
-                : actionType === "reject_response"
-                  ? "bg-red-600 hover:bg-red-700 shadow-red-600/30"
-                  : "bg-cyan-500 hover:bg-cyan-600 shadow-cyan-500/30"
-            }`}
-          >
-            {loading
-              ? "Processing..."
-              : actionType === "reject_response"
-                ? "Reject Escalation Response"
-                : "Approve Escalation Resolution"}
+            Close
           </button>
         </div>
       </div>
     </div>
   );
 }
-
-export default AdminEscalationResolutionModal;

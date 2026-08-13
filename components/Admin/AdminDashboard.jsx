@@ -1163,6 +1163,24 @@ export function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedIssue, setSelectedIssue] = useState(null);
+
+  function resolveIssueId(issue) {
+    return issue?._id ?? issue?.issueId ?? issue?.id ?? null;
+  }
+
+  function handleSelectIssue(rawIssue) {
+    if (!rawIssue) {
+      setSelectedIssue(null);
+      return;
+    }
+    const realId = resolveIssueId(rawIssue);
+    setSelectedIssue({
+      ...rawIssue,
+      _id: realId,
+      issueId: realId,
+      id: realId,
+    });
+  }
   const [messageOfficer, setMessageOfficer] = useState(null);
   const [messageIssues, setMessageIssues] = useState([]);
   const [reassignIssue, setReassignIssue] = useState(null);
@@ -2316,7 +2334,8 @@ export function AdminDashboard() {
               <div className="p-6">
                 <SLAMonitoringDashboard
                   issues={issues}
-                  onViewIssue={setSelectedIssue}
+                  onViewIssue={handleSelectIssue}
+                  adminUserId={dbUser?._id}
                 />
               </div>
             </div>
@@ -2334,7 +2353,7 @@ export function AdminDashboard() {
             <SLAAnalyticsDashboard
               userId={dbUser?._id}
               issues={issues}
-              onViewIssue={setSelectedIssue}
+              onViewIssue={handleSelectIssue}
             />
           )}
 
@@ -2359,7 +2378,7 @@ export function AdminDashboard() {
             setSelectedOfficerWorkload(null);
           }}
           onViewIssue={(issue) => {
-            setSelectedIssue(issue);
+            handleSelectIssue(issue);
           }}
           onReassignIssue={(issue) => {
             setReassignIssue(issue);
@@ -2377,8 +2396,13 @@ export function AdminDashboard() {
       {selectedIssue && (
         <AdminIssueModal
           issue={selectedIssue}
+          adminUserId={dbUser?._id}
           onClose={() => setSelectedIssue(null)}
           onUpdated={handleIssueUpdated}
+          onOpenEscalation={(issue) => {
+            setSelectedIssue(null);
+            setActiveTab("sla");
+          }}
         />
       )}
 
