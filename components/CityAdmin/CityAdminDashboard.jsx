@@ -8,6 +8,7 @@ import CityAdminOverview from "../city-admin/CityAdminOverview";
 import CityAdminAllIssues from "../city-admin/CityAdminAllIssues";
 import CityAdminSLAMonitor from "../city-admin/CityAdminSLAMonitor";
 import CityIssueAnalytics from "../city-admin/CityIssueAnalytics";
+import CityAdminPublicModeration from "../city-admin/public-moderation/CityAdminPublicModeration";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -304,6 +305,13 @@ export default function CityAdminDashboard() {
     api.cityAdmin.getCityAdminOverview,
     dbUser?._id && dbUser.role === "city_admin"
       ? { cityAdminUserId: dbUser._id, days: rangeDays }
+      : "skip",
+  );
+
+  const cityAdminProfile = useQuery(
+    api.cityAdmin.getCityAdminProfile,
+    dbUser?._id && dbUser.role === "city_admin"
+      ? { userId: dbUser._id }
       : "skip",
   );
 
@@ -2402,6 +2410,12 @@ export default function CityAdminDashboard() {
                     dateRange={dateRange}
                     onSetDateRange={setDateRange}
                     onSelectIssue={handleSelectIssue}
+                  />
+                )}
+                {activeTab === "public-moderation" && dbUser?._id && (
+                  <CityAdminPublicModeration
+                    cityAdminUserId={dbUser._id}
+                    city={cityAdminProfile?.city || overviewData?.scope?.city}
                   />
                 )}
                 {activeTab === "officers" && renderOfficerManagement()}
