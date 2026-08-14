@@ -316,8 +316,6 @@ export default function CityAdminDashboard() {
     dbUser && dbUser.role === "city_admin" && overviewData === null;
   const isOverviewLoading =
     dbUser && dbUser.role === "city_admin" && overviewData === undefined;
-  const [heatmapFilter, setHeatmapFilter] = useState("category");
-  const [showWardBoundaries, setShowWardBoundaries] = useState(true);
   const [officerTab, setOfficerTab] = useState("pending");
 
   const [issues, setIssues] = useState([]);
@@ -603,12 +601,6 @@ export default function CityAdminDashboard() {
             gradient: "from-teal-500 to-cyan-500",
           },
           {
-            id: "heatmap",
-            label: "Heatmap",
-            icon: MapPin,
-            gradient: "from-emerald-500 to-teal-500",
-          },
-          {
             id: "public-moderation",
             label: "Public Moderation",
             icon: Globe,
@@ -878,185 +870,6 @@ export default function CityAdminDashboard() {
           </div>
         </div>
       ))}
-    </div>
-  );
-
-  const renderHeatmapSection = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-      <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-xl blur opacity-40"></div>
-              <div className="relative w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-                <MapPinned className="w-6 h-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                Heatmap
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Real-time density
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-6 flex flex-wrap gap-3">
-          <select
-            value={heatmapFilter}
-            onChange={(e) => setHeatmapFilter(e.target.value)}
-            className="px-4 py-2 text-sm bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-600 border border-slate-200 dark:border-slate-600 rounded-xl font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all shadow-sm hover:shadow-md"
-          >
-            <option>By Category</option>
-            <option>By Status</option>
-            <option>By priority</option>
-            <option>By SLA Risk</option>
-          </select>
-
-          <button
-            onClick={() => setShowWardBoundaries(!showWardBoundaries)}
-            className={`px-4 py-2 text-sm rounded-xl font-semibold transition-all shadow-sm hover:shadow-md ${
-              showWardBoundaries
-                ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white"
-                : "bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 text-slate-600 dark:text-slate-300"
-            }`}
-          >
-            Ward Boundaries {showWardBoundaries ? "ON" : "OFF"}
-          </button>
-        </div>
-
-        <div className="relative h-80 bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-2xl mb-6 overflow-hidden border border-slate-200 dark:border-slate-700">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <MapPin className="w-20 h-20 text-slate-300 dark:text-slate-600" />
-          </div>
-          <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm p-4 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700">
-            <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-3">
-              Intensity Scale
-            </p>
-            <div className="flex gap-1.5">
-              {[
-                "#dcfce7",
-                "#86efac",
-                "#4ade80",
-                "#22c55e",
-                "#16a34a",
-                "#15803d",
-              ].map((color, i) => (
-                <div
-                  key={i}
-                  className="w-7 h-5 rounded-md shadow-sm"
-                  style={{ backgroundColor: color }}
-                ></div>
-              ))}
-            </div>
-            <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mt-2">
-              <span>Low</span>
-              <span>High</span>
-            </div>
-          </div>
-        </div>
-
-        <button className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl">
-          View Ward Analytics
-        </button>
-      </div>
-
-      <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-cyan-600 rounded-xl blur opacity-40"></div>
-            <div className="relative w-12 h-12 bg-gradient-to-br from-blue-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg">
-              <BarChart3 className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              Top Categories
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Most reported issues
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4 mb-6">
-          {topCategories.map((item, idx) => (
-            <div
-              key={idx}
-              className="group/item p-5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-600 hover:from-cyan-50 hover:to-blue-50 dark:hover:from-cyan-900/30 dark:hover:to-blue-900/30 rounded-2xl border border-slate-200 dark:border-slate-600 hover:border-cyan-300 dark:hover:border-cyan-600 transition-all duration-300 hover:shadow-lg"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-10 h-10 bg-gradient-to-br rounded-xl flex items-center justify-center shadow-md ${
-                      idx === 0
-                        ? "from-amber-400 to-orange-500"
-                        : idx === 1
-                          ? "from-cyan-400 to-blue-500"
-                          : idx === 2
-                            ? "from-emerald-400 to-teal-500"
-                            : "from-slate-400 to-slate-500"
-                    }`}
-                  >
-                    <span className="text-white text-sm font-black">
-                      {idx + 1}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white capitalize text-base">
-                      {item.category}
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                      Category Type
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-black text-slate-900 dark:text-white">
-                    {item.count}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                    issues
-                  </p>
-                </div>
-              </div>
-              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-                <div
-                  className={`h-2.5 rounded-full transition-all duration-500 bg-gradient-to-r ${
-                    idx === 0
-                      ? "from-amber-400 to-orange-500"
-                      : idx === 1
-                        ? "from-cyan-400 to-blue-500"
-                        : idx === 2
-                          ? "from-emerald-400 to-teal-500"
-                          : "from-slate-400 to-slate-500"
-                  }`}
-                  style={{ width: `${(item.count / issues.length) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="p-5 bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-inner">
-          <div className="flex gap-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-amber-900 dark:text-amber-300 mb-1.5">
-                AI Insight
-              </p>
-              <p className="text-xs text-amber-800 dark:text-amber-400 font-medium leading-relaxed">
-                {topCategories[0]?.category} issues are trending. Consider
-                allocating more resources to this department.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 
@@ -2595,7 +2408,6 @@ export default function CityAdminDashboard() {
                 {activeTab === "departments" && renderDepartmentPerformance()}
                 {activeTab === "audit" && renderAuditLogs()}
                 {activeTab === "ai" && renderAIInsights()}
-                {activeTab === "heatmap" && renderHeatmapSection()}
               </>
             )}
         </div>

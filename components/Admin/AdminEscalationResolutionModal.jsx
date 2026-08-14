@@ -169,11 +169,25 @@ export function AdminEscalationResolutionModal({
   const hasExistingSlaDeadline =
     existingSlaTimestamp !== null && Number.isFinite(existingSlaTimestamp);
 
+  // Review status
+  const reviewStatus = String(
+    issue?.escalation?.adminReviewStatus ??
+      issue?.escalation?.status ??
+      issue?.escalation_admin_review_status ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
   // Active escalation state
   const isEscalationActive =
     issue?.escalation?.isActive === true ||
     issue?.escalatedToAdmin === true ||
     issue?.is_escalated === true;
+
+  const isEscalationReviewed = reviewStatus === "reviewed";
+  const isEscalationPendingReview =
+    isEscalationActive && reviewStatus === "pending";
 
   // Action options definition
   const actionOptions = useMemo(() => {
@@ -183,58 +197,69 @@ export function AdminEscalationResolutionModal({
         label: "Extend SLA",
         category: "corrective",
         icon: Clock,
-        disabled: !hasExistingSlaDeadline,
-        disabledReason:
-          "No SLA deadline has been assigned to this issue. An SLA must exist before System Admin can extend it.",
+        disabled: !hasExistingSlaDeadline || isEscalationPendingReview,
+        disabledReason: isEscalationPendingReview
+          ? "Review and start handling this escalation before extending SLA."
+          : "No SLA deadline has been assigned to this issue. An SLA must exist before System Admin can extend it.",
       },
       {
         id: "reassign_unit_officer",
         label: "Reassign Unit Officer",
         category: "corrective",
         icon: Shield,
-        disabled: false,
+        disabled: isEscalationPendingReview,
+        disabledReason:
+          "Review and start handling this escalation before reassigning officers.",
       },
       {
         id: "reassign_field_officer",
         label: "Reassign Field Officer",
         category: "corrective",
         icon: Zap,
-        disabled: false,
+        disabled: isEscalationPendingReview,
+        disabledReason:
+          "Review and start handling this escalation before reassigning officers.",
       },
       {
         id: "change_classification",
         label: "Change Classification",
         category: "corrective",
         icon: Tag,
-        disabled: false,
+        disabled: isEscalationPendingReview,
+        disabledReason:
+          "Review and start handling this escalation before changing classification.",
       },
       {
         id: "update_priority",
         label: "Update Priority",
         category: "corrective",
         icon: Flame,
-        disabled: false,
+        disabled: isEscalationPendingReview,
+        disabledReason:
+          "Review and start handling this escalation before updating priority.",
       },
       {
         id: "approve",
         label: "Approve Escalation",
         category: "decision",
         icon: CheckCircle,
-        disabled: !isEscalationActive,
-        disabledReason:
-          "This issue does not currently have an active escalation.",
+        disabled: !isEscalationActive || isEscalationPendingReview,
+        disabledReason: isEscalationPendingReview
+          ? "Review and start handling this escalation before approving."
+          : "This issue does not currently have an active escalation.",
       },
       {
         id: "reject",
         label: "Reject Escalation",
         category: "decision",
         icon: XCircle,
-        disabled: !isEscalationActive,
-        disabledReason:
-          "This issue does not currently have an active escalation.",
+        disabled: !isEscalationActive || isEscalationPendingReview,
+        disabledReason: isEscalationPendingReview
+          ? "Review and start handling this escalation before rejecting."
+          : "This issue does not currently have an active escalation.",
       },
     ];
-  }, [hasExistingSlaDeadline, isEscalationActive]);
+  }, [hasExistingSlaDeadline, isEscalationActive, isEscalationPendingReview]);
 
   // Pick first enabled action or initialAction
   const getDefaultAction = () => {
@@ -352,6 +377,7 @@ export function AdminEscalationResolutionModal({
   }, [actionType, issueId]);
 
   // Mutations
+  const reviewEscalationMut = useMutation(api.escalation.reviewEscalation);
   const extendSla = useMutation(api.escalation.extendIssueSla);
   const reassignOfficer = useMutation(api.escalation.reassignIssueOfficer);
   const changeClassification = useMutation(
@@ -360,6 +386,29 @@ export function AdminEscalationResolutionModal({
   const updatePriority = useMutation(api.escalation.updateIssuePriority);
   const approveEscalation = useMutation(api.escalation.approveEscalation);
   const rejectEscalation = useMutation(api.escalation.rejectEscalation);
+
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  const handleStartHandlingEscalation = async () => {
+    if (!issueId || !adminUserId) {
+      setModalError("Authenticated System Admin user ID is missing.");
+      return;
+    }
+    setReviewLoading(true);
+    setModalError("");
+    setModalSuccess("");
+    try {
+      await reviewEscalationMut({
+        issueId,
+        adminUserId,
+      });
+      setModalSuccess("Escalation acknowledged by System Admin.");
+    } catch (err) {
+      setModalError(err.message || "Failed to start handling escalation.");
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   // Subcategory management handlers
   const handleToggleSubcategory = (subName) => {
@@ -521,7 +570,14 @@ export function AdminEscalationResolutionModal({
         setSelectedCandidate(null);
       }
     } catch (err) {
-      setModalError(err.message || "Action failed. Please try again.");
+      const msg = err.message || "";
+      if (msg.includes("ESCALATION_REVIEW_REQUIRED")) {
+        setModalError(
+          "Review Required: This escalation has not been acknowledged yet. Start handling the escalation before taking corrective action.",
+        );
+      } else {
+        setModalError(msg || "Action failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -623,8 +679,21 @@ export function AdminEscalationResolutionModal({
                   {issue.ticket_id || issue.code || issue.issueCode}
                 </code>
                 {isEscalationActive ? (
-                  <span className="inline-flex items-center gap-1 bg-rose-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                    <Flame size={11} /> Active Escalation
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                      isEscalationPendingReview
+                        ? "bg-amber-500 text-white animate-pulse"
+                        : isEscalationReviewed
+                          ? "bg-blue-600 text-white"
+                          : "bg-rose-500 text-white"
+                    }`}
+                  >
+                    <Shield size={11} />
+                    {isEscalationPendingReview
+                      ? "Pending Review"
+                      : isEscalationReviewed
+                        ? "Reviewed"
+                        : "Active Escalation"}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
@@ -648,6 +717,44 @@ export function AdminEscalationResolutionModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Review Required Banner */}
+          {isEscalationPendingReview && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-3xl p-5 mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+                  <Activity size={22} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-amber-900 dark:text-amber-100">
+                    Escalation Review Required
+                  </h4>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    This escalation must be acknowledged by System Admin before
+                    taking corrective or final resolution actions.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={reviewLoading}
+                onClick={handleStartHandlingEscalation}
+                className="px-4 py-2.5 rounded-2xl font-black text-xs bg-amber-600 hover:bg-amber-700 text-white shadow-lg transition-all flex items-center gap-2 flex-shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                {reviewLoading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Acknowledging...</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield size={14} />
+                    <span>Start Handling Escalation</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Alerts / Error messages */}
           {modalError && (
             <div className="flex items-center gap-2 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-200 text-xs font-bold animate-in fade-in">
@@ -1217,14 +1324,16 @@ export function AdminEscalationResolutionModal({
                   <button
                     type="button"
                     onClick={() => handleSubmitAction()}
-                    disabled={loading}
-                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={loading || isEscalationPendingReview}
+                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {loading ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
                         <span>Processing Action...</span>
                       </>
+                    ) : isEscalationPendingReview ? (
+                      <span>Review Required Before Submitting</span>
                     ) : (
                       <span>Execute Action</span>
                     )}

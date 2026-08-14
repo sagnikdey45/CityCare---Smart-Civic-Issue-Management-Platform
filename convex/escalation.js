@@ -1,6 +1,53 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// Helper function to resolve the admin's database user ID
+async function resolveAdminUserId(ctx, adminUserIdStr) {
+  if (adminUserIdStr) {
+    try {
+      const user = await ctx.db.get(adminUserIdStr);
+      if (
+        user &&
+        (user.role === "admin" ||
+          user.role === "city_admin" ||
+          user.role === "unit_officer")
+      ) {
+        return user._id;
+      }
+    } catch (e) {
+      // Not a valid ID format or not found
+    }
+  }
+
+  // Fallback 1: search for first admin in users table
+  const firstAdmin = await ctx.db
+    .query("users")
+    .withIndex("by_role", (q) => q.eq("role", "admin"))
+    .first();
+  if (firstAdmin) {
+    return firstAdmin._id;
+  }
+
+  // Fallback 2: filter query for admin role
+  const anyAdmin = await ctx.db
+    .query("users")
+    .filter((q) => q.eq(q.field("role"), "admin"))
+    .first();
+  if (anyAdmin) {
+    return anyAdmin._id;
+  }
+
+  // Fallback 3: create a mock admin user if none exists
+  const newAdminId = await ctx.db.insert("users", {
+    fullName: "System Admin",
+    email: "admin@citycare.gov",
+    password: "hashedpassword",
+    role: "admin",
+    createdAt: new Date().toISOString(),
+  });
+  return newAdminId;
+}
+
 /**
  * Strict System Admin authorization helper.
  * Throws if user does not exist or is not a system admin (role !== "admin").
@@ -206,23 +253,23 @@ async function insertEscalationActionIfActive(
   });
 }
 
-function getActiveEscalationReviewPatch(issue) {
+function requireReviewedEscalation(issue) {
   const state = getEscalationState(issue);
-  if (!state.isActive || !issue?.escalation) {
-    return {};
+  if (!state.isActive) {
+    throw new Error(
+      "ESCALATION_NOT_ACTIVE: This issue does not have an active escalation.",
+    );
   }
 
-  const currentStatus = issue.escalation.adminReviewStatus;
+  const reviewStatus = normalizeStatus(issue?.escalation?.adminReviewStatus);
 
-  return {
-    escalation: {
-      ...issue.escalation,
-      adminReviewStatus:
-        currentStatus === "pending" || !currentStatus
-          ? "reviewed"
-          : currentStatus,
-    },
-  };
+  if (reviewStatus !== "reviewed") {
+    throw new Error(
+      "ESCALATION_REVIEW_REQUIRED: Review and start handling this escalation before performing administrative actions.",
+    );
+  }
+
+  return state;
 }
 
 /**
@@ -517,15 +564,38 @@ export const reviewEscalation = mutation({
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
+    const state = getEscalationState(issue);
+    if (!state.isActive) {
+      throw new Error(
+        "ESCALATION_NOT_ACTIVE: This issue does not have an active escalation.",
+      );
+    }
+    if (!issue.escalation) {
+      throw new Error("ESCALATION_NOT_FOUND: Escalation details are missing.");
+    }
+    if (state.resolved) {
+      throw new Error(
+        "ESCALATION_ALREADY_CLOSED: This escalation has already been completed.",
+      );
+    }
+
+    const currentStatus = normalizeStatus(issue.escalation?.adminReviewStatus);
+
+    if (currentStatus === "reviewed") {
+      return {
+        success: true,
+        alreadyReviewed: true,
+        reviewStatus: "reviewed",
+      };
+    }
+
     const now = Date.now();
 
     await ctx.db.patch(args.issueId, {
-      escalation: issue.escalation
-        ? {
-            ...issue.escalation,
-            adminReviewStatus: "reviewed",
-          }
-        : undefined,
+      escalation: {
+        ...issue.escalation,
+        adminReviewStatus: "reviewed",
+      },
     });
 
     await ctx.db.insert("escalationResolutionActions", {
@@ -547,7 +617,12 @@ export const reviewEscalation = mutation({
       createdAt: now,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      alreadyReviewed: false,
+      reviewStatus: "reviewed",
+      reviewedAt: now,
+    };
   },
 });
 
@@ -562,6 +637,10 @@ export const extendIssueSla = mutation({
     const adminUser = await requireSystemAdmin(ctx, args.adminUserId);
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
+
+    if (getEscalationState(issue).isActive) {
+      requireReviewedEscalation(issue);
+    }
 
     const existingDeadline = getTimestamp(
       issue.slaDeadline ?? issue.sla_deadline,
@@ -588,7 +667,6 @@ export const extendIssueSla = mutation({
       slaExtendedCount: (issue.slaExtendedCount || 0) + 1,
       lastSlaExtensionAt: now,
       slaBreached: false,
-      ...getActiveEscalationReviewPatch(issue),
     });
 
     await insertEscalationActionIfActive(ctx, {
@@ -629,6 +707,10 @@ export const reassignIssueOfficer = mutation({
     const adminUser = await requireSystemAdmin(ctx, args.adminUserId);
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
+
+    if (getEscalationState(issue).isActive) {
+      requireReviewedEscalation(issue);
+    }
 
     const now = Date.now();
     const issueCity = normalizeLocation(issue.city);
@@ -734,7 +816,6 @@ export const reassignIssueOfficer = mutation({
         assignedUnitOfficer: profile.userId,
         assignedFieldOfficer: keepFieldOfficer,
         status: nextStatus,
-        ...getActiveEscalationReviewPatch(issue),
       });
 
       await insertEscalationActionIfActive(ctx, {
@@ -832,7 +913,6 @@ export const reassignIssueOfficer = mutation({
       await ctx.db.patch(args.issueId, {
         assignedFieldOfficer: profile.userId,
         status: nextStatus,
-        ...getActiveEscalationReviewPatch(issue),
       });
 
       await insertEscalationActionIfActive(ctx, {
@@ -875,6 +955,10 @@ export const updateIssuePriority = mutation({
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
+    if (getEscalationState(issue).isActive) {
+      requireReviewedEscalation(issue);
+    }
+
     if (
       (args.priority === "high" || args.priority === "critical") &&
       !args.notes.trim()
@@ -889,7 +973,6 @@ export const updateIssuePriority = mutation({
 
     await ctx.db.patch(args.issueId, {
       priority: args.priority,
-      ...getActiveEscalationReviewPatch(issue),
     });
 
     await insertEscalationActionIfActive(ctx, {
@@ -934,6 +1017,10 @@ export const changeIssueClassification = mutation({
     const adminUser = await requireSystemAdmin(ctx, args.adminUserId);
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
+
+    if (getEscalationState(issue).isActive) {
+      requireReviewedEscalation(issue);
+    }
 
     const now = Date.now();
     const targetCategory = String(
@@ -1106,18 +1193,6 @@ export const changeIssueClassification = mutation({
       subcategory: normalizedSubcategories,
       assignedUnitOfficer: nextUnitOfficer,
       assignedFieldOfficer: nextFieldOfficer,
-      ...(issue.escalation
-        ? {
-            escalation: {
-              ...issue.escalation,
-              adminReviewStatus:
-                !issue.escalation.adminReviewStatus ||
-                issue.escalation.adminReviewStatus === "pending"
-                  ? "reviewed"
-                  : issue.escalation.adminReviewStatus,
-            },
-          }
-        : {}),
     });
 
     await insertEscalationActionIfActive(ctx, {
@@ -1199,6 +1274,8 @@ export const approveEscalation = mutation({
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
+    requireReviewedEscalation(issue);
+
     const now = Date.now();
 
     const targetStatus =
@@ -1214,7 +1291,6 @@ export const approveEscalation = mutation({
         resolved: true,
         resolvedAt: now,
         resolutionNote: args.notes,
-        adminReviewStatus: "resolved",
       },
     });
 
@@ -1251,9 +1327,8 @@ export const rejectEscalation = mutation({
     const adminUser = await requireSystemAdmin(ctx, args.adminUserId);
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found.");
-    if (!issue.escalation && !issue.escalatedToAdmin) {
-      throw new Error("This issue does not have an active escalation.");
-    }
+
+    requireReviewedEscalation(issue);
 
     const reason = args.reason.trim();
     if (!reason) {
@@ -1275,7 +1350,6 @@ export const rejectEscalation = mutation({
         resolved: true,
         resolvedAt: now,
         resolutionNote: reason,
-        adminReviewStatus: "rejected",
       },
     });
 
@@ -1403,5 +1477,300 @@ export const getEscalationAnalytics = query({
       escalationsByDepartment,
       mostDelayedOfficers,
     };
+  },
+});
+
+// Mobile Escalation Functions
+export const getEscalationDetailsByIssueId = query({
+  args: {
+    issueId: v.id("issues"),
+  },
+
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+
+    if (!issue) return null;
+
+    const actions = await ctx.db
+
+      .query("escalationResolutionActions")
+
+      .withIndex("by_issue", (q) => q.eq("issueId", args.issueId))
+
+      .collect();
+
+    const enrichedActions = await Promise.all(
+      actions.map(async (a) => {
+        const performer = await ctx.db.get(a.performedBy);
+
+        return {
+          id: a._id,
+
+          issueId: a.issueId,
+
+          type: a.actionType,
+
+          performedBy: performer ? performer.fullName : "System Admin",
+
+          performedAt: a.performedAt,
+
+          oldValue: a.oldValue,
+
+          newValue: a.newValue,
+
+          notes: a.notes,
+        };
+      }),
+    );
+
+    enrichedActions.sort((x, y) => x.performedAt - y.performedAt);
+
+    return {
+      escalatedToAdmin: issue.escalatedToAdmin || false,
+
+      status: issue.status,
+
+      escalation: issue.escalation || null,
+
+      actions: enrichedActions,
+    };
+  },
+});
+
+export const escalateIssueMobile = mutation({
+  args: {
+    issueId: v.id("issues"),
+
+    prevIssueStatus: v.string(),
+
+    escalationCategory: v.union(
+      v.literal("sla_breach"),
+
+      v.literal("resource_shortage"),
+
+      v.literal("technical_complexity"),
+
+      v.literal("public_safety_risk"),
+
+      v.literal("legal_or_regulatory"),
+
+      v.literal("citizen_escalation"),
+
+      v.literal("repeat_failure"),
+
+      v.literal("cross_department_dependency"),
+
+      v.literal("budget_approval_required"),
+
+      v.literal("emergency_response"),
+
+      v.literal("officer_non_responsiveness"),
+
+      v.literal("technical_dependency"),
+
+      v.literal("third_party_dependency"),
+
+      v.literal("environmental_risk"),
+
+      v.literal("administrative_approval_pending"),
+
+      v.literal("other"),
+    ),
+
+    escalationPriority: v.union(
+      v.literal("medium"),
+      v.literal("high"),
+      v.literal("critical"),
+    ),
+
+    escalationReason: v.string(),
+
+    adminUserId: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+
+    if (!issue) throw new Error("Issue not found");
+
+    const now = Date.now();
+
+    const adminDbId = await resolveAdminUserId(ctx, args.adminUserId);
+
+    await ctx.db.patch(args.issueId, {
+      escalatedToAdmin: true,
+
+      status: "escalated",
+
+      escalation: {
+        category: args.escalationCategory,
+
+        priority: args.escalationPriority,
+
+        reason: args.escalationReason,
+
+        comments: "",
+
+        escalatedBy: adminDbId,
+
+        escalatedAt: now,
+
+        prevIssueStatus: args.prevIssueStatus,
+
+        resolved: false,
+
+        adminReviewStatus: "pending",
+
+        escalationCount: (issue.escalation?.escalationCount || 0) + 1,
+      },
+    });
+
+    await ctx.db.insert("escalationResolutionActions", {
+      issueId: args.issueId,
+
+      actionType: "escalate",
+
+      performedBy: adminDbId,
+
+      performedAt: now,
+
+      newValue: args.escalationCategory,
+
+      notes: args.escalationReason,
+    });
+
+    await ctx.db.insert("issueUpdates", {
+      issueId: args.issueId,
+
+      status: "escalated",
+
+      comment: `Escalated to Admin. Category: ${args.escalationCategory}. Priority: ${args.escalationPriority}. Reason: ${args.escalationReason}`,
+
+      updatedBy: adminDbId,
+
+      role: "admin",
+
+      attachments: [],
+
+      scope: "officer_and_citizen",
+
+      createdAt: now,
+    });
+
+    // Notify Reporter
+
+    await ctx.db.insert("notifications", {
+      userId: issue.reportedBy,
+
+      issueId: args.issueId,
+
+      title: `Issue Escalated - "${issue.title}"`,
+
+      message: `Your issue has been escalated to administrative queue. Category: ${args.escalationCategory}`,
+
+      type: "issue_escalated",
+
+      read: false,
+
+      createdAt: now,
+    });
+
+    // Notify Officers
+
+    if (issue.assignedUnitOfficer) {
+      await ctx.db.insert("notifications", {
+        userId: issue.assignedUnitOfficer,
+
+        issueId: args.issueId,
+
+        title: `Assigned Issue Escalated - "${issue.title}"`,
+
+        message: `An issue assigned to you has been escalated to administrative queue. Category: ${args.escalationCategory}`,
+
+        type: "issue_escalated",
+
+        read: false,
+
+        createdAt: now,
+      });
+    }
+
+    if (issue.assignedFieldOfficer) {
+      await ctx.db.insert("notifications", {
+        userId: issue.assignedFieldOfficer,
+
+        issueId: args.issueId,
+
+        title: `Assigned Issue Escalated - "${issue.title}"`,
+
+        message: `An issue assigned to you has been escalated to administrative queue. Category: ${args.escalationCategory}`,
+
+        type: "issue_escalated",
+
+        read: false,
+
+        createdAt: now,
+      });
+    }
+
+    // Notify Admins
+
+    const admins = await ctx.db
+
+      .query("users")
+
+      .withIndex("by_role", (q) => q.eq("role", "admin"))
+
+      .collect();
+
+    for (const admin of admins) {
+      await ctx.db.insert("notifications", {
+        userId: admin._id,
+
+        issueId: args.issueId,
+
+        title: `Escalation Pending - "${issue.title}"`,
+
+        message: `A new escalation is pending review: "${issue.title}". Category: ${args.escalationCategory}`,
+
+        type: "issue_escalated",
+
+        read: false,
+
+        createdAt: now,
+      });
+    }
+
+    // Notify City Admins if critical
+
+    if (args.escalationPriority === "critical") {
+      const cityAdmins = await ctx.db
+
+        .query("users")
+
+        .withIndex("by_role", (q) => q.eq("role", "city_admin"))
+
+        .collect();
+
+      for (const ca of cityAdmins) {
+        await ctx.db.insert("notifications", {
+          userId: ca._id,
+
+          issueId: args.issueId,
+
+          title: `URGENT: Critical Escalation - "${issue.title}"`,
+
+          message: `CRITICAL escalation requires immediate action: "${issue.title}". Category: ${args.escalationCategory}`,
+
+          type: "issue_escalated",
+
+          read: false,
+
+          createdAt: now,
+        });
+      }
+    }
+
+    return { success: true };
   },
 });

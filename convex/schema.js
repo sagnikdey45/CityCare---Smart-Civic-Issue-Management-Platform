@@ -447,6 +447,7 @@ export default defineSchema({
             v.literal("pending"),
             v.literal("reviewed"),
             v.literal("resolved"),
+            v.literal("rejected"),
           ),
         ),
         escalationCount: v.optional(v.number()),

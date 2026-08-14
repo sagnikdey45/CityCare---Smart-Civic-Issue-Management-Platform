@@ -857,13 +857,10 @@ export const reviewEscalation = mutation({
     const now = Date.now();
 
     await ctx.db.patch(args.issueId, {
-      escalationReviewedAt: now,
-      escalationReviewedBy: args.cityAdminUserId,
       escalation: {
         ...(issue.escalation || {}),
         adminReviewStatus: "reviewed",
       },
-      updatedAt: now,
     });
 
     await ctx.db.insert("escalationResolutionActions", {

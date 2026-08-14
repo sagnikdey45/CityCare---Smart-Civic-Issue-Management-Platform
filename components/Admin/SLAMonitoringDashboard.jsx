@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import {
   AlertTriangle,
   Clock,
+  Loader2,
   Shield,
   Filter,
   Search,
@@ -141,10 +142,26 @@ function isResolvedEscalation(issue) {
 
 function getEscalationReviewStatus(issue) {
   return String(
-    issue?.escalation?.status ?? issue?.escalation_admin_review_status ?? "",
+    issue?.escalation?.adminReviewStatus ??
+      issue?.escalation?.status ??
+      issue?.escalation_admin_review_status ??
+      "",
   )
     .trim()
     .toLowerCase();
+}
+
+function isEscalationPendingReview(issue) {
+  return (
+    hasActiveEscalation(issue) && getEscalationReviewStatus(issue) === "pending"
+  );
+}
+
+function isEscalationReviewed(issue) {
+  return (
+    hasActiveEscalation(issue) &&
+    getEscalationReviewStatus(issue) === "reviewed"
+  );
 }
 
 function getAdminReviewStatus(issue) {
@@ -399,26 +416,32 @@ function EscalationAnalyticsSection({ issues }) {
 function EscalationTimeline({ issue }) {
   const currentActions =
     issue.escalation_resolution_actions?.filter(
-      (a) => a.performed_at >= (issue.escalated_at || 0),
+      (a) =>
+        (a.performed_at ?? a.performedAt ?? 0) >= (issue.escalated_at || 0),
     ) || [];
 
   const reviewAction = currentActions.find(
-    (a) => a.type === "review_escalation",
+    (a) =>
+      a.type === "review_escalation" || a.actionType === "review_escalation",
   );
 
   const resolutionActions = currentActions.filter(
-    (a) => a.type !== "escalate" && a.type !== "review_escalation",
+    (a) =>
+      a.type !== "escalate" &&
+      a.type !== "review_escalation" &&
+      a.actionType !== "escalate" &&
+      a.actionType !== "review_escalation",
   );
   const hasResolutionAction = resolutionActions.length > 0;
-  const resolutionActionTime = resolutionActions[0]?.performed_at || null;
+  const resolutionActionTime =
+    resolutionActions[0]?.performed_at ??
+    resolutionActions[0]?.performedAt ??
+    null;
 
   const reviewTime =
-    reviewAction?.performed_at ||
-    (issue.escalation_admin_review_status === "resolved" ||
-    issue.escalation_admin_review_status === "reviewed"
-      ? resolutionActionTime || issue.escalation_resolved_at
-      : null) ||
-    null;
+    reviewAction?.performed_at ?? reviewAction?.performedAt ?? null;
+
+  const reviewStatus = getEscalationReviewStatus(issue);
 
   const steps = [
     {
@@ -429,8 +452,9 @@ function EscalationTimeline({ issue }) {
     {
       label: "Admin Reviewed",
       done:
-        issue.escalation_admin_review_status === "reviewed" ||
-        issue.escalation_admin_review_status === "resolved",
+        Boolean(reviewAction) ||
+        reviewStatus === "reviewed" ||
+        reviewStatus === "resolved",
       time: reviewTime,
     },
     {
@@ -494,7 +518,14 @@ function EscalationTimeline({ issue }) {
 
 // Issue card
 
-function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
+function IssueCard({
+  issue,
+  onAction,
+  onViewIssue,
+  onOpenEscalation,
+  onStartHandling,
+  reviewingIssueId,
+}) {
   const [expanded, setExpanded] = useState(false);
   const sla = calculateSLAStatus(issue.sla_deadline);
   const isEscalated = !!issue.is_escalated;
@@ -888,58 +919,86 @@ function IssueCard({ issue, onAction, onViewIssue, onOpenEscalation }) {
           )}
           {hasBeenEscalated && !escalationResolved && (
             <>
-              <ActionBtn
-                onClick={() => onOpenEscalation(issue)}
-                variant="purple"
-                icon={<Eye size={12} />}
-              >
-                Review
-              </ActionBtn>
-
-              <ActionBtn
-                onClick={() => onAction(issue, "approve")}
-                variant="emerald"
-                icon={<CheckCircle size={12} />}
-              >
-                Resolve
-              </ActionBtn>
-
-              {canTakeSlaAction && (
+              {isEscalationPendingReview(issue) ? (
+                <button
+                  type="button"
+                  disabled={
+                    reviewingIssueId ===
+                    (issue._id || issue.id || issue.issueId)
+                  }
+                  onClick={() => onStartHandling(issue)}
+                  className="px-3.5 py-2 rounded-2xl font-black text-xs bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {reviewingIssueId ===
+                  (issue._id || issue.id || issue.issueId) ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Starting Handling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldAlert size={13} />
+                      <span>Start Handling Escalation</span>
+                    </>
+                  )}
+                </button>
+              ) : (
                 <>
                   <ActionBtn
-                    onClick={() => onAction(issue, "reassign_unit_officer")}
-                    variant="cyan"
-                    icon={<Shield size={12} />}
+                    onClick={() => onOpenEscalation(issue)}
+                    variant="purple"
+                    icon={<Eye size={12} />}
                   >
-                    Reassign UO
+                    Manage Escalation
                   </ActionBtn>
+
                   <ActionBtn
-                    onClick={() => onAction(issue, "reassign_field_officer")}
+                    onClick={() => onAction(issue, "approve")}
                     variant="emerald"
-                    icon={<Zap size={12} />}
+                    icon={<CheckCircle size={12} />}
                   >
-                    Reassign FO
+                    Resolve
+                  </ActionBtn>
+
+                  {canTakeSlaAction && (
+                    <>
+                      <ActionBtn
+                        onClick={() => onAction(issue, "reassign_unit_officer")}
+                        variant="cyan"
+                        icon={<Shield size={12} />}
+                      >
+                        Reassign UO
+                      </ActionBtn>
+                      <ActionBtn
+                        onClick={() =>
+                          onAction(issue, "reassign_field_officer")
+                        }
+                        variant="emerald"
+                        icon={<Zap size={12} />}
+                      >
+                        Reassign FO
+                      </ActionBtn>
+                    </>
+                  )}
+
+                  {canTakeSlaAction && (
+                    <ActionBtn
+                      onClick={() => onAction(issue, "extend_sla")}
+                      variant="amber"
+                      icon={<Timer size={12} />}
+                    >
+                      Extend SLA
+                    </ActionBtn>
+                  )}
+                  <ActionBtn
+                    onClick={() => onViewIssue(issue)}
+                    variant="default"
+                    icon={<Eye size={12} />}
+                  >
+                    View Issue
                   </ActionBtn>
                 </>
               )}
-
-              {canTakeSlaAction && (
-                <ActionBtn
-                  onClick={() => onAction(issue, "extend_sla")}
-                  variant="amber"
-                  icon={<Timer size={12} />}
-                >
-                  Extend SLA
-                </ActionBtn>
-              )}
-
-              <ActionBtn
-                onClick={() => onViewIssue(issue)}
-                variant="default"
-                icon={<Eye size={12} />}
-              >
-                View Issue
-              </ActionBtn>
             </>
           )}
           {hasBeenEscalated &&
@@ -1323,6 +1382,28 @@ export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
     sortBy,
   ]);
 
+  const reviewEscalationMut = useMutation(api.escalation.reviewEscalation);
+  const [reviewingIssueId, setReviewingIssueId] = useState(null);
+
+  const handleStartHandlingEscalation = async (issue) => {
+    const issueId = issue?._id ?? issue?.id ?? issue?.issueId;
+    if (!issueId || !adminUserId) {
+      return;
+    }
+
+    try {
+      setReviewingIssueId(issueId);
+      await reviewEscalationMut({
+        issueId,
+        adminUserId,
+      });
+    } catch (error) {
+      console.error("Failed to review escalation:", error);
+    } finally {
+      setReviewingIssueId(null);
+    }
+  };
+
   // Action modal opener for all actions
   const openIssueAction = (issue, initialAction = null) => {
     setResolutionModalState({
@@ -1339,7 +1420,7 @@ export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(255,255,255,0.12),transparent_60%)]" />
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-sm" />
           <div className="relative p-6">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-5">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-5 justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center backdrop-blur-sm flex-shrink-0 shadow-xl">
                   <AlertTriangle
@@ -1356,20 +1437,56 @@ export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
                   </p>
                   <div className="flex items-center gap-4 mt-3 flex-wrap">
                     {stats.breached > 0 && (
-                      <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-xl px-3 py-1.5">
-                        <XCircle size={13} className="text-red-200" />
-                        <span className="text-white text-xs font-black">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSlaFilter("breached");
+                          setEscalationStatusFilter("all");
+                        }}
+                        className={`flex items-center gap-1.5 backdrop-blur-sm rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                          slaFilter === "breached"
+                            ? "bg-white text-red-700 shadow-md font-black"
+                            : "bg-white/15 hover:bg-white/25 text-white"
+                        }`}
+                      >
+                        <XCircle
+                          size={13}
+                          className={
+                            slaFilter === "breached"
+                              ? "text-red-600"
+                              : "text-red-200"
+                          }
+                        />
+                        <span className="text-xs font-black">
                           {stats.breached} SLA Breaches
                         </span>
-                      </div>
+                      </button>
                     )}
                     {stats.escalated > 0 && (
-                      <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-xl px-3 py-1.5">
-                        <ArrowUpCircle size={13} className="text-purple-200" />
-                        <span className="text-white text-xs font-black">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEscalationStatusFilter("active");
+                          setSlaFilter("all");
+                        }}
+                        className={`flex items-center gap-1.5 backdrop-blur-sm rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                          escalationStatusFilter === "active"
+                            ? "bg-white text-purple-800 shadow-md font-black"
+                            : "bg-white/15 hover:bg-white/25 text-white"
+                        }`}
+                      >
+                        <ArrowUpCircle
+                          size={13}
+                          className={
+                            escalationStatusFilter === "active"
+                              ? "text-purple-700"
+                              : "text-purple-200"
+                          }
+                        />
+                        <span className="text-xs font-black">
                           {stats.escalated} Escalations
                         </span>
-                      </div>
+                      </button>
                     )}
                     {stats.criticalEsc > 0 && (
                       <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-xl px-3 py-1.5">
@@ -1389,6 +1506,44 @@ export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Action Buttons for quick filtering */}
+              <div className="flex items-center gap-3 flex-wrap shrink-0">
+                {stats.breached > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSlaFilter("breached");
+                      setEscalationStatusFilter("all");
+                    }}
+                    className={`px-4 py-2.5 rounded-2xl font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer ${
+                      slaFilter === "breached"
+                        ? "bg-white text-red-700 shadow-2xl scale-105 ring-2 ring-white/60"
+                        : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border border-white/20 hover:border-white/40"
+                    }`}
+                  >
+                    <XCircle size={16} />
+                    <span>View Breached ({stats.breached})</span>
+                  </button>
+                )}
+                {stats.escalated > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEscalationStatusFilter("active");
+                      setSlaFilter("all");
+                    }}
+                    className={`px-4 py-2.5 rounded-2xl font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer ${
+                      escalationStatusFilter === "active"
+                        ? "bg-white text-rose-700 shadow-2xl scale-105 ring-2 ring-white/60"
+                        : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border border-white/20 hover:border-white/40"
+                    }`}
+                  >
+                    <ArrowUpCircle size={16} />
+                    <span>View Escalated ({stats.escalated})</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1809,6 +1964,8 @@ export default function SLAMonitoringDashboard({ onViewIssue, adminUserId }) {
                 onAction={(i, act) => openIssueAction(i, act)}
                 onViewIssue={onViewIssue}
                 onOpenEscalation={(i) => openIssueAction(i, null)}
+                onStartHandling={handleStartHandlingEscalation}
+                reviewingIssueId={reviewingIssueId}
               />
             ))}
           </div>
