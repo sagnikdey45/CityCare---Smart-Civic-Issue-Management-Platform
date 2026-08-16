@@ -88,7 +88,7 @@ export default function IssueReportLimitCard({
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-                    You can submit up to 3 reports every 8 hours.
+                    You can submit up to 5 reports every 8 hours.
                   </p>
                 </div>
               </div>

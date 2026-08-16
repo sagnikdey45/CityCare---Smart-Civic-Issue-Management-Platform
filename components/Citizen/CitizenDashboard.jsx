@@ -10,6 +10,7 @@ import {
   TrendingUp,
   CheckCircle,
   Grid,
+  Gamepad,
   List,
   MapPin,
   Zap,
@@ -320,6 +321,17 @@ export function CitizenDashboard({ onNotificationsClick, unreadCount }) {
               <PlusCircle size={20} strokeWidth={2.5} />
               <span className="hidden sm:inline tracking-wide">
                 Report Issue
+              </span>
+            </button>
+
+            <button
+              data-tutorial="report-issue"
+              onClick={() => router.push("/citizen/gamification")}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl font-bold shadow-[0_4px_15px_rgba(16,185,129,0.3)] hover:shadow-[0_8px_25px_rgba(16,185,129,0.5)] transition-all duration-300 transform hover:-translate-y-0.5"
+            >
+              <Gamepad size={20} strokeWidth={2.5} />
+              <span className="hidden sm:inline tracking-wide">
+                Gamification Corner
               </span>
             </button>
 

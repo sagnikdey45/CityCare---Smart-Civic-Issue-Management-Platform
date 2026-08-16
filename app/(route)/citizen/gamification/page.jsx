@@ -5,12 +5,24 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ModeToggle } from "@/components/ModeToggle";
 import { useSession, signOut } from "next-auth/react";
-import { PlusCircle, Bell, User, LogOut, TrendingUp } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { NotificationsPanel } from "@/components/NotificationPanel";
+import { PlusCircle, Bell, User, LogOut, TrendingUp, Home } from "lucide-react";
 
 const GamificationPage = () => {
   const { data: session } = useSession();
   const router = useRouter();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const userId = session?.user?.id;
+
+  const notifications = useQuery(
+    api.notifications.getByUser,
+    userId ? { userId } : "skip",
+  );
+
+  const unreadCount = notifications?.filter((n) => !n.read).length || 0;
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] dark:bg-[#050505] transition-colors duration-700 selection:bg-emerald-500/30 relative">
@@ -44,7 +56,7 @@ const GamificationPage = () => {
 
           {/* Right Section */}
           <div className="flex items-center gap-3 sm:gap-5">
-            <button
+            {/* <button
               onClick={() => router.push("/citizen/report")}
               className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl font-bold shadow-[0_4px_15px_rgba(16,185,129,0.3)] hover:shadow-[0_8px_25px_rgba(16,185,129,0.5)] transition-all duration-300 transform hover:-translate-y-0.5"
             >
@@ -52,9 +64,27 @@ const GamificationPage = () => {
               <span className="hidden sm:inline tracking-wide">
                 Report Issue
               </span>
-            </button>
+            </button> */}
+            
+              {/* Dashboard */}
+              <button
+                onClick={() => router.push("/citizen/")}
+                className="group flex items-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-sm
+                  bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700
+                  border border-slate-300 dark:border-slate-600
+                  text-slate-700 dark:text-slate-200
+                  shadow-sm hover:shadow-md
+                  hover:-translate-y-0.5 active:scale-95
+                  transition-all duration-200"
+              >
+                <Home className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </button>
+
+              
 
             <button
+              onClick={() => setIsNotificationsOpen(true)}
               className="relative p-2.5 rounded-xl bg-gray-100/80 dark:bg-white/5 border border-gray-200/80 dark:border-white/10 shadow-sm hover:bg-white dark:hover:bg-white/10 hover:shadow-md transition-all duration-300 group"
               aria-label="Notifications"
             >
@@ -62,6 +92,11 @@ const GamificationPage = () => {
                 className="text-gray-700 dark:text-gray-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors"
                 size={22}
               />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white/80">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
 
             <div className="hidden sm:block">
@@ -120,6 +155,11 @@ const GamificationPage = () => {
       <div className="max-w-[90rem] mx-auto p-4 sm:p-6 lg:p-8 relative z-10">
         <CitizenGamificationSection />
       </div>
+      <NotificationsPanel
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications || []}
+      />
     </div>
   );
 };
