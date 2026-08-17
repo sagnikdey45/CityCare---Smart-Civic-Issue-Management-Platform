@@ -3636,3 +3636,495 @@ export const getCityIssueDetails = query({
     };
   },
 });
+
+function safeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const DEPARTMENT_LABELS = {
+  road: "Road & Infrastructure",
+  electricity: "Electricity & Lighting",
+  water: "Water Supply",
+  sanitation: "Sanitation",
+  drainage: "Drainage & Sewer",
+  solid_waste: "Solid Waste Management",
+  public_health: "Public Health",
+  other: "Other",
+};
+
+/**
+ * City-Wide Department Performance, Officer Metrics & Issue Statistics Query
+ * Strictly city-scoped to the authenticated City Admin's assigned city.
+ */
+export const getCityDepartmentPerformance = query({
+  args: {
+    cityAdminUserId: v.id("users"),
+  },
+
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.cityAdminUserId);
+    if (!user || user.role !== "city_admin") {
+      throw new Error(
+        "CITY_ADMIN_REQUIRED: City Administrator access required.",
+      );
+    }
+
+    const profile = await ctx.db
+      .query("cityAdmins")
+      .withIndex("by_user", (q) => q.eq("userId", args.cityAdminUserId))
+      .unique();
+
+    if (!profile) {
+      throw new Error("CITY_ADMIN_PROFILE_NOT_FOUND: Profile not found.");
+    }
+
+    const city = profile.city;
+    const state = profile.state || "";
+
+    // Fetch all issues for this city
+    const cityIssues = await ctx.db
+      .query("issues")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+
+    // Fetch all Unit Officers for this city
+    const unitOfficers = await ctx.db
+      .query("unitOfficers")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+
+    // Fetch all Field Officers for this city
+    const fieldOfficers = await ctx.db
+      .query("fieldOfficers")
+      .withIndex("by_city", (q) => q.eq("city", city))
+      .collect();
+
+    // Build user ID to name lookup maps
+    const officerNameMap = new Map();
+    unitOfficers.forEach((uo) => {
+      if (uo.userId) officerNameMap.set(String(uo.userId), uo.fullName);
+    });
+    fieldOfficers.forEach((fo) => {
+      if (fo.userId) officerNameMap.set(String(fo.userId), fo.fullName);
+    });
+
+    const TERMINAL_STATUSES = new Set([
+      "resolved",
+      "closed",
+      "rejected",
+      "withdrawn",
+    ]);
+
+    // Initialize department map
+    const deptMap = new Map();
+
+    function getDeptEntry(rawDept) {
+      const key = normalizeDepartment(rawDept);
+      if (!deptMap.has(key)) {
+        deptMap.set(key, {
+          department: key,
+          label:
+            DEPARTMENT_LABELS[key] ||
+            key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, " "),
+          issues: [],
+          unitOfficers: [],
+          fieldOfficers: [],
+        });
+      }
+      return deptMap.get(key);
+    }
+
+    // Populate officers into department map
+    unitOfficers.forEach((uo) => {
+      const deptEntry = getDeptEntry(uo.department);
+      deptEntry.unitOfficers.push(uo);
+    });
+
+    fieldOfficers.forEach((fo) => {
+      const deptEntry = getDeptEntry(fo.department);
+      deptEntry.fieldOfficers.push(fo);
+    });
+
+    // Populate issues into department map
+    cityIssues.forEach((issue) => {
+      const deptKey = issue.department ?? issue.category ?? "other";
+      const deptEntry = getDeptEntry(deptKey);
+      deptEntry.issues.push(issue);
+    });
+
+    // Process performance metrics for each department
+    const departmentResults = [];
+
+    for (const [deptKey, data] of deptMap.entries()) {
+      const issues = data.issues;
+      const uos = data.unitOfficers;
+      const fos = data.fieldOfficers;
+
+      const totalIssues = issues.length;
+
+      // Status breakdown
+      const statusBreakdown = {
+        pending: 0,
+        verified: 0,
+        assigned: 0,
+        in_progress: 0,
+        pending_uo_verification: 0,
+        rework_required: 0,
+        reopened: 0,
+        escalated: 0,
+        resolved: 0,
+        closed: 0,
+        rejected: 0,
+        withdrawn: 0,
+      };
+
+      // Priority breakdown
+      const priorityBreakdown = {
+        low: 0,
+        medium: 0,
+        high: 0,
+        critical: 0,
+      };
+
+      let activeIssues = 0;
+      let slaBreachedIssues = 0;
+      let slaCompliantIssues = 0;
+      let slaNoDeadline = 0;
+      let slaExtensionCount = 0;
+      let activeEscalations = 0;
+      let totalReopenEvents = 0;
+
+      let totalResolutionMs = 0;
+      let resolvedCountForTime = 0;
+
+      let totalCitizenRating = 0;
+      let ratedIssueCount = 0;
+
+      const reportReadyIssues = [];
+
+      issues.forEach((issue) => {
+        const normStatus = String(issue.status || "pending").toLowerCase();
+        if (statusBreakdown[normStatus] !== undefined) {
+          statusBreakdown[normStatus] += 1;
+        } else {
+          statusBreakdown.pending += 1;
+        }
+
+        const normPriority = String(issue.priority || "medium").toLowerCase();
+        if (priorityBreakdown[normPriority] !== undefined) {
+          priorityBreakdown[normPriority] += 1;
+        } else {
+          priorityBreakdown.medium += 1;
+        }
+
+        if (!TERMINAL_STATUSES.has(normStatus)) {
+          activeIssues += 1;
+        }
+
+        // SLA
+        if (issue.slaBreached) {
+          slaBreachedIssues += 1;
+        } else if (
+          issue.slaDeadline !== null &&
+          issue.slaDeadline !== undefined
+        ) {
+          slaCompliantIssues += 1;
+        } else {
+          slaNoDeadline += 1;
+        }
+
+        slaExtensionCount += safeNumber(issue.slaExtendedCount);
+
+        // Escalations
+        if (
+          issue.escalatedToAdmin === true &&
+          issue.escalation?.resolved !== true
+        ) {
+          activeEscalations += 1;
+        }
+
+        // Reopens
+        if (issue.isReopened || normStatus === "reopened") {
+          totalReopenEvents += safeNumber(issue.reopenCount) || 1;
+        }
+
+        // Resolution Time
+        if (normStatus === "resolved" || normStatus === "closed") {
+          const finalTime = issue.resolvedAt || issue.closedAt;
+          if (finalTime && issue.createdAt && finalTime > issue.createdAt) {
+            totalResolutionMs += finalTime - issue.createdAt;
+            resolvedCountForTime += 1;
+          }
+        }
+
+        // Rating
+        if (issue.citizenRating !== null && issue.citizenRating !== undefined) {
+          totalCitizenRating += Number(issue.citizenRating);
+          ratedIssueCount += 1;
+        }
+
+        // Officers assigned names
+        const uoName = issue.assignedUnitOfficer
+          ? officerNameMap.get(String(issue.assignedUnitOfficer)) ||
+            "Unit Officer"
+          : "Unassigned";
+        const foName = issue.assignedFieldOfficer
+          ? officerNameMap.get(String(issue.assignedFieldOfficer)) ||
+            "Field Officer"
+          : "Unassigned";
+
+        reportReadyIssues.push({
+          issueId: issue._id,
+          issueCode: issue.issueCode,
+          title: issue.title,
+          category: issue.category,
+          department: deptKey,
+          priority: issue.priority,
+          status: issue.status,
+          createdAt: issue.createdAt,
+          resolvedAt: issue.resolvedAt || null,
+          closedAt: issue.closedAt || null,
+          slaDeadline: issue.slaDeadline || null,
+          slaBreached: issue.slaBreached ?? false,
+          citizenRating: issue.citizenRating ?? null,
+          assignedUnitOfficer: uoName,
+          assignedFieldOfficer: foName,
+        });
+      });
+
+      const evaluatedSlaCount = slaBreachedIssues + slaCompliantIssues;
+      const slaComplianceRate =
+        evaluatedSlaCount > 0
+          ? (slaCompliantIssues / evaluatedSlaCount) * 100
+          : 100;
+
+      const resolvedTotal = statusBreakdown.resolved + statusBreakdown.closed;
+      const resolutionRate =
+        totalIssues > 0 ? (resolvedTotal / totalIssues) * 100 : 0;
+      const rejectionRate =
+        totalIssues > 0 ? (statusBreakdown.rejected / totalIssues) * 100 : 0;
+
+      const avgResolutionMs =
+        resolvedCountForTime > 0 ? totalResolutionMs / resolvedCountForTime : 0;
+      const avgResolutionHours = safeNumber(avgResolutionMs / (1000 * 60 * 60));
+      const avgResolutionDays = safeNumber(
+        avgResolutionMs / (1000 * 60 * 60 * 24),
+      );
+
+      const averageCitizenRating =
+        ratedIssueCount > 0
+          ? Number((totalCitizenRating / ratedIssueCount).toFixed(1))
+          : null;
+
+      // Unit Officers metrics
+      const unitOfficerList = uos.map((uo) => ({
+        profileId: uo._id,
+        userId: uo.userId,
+        fullName: uo.fullName,
+        department: uo.department,
+        city: uo.city,
+        accountApproved: uo.accountApproved,
+        rating: safeNumber(uo.rating),
+        efficiencyScore: safeNumber(uo.efficiencyScore),
+        avgResolutionTime: safeNumber(uo.avgResolutionTime),
+        totalVerifiedIssues: safeNumber(uo.totalVerifiedIssues),
+        totalRejectedIssues: safeNumber(uo.totalRejectedIssues),
+        activeIssues: uo.activeIssueIds?.length ?? 0,
+        resolvedIssues: uo.resolvedIssueIds?.length ?? 0,
+      }));
+
+      // Field Officers metrics
+      let totalFoWorkloadPercent = 0;
+      let officersAtCapacityCount = 0;
+
+      const fieldOfficerList = fos.map((fo) => {
+        const currentActive = safeNumber(fo.currentActiveIssues);
+        const maxCapacity = safeNumber(fo.maxIssueCapacity);
+        const workloadPercent =
+          maxCapacity > 0
+            ? Math.min(100, (currentActive / maxCapacity) * 100)
+            : 0;
+        totalFoWorkloadPercent += workloadPercent;
+
+        if (maxCapacity > 0 && currentActive >= maxCapacity) {
+          officersAtCapacityCount += 1;
+        }
+
+        return {
+          profileId: fo._id,
+          userId: fo.userId,
+          fullName: fo.fullName,
+          department: fo.department,
+          city: fo.city,
+          specialisations: fo.specialisations ?? [],
+          accountApproved: fo.accountApproved,
+          currentActiveIssues: currentActive,
+          maxIssueCapacity: maxCapacity,
+          workloadPercent: Number(workloadPercent.toFixed(1)),
+          totalResolvedIssues: safeNumber(fo.totalResolvedIssues),
+          avgResolutionTime: safeNumber(fo.avgResolutionTime),
+          onTimeCompletionRate: safeNumber(fo.onTimeCompletionRate),
+          rating: safeNumber(fo.rating),
+          efficiencyScore: safeNumber(fo.efficiencyScore),
+        };
+      });
+
+      const activeUoCount = uos.filter((o) => o.accountApproved).length;
+      const activeFoCount = fos.filter((o) => o.accountApproved).length;
+
+      const avgUoRating =
+        uos.length > 0
+          ? Number(
+              (
+                uos.reduce((s, o) => s + safeNumber(o.rating), 0) / uos.length
+              ).toFixed(1),
+            )
+          : 0;
+      const avgUoEfficiency =
+        uos.length > 0
+          ? Math.round(
+              uos.reduce((s, o) => s + safeNumber(o.efficiencyScore), 0) /
+                uos.length,
+            )
+          : 0;
+
+      const avgFoRating =
+        fos.length > 0
+          ? Number(
+              (
+                fos.reduce((s, o) => s + safeNumber(o.rating), 0) / fos.length
+              ).toFixed(1),
+            )
+          : 0;
+      const avgFoEfficiency =
+        fos.length > 0
+          ? Math.round(
+              fos.reduce((s, o) => s + safeNumber(o.efficiencyScore), 0) /
+                fos.length,
+            )
+          : 0;
+      const avgFoOnTimeRate =
+        fos.length > 0
+          ? Number(
+              (
+                fos.reduce(
+                  (s, o) => s + safeNumber(o.onTimeCompletionRate),
+                  0,
+                ) / fos.length
+              ).toFixed(1),
+            )
+          : 0;
+      const avgFoWorkload =
+        fos.length > 0
+          ? Number((totalFoWorkloadPercent / fos.length).toFixed(1))
+          : 0;
+
+      departmentResults.push({
+        department: deptKey,
+        label:
+          DEPARTMENT_LABELS[deptKey] ||
+          deptKey.charAt(0).toUpperCase() + deptKey.slice(1).replace(/_/g, " "),
+        metrics: {
+          totalIssues,
+          activeIssues,
+          resolvedIssues: statusBreakdown.resolved,
+          closedIssues: statusBreakdown.closed,
+          rejectedIssues: statusBreakdown.rejected,
+          withdrawnIssues: statusBreakdown.withdrawn,
+          resolutionRate: Number(resolutionRate.toFixed(1)),
+          rejectionRate: Number(rejectionRate.toFixed(1)),
+
+          slaBreachedIssues,
+          slaCompliantIssues,
+          slaNoDeadline,
+          slaComplianceRate: Number(slaComplianceRate.toFixed(1)),
+          slaExtensionCount,
+          averageSlaExtensions:
+            totalIssues > 0
+              ? Number((slaExtensionCount / totalIssues).toFixed(1))
+              : 0,
+
+          avgResolutionHours: Number(avgResolutionHours.toFixed(1)),
+          avgResolutionDays: Number(avgResolutionDays.toFixed(1)),
+
+          averageCitizenRating,
+          ratedIssueCount,
+
+          activeEscalations,
+          totalReopenEvents,
+
+          unitOfficerCount: uos.length,
+          activeUnitOfficerCount: activeUoCount,
+          fieldOfficerCount: fos.length,
+          activeFieldOfficerCount: activeFoCount,
+
+          averageUnitOfficerRating: avgUoRating,
+          averageUnitOfficerEfficiency: avgUoEfficiency,
+          averageFieldOfficerRating: avgFoRating,
+          averageFieldOfficerEfficiency: avgFoEfficiency,
+          averageFieldOfficerOnTimeRate: avgFoOnTimeRate,
+          averageFieldOfficerWorkload: avgFoWorkload,
+          officersAtCapacity: officersAtCapacityCount,
+        },
+        statusBreakdown,
+        priorityBreakdown,
+        unitOfficers: unitOfficerList,
+        fieldOfficers: fieldOfficerList,
+        issues: reportReadyIssues,
+      });
+    }
+
+    // Sort departments: highest issue count first
+    departmentResults.sort(
+      (a, b) => b.metrics.totalIssues - a.metrics.totalIssues,
+    );
+
+    // City-wide summary
+    let cityTotalIssues = 0;
+    let cityActiveIssues = 0;
+    let cityResolvedIssues = 0;
+    let cityClosedIssues = 0;
+    let citySlaBreached = 0;
+    let citySlaCompliant = 0;
+    let cityUnitOfficers = 0;
+    let cityFieldOfficers = 0;
+
+    departmentResults.forEach((d) => {
+      cityTotalIssues += d.metrics.totalIssues;
+      cityActiveIssues += d.metrics.activeIssues;
+      cityResolvedIssues += d.metrics.resolvedIssues;
+      cityClosedIssues += d.metrics.closedIssues;
+      citySlaBreached += d.metrics.slaBreachedIssues;
+      citySlaCompliant += d.metrics.slaCompliantIssues;
+      cityUnitOfficers += d.metrics.unitOfficerCount;
+      cityFieldOfficers += d.metrics.fieldOfficerCount;
+    });
+
+    const totalEvaluatedSla = citySlaBreached + citySlaCompliant;
+    const overallSlaComplianceRate =
+      totalEvaluatedSla > 0
+        ? Number(((citySlaCompliant / totalEvaluatedSla) * 100).toFixed(1))
+        : 100;
+
+    return {
+      scope: {
+        city,
+        state,
+      },
+      generatedAt: Date.now(),
+      summary: {
+        totalDepartments: departmentResults.length,
+        totalIssues: cityTotalIssues,
+        activeIssues: cityActiveIssues,
+        resolvedIssues: cityResolvedIssues,
+        closedIssues: cityClosedIssues,
+        slaBreachedIssues: citySlaBreached,
+        totalUnitOfficers: cityUnitOfficers,
+        totalFieldOfficers: cityFieldOfficers,
+        overallSlaComplianceRate,
+      },
+      departments: departmentResults,
+    };
+  },
+});

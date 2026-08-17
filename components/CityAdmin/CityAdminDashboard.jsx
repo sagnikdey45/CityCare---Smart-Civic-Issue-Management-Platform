@@ -10,6 +10,7 @@ import CityAdminSLAMonitor from "../city-admin/CityAdminSLAMonitor";
 import CityIssueAnalytics from "../city-admin/CityIssueAnalytics";
 import CityAdminPublicModeration from "../city-admin/public-moderation/CityAdminPublicModeration";
 import CityAdminCitizenRewards from "../city-admin/rewards/CityAdminCitizenRewards";
+import CityAdminDepartments from "../city-admin/departments/CityAdminDepartments";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -325,7 +326,6 @@ export default function CityAdminDashboard() {
     dbUser && dbUser.role === "city_admin" && overviewData === null;
   const isOverviewLoading =
     dbUser && dbUser.role === "city_admin" && overviewData === undefined;
-  const [officerTab, setOfficerTab] = useState("pending");
 
   const [issues, setIssues] = useState([]);
   const [officers, setOfficers] = useState([]);
@@ -622,16 +622,10 @@ export default function CityAdminDashboard() {
             gradient: "from-amber-400 to-orange-500",
           },
           {
-            id: "officers",
-            label: "Officers",
-            icon: Users,
-            gradient: "from-blue-500 to-cyan-500",
-          },
-          {
             id: "departments",
-            label: "Departments",
-            icon: BarChart3,
-            gradient: "from-violet-500 to-blue-500",
+            label: "Departments & Reports",
+            icon: Building2,
+            gradient: "from-violet-500 to-indigo-600",
           },
           {
             id: "audit",
@@ -888,257 +882,6 @@ export default function CityAdminDashboard() {
       onViewIssue={setSelectedIssue}
     />
   );
-
-  const renderOfficerManagement = () => (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 mb-6">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-        Officer Management & Approvals
-      </h2>
-
-      <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-800">
-        <button
-          onClick={() => setOfficerTab("pending")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            officerTab === "pending"
-              ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}
-        >
-          Pending Approvals ({pendingOfficers.length})
-        </button>
-        <button
-          onClick={() => setOfficerTab("active")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            officerTab === "active"
-              ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}
-        >
-          Active Officers ({activeOfficers.length})
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        </div>
-      ) : officerTab === "pending" ? (
-        pendingOfficers.length === 0 ? (
-          <div className="text-center py-12">
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-            <p className="text-gray-500">No pending officer approvals!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pendingOfficers.map((officer) => (
-              <div
-                key={officer.id}
-                className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">
-                      {officer.full_name}
-                    </h3>
-                    <p className="text-xs text-gray-500">{officer.email}</p>
-                  </div>
-                  <span
-                    className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      officer.role === "ward_officer"
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                        : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                    }`}
-                  >
-                    {officer.role === "ward_officer"
-                      ? "Ward Officer"
-                      : "Field Worker"}
-                  </span>
-                </div>
-
-                <div className="space-y-2 mb-4 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Users className="w-4 h-4" />
-                    <span className="capitalize">
-                      {officer.role.replace("_", " ")}
-                    </span>
-                  </div>
-                  {officer.ward_zone && (
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <MapPin className="w-4 h-4" />
-                      <span>Ward: {officer.ward_zone}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Calendar className="w-4 h-4" />
-                    <span>
-                      Requested:{" "}
-                      {new Date(officer.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleApproveOfficer(officer.id)}
-                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleRejectOfficer(officer.id)}
-                    className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      ) : activeOfficers.length === 0 ? (
-        <div className="text-center py-12">
-          <Users className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500">No active officers yet!</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {activeOfficers.map((officer) => (
-            <div
-              key={officer.id}
-              className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-bold">
-                    {officer.full_name.charAt(0)}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 dark:text-white">
-                    {officer.full_name}
-                  </h3>
-                  <p className="text-xs text-gray-500 capitalize">
-                    {officer.role.replace("_", " ")}
-                  </p>
-                </div>
-              </div>
-              {officer.ward_zone && (
-                <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                  Ward: {officer.ward_zone}
-                </div>
-              )}
-              <button className="w-full py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white text-xs font-medium rounded-lg transition-colors">
-                View Profile
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const renderDepartmentPerformance = () => {
-    const departmentData = issues.reduce((acc, issue) => {
-      const dept = issue.category;
-      if (!acc[dept]) {
-        acc[dept] = {
-          total: 0,
-          resolved: 0,
-          pending: 0,
-          avgTime: 0,
-        };
-      }
-      acc[dept].total++;
-      if (issue.status === "resolved") acc[dept].resolved++;
-      if (issue.status === "pending") acc[dept].pending++;
-      return acc;
-    }, {});
-
-    const departments = Object.entries(departmentData).map(([name, data]) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      total: data.total,
-      avgTime: "3.5 days",
-      onTime: Math.round((data.resolved / data.total) * 100),
-      reopenRate: 2.5,
-      score: Math.round((data.resolved / data.total) * 100),
-      color: "blue",
-    }));
-
-    return (
-      <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 mb-6">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-          Department Performance Dashboard
-        </h2>
-
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-          </div>
-        ) : departments.length === 0 ? (
-          <div className="text-center py-12">
-            <BarChart3 className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
-            <p className="text-gray-500">No department data available!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {departments.map((dept, idx) => (
-              <div
-                key={idx}
-                className="p-5 bg-gray-50 dark:bg-gray-800 rounded-xl"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900 dark:text-white">
-                    {dept.name}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <Award className="w-5 h-5 text-blue-500" />
-                    <span className="text-xl font-bold text-gray-900 dark:text-white">
-                      {dept.score}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Total Issues</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {dept.total}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Avg Time</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {dept.avgTime}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500 mb-1">On-Time Rate</p>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500"
-                          style={{ width: `${dept.onTime}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {dept.onTime}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <button className="w-full py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white text-sm font-medium rounded-lg transition-colors">
-                  View Department Report
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderAuditLogs = () => (
     <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 mb-6">
@@ -2427,8 +2170,12 @@ export default function CityAdminDashboard() {
                       city={cityAdminProfile?.city || overviewData?.scope?.city}
                     />
                   )}
-                {activeTab === "officers" && renderOfficerManagement()}
-                {activeTab === "departments" && renderDepartmentPerformance()}
+                {activeTab === "departments" && dbUser?._id && (
+                  <CityAdminDepartments
+                    cityAdminUserId={dbUser._id}
+                    city={cityAdminProfile?.city ?? overviewData?.scope?.city}
+                  />
+                )}
                 {activeTab === "audit" && renderAuditLogs()}
                 {activeTab === "ai" && renderAIInsights()}
               </>
