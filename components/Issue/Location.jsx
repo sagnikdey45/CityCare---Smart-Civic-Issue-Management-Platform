@@ -445,13 +445,18 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
     );
   }
 
-  /* --------------------------------------------------
-     Manual Mode Input Handlers
-  -------------------------------------------------- */
   const handleManualCoordinateChange = (field, value) => {
+    let parsedValue = value;
+    if (value === "" || value === null || value === undefined) {
+      parsedValue = "";
+    } else {
+      const num = Number(value);
+      parsedValue = Number.isFinite(num) ? num : value;
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [field]: value === "" ? "" : value,
+      [field]: parsedValue,
     }));
 
     setErrors((prev) => ({

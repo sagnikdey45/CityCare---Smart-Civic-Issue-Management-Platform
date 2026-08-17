@@ -37,6 +37,12 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 
+const formatCoordinate = (val) => {
+  if (val === null || val === undefined || val === "") return "N/A";
+  const num = Number(val);
+  return Number.isFinite(num) ? num.toFixed(6) : "N/A";
+};
+
 const PreviewModal = ({
   formData,
   setFormData,
@@ -471,8 +477,8 @@ const PreviewModal = ({
                   {formData.address}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                  {formData.latitude.toFixed(6)},{" "}
-                  {formData.longitude.toFixed(6)}
+                  {formatCoordinate(formData.latitude)},{" "}
+                  {formatCoordinate(formData.longitude)}
                 </p>
               </div>
             </div>
