@@ -24,6 +24,17 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useSession } from "next-auth/react";
 
+const defaultMeta = {
+  Icon: AlertCircle,
+  gradient: "from-blue-500 to-cyan-500",
+  glow: "shadow-blue-500/30",
+  dot: "bg-blue-500",
+  pill: "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/25",
+  accent: "from-blue-500/20 to-cyan-500/10",
+  unreadBorder: "border-blue-200/70 dark:border-blue-500/30",
+  label: "Notification",
+};
+
 const notificationMeta = {
   status: {
     Icon: AlertCircle,
@@ -59,6 +70,28 @@ const notificationMeta = {
   },
 
   assigned: {
+    Icon: UserCheck,
+    gradient: "from-cyan-600 to-sky-500",
+    glow: "shadow-cyan-500/30",
+    dot: "bg-cyan-600",
+    pill: "bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/25",
+    accent: "from-cyan-500/20 to-sky-500/10",
+    unreadBorder: "border-sky-200/70 dark:border-sky-500/30",
+    label: "Assignment",
+  },
+
+  assignment: {
+    Icon: UserCheck,
+    gradient: "from-cyan-600 to-sky-500",
+    glow: "shadow-cyan-500/30",
+    dot: "bg-cyan-600",
+    pill: "bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/25",
+    accent: "from-cyan-500/20 to-sky-500/10",
+    unreadBorder: "border-sky-200/70 dark:border-sky-500/30",
+    label: "Assignment",
+  },
+
+  issue_assigned: {
     Icon: UserCheck,
     gradient: "from-cyan-600 to-sky-500",
     glow: "shadow-cyan-500/30",
@@ -113,6 +146,17 @@ const notificationMeta = {
     label: "Verification",
   },
 
+  issue_verified: {
+    Icon: CheckCircle,
+    gradient: "from-emerald-600 to-green-500",
+    glow: "shadow-emerald-500/30",
+    dot: "bg-emerald-600",
+    pill: "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/25",
+    accent: "from-emerald-500/20 to-green-500/10",
+    unreadBorder: "border-emerald-200/70 dark:border-emerald-500/30",
+    label: "Verification",
+  },
+
   in_progress: {
     Icon: Clock3,
     gradient: "from-blue-500 to-indigo-500",
@@ -136,6 +180,17 @@ const notificationMeta = {
   },
 
   resolution: {
+    Icon: CheckCheck,
+    gradient: "from-teal-500 to-emerald-500",
+    glow: "shadow-teal-500/30",
+    dot: "bg-teal-500",
+    pill: "bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/25",
+    accent: "from-teal-500/20 to-emerald-500/10",
+    unreadBorder: "border-teal-200/70 dark:border-teal-500/30",
+    label: "Resolution",
+  },
+
+  issue_resolved: {
     Icon: CheckCheck,
     gradient: "from-teal-500 to-emerald-500",
     glow: "shadow-teal-500/30",
@@ -179,6 +234,39 @@ const notificationMeta = {
     label: "Rejected",
   },
 
+  issue_rejected: {
+    Icon: XCircle,
+    gradient: "from-red-600 to-rose-500",
+    glow: "shadow-red-500/30",
+    dot: "bg-red-600",
+    pill: "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/25",
+    accent: "from-red-500/20 to-rose-500/10",
+    unreadBorder: "border-red-200/70 dark:border-red-500/30",
+    label: "Rejected",
+  },
+
+  badge_earned: {
+    Icon: Sparkles,
+    gradient: "from-amber-500 to-yellow-500",
+    glow: "shadow-amber-500/30",
+    dot: "bg-amber-500",
+    pill: "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/25",
+    accent: "from-amber-500/20 to-yellow-500/10",
+    unreadBorder: "border-amber-200/70 dark:border-amber-500/30",
+    label: "Badge Earned",
+  },
+
+  points_awarded: {
+    Icon: Sparkles,
+    gradient: "from-emerald-500 to-teal-500",
+    glow: "shadow-emerald-500/30",
+    dot: "bg-emerald-500",
+    pill: "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/25",
+    accent: "from-emerald-500/20 to-teal-500/10",
+    unreadBorder: "border-emerald-200/70 dark:border-emerald-500/30",
+    label: "Points Earned",
+  },
+
   system: {
     Icon: Settings,
     gradient: "from-slate-500 to-gray-500",
@@ -190,6 +278,11 @@ const notificationMeta = {
     label: "System Update",
   },
 };
+
+function getNotificationMeta(type) {
+  if (!type) return notificationMeta.status || defaultMeta;
+  return notificationMeta[type] || notificationMeta.status || defaultMeta;
+}
 
 const notificationTextColor = {
   status: "text-blue-600 dark:text-blue-400",
@@ -467,8 +560,8 @@ export function NotificationsPanel({ isOpen, onClose, notifications }) {
             <div className="p-3 space-y-2">
               {filteredNotifications.map((notification, idx) => {
                 const type = notification?.type;
-                const meta = notificationMeta[notification?.type || "status"];
-                const { Icon } = meta;
+                const meta = getNotificationMeta(type);
+                const Icon = meta.Icon || AlertCircle;
 
                 return (
                   <div

@@ -874,7 +874,7 @@ const PreviewModal = ({
 
           {/* ── Contact / Anonymous ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60 p-4">
+            <div className={`relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60 p-4 ${formData.isAnonymous ? "sm:col-span-2" : ""}`}>
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
               <div className="flex items-center gap-2 mb-2 pl-1">
                 <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -895,24 +895,26 @@ const PreviewModal = ({
               </p>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl border border-cyan-200/70 dark:border-cyan-700/40 bg-cyan-50/60 dark:bg-slate-800/60 p-4">
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-cyan-500 to-teal-500" />
-              <div className="flex items-center gap-2 mb-2 pl-1">
-                <Mail className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Contact
-                </span>
+            {!formData.isAnonymous && (
+              <div className="relative overflow-hidden rounded-2xl border border-cyan-200/70 dark:border-cyan-700/40 bg-cyan-50/60 dark:bg-slate-800/60 p-4">
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-cyan-500 to-teal-500" />
+                <div className="flex items-center gap-2 mb-2 pl-1">
+                  <Mail className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Contact
+                  </span>
+                </div>
+                {formData.additionalEmail ? (
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-all pl-1">
+                    {formData.additionalEmail}
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 italic pl-1">
+                    No contact details provided
+                  </p>
+                )}
               </div>
-              {formData.additionalEmail ? (
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-all pl-1">
-                  {formData.additionalEmail}
-                </p>
-              ) : (
-                <p className="text-sm text-slate-400 dark:text-slate-500 italic pl-1">
-                  No contact details provided
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </div>
 

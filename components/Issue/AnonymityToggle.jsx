@@ -7,12 +7,42 @@ import {
   Award,
   Lightbulb,
   EyeOff,
+  Info,
 } from "lucide-react";
 
-const AnonymityToggle = ({ formData, setFormData, errors }) => {
+const AnonymityToggle = ({ formData, setFormData, errors = {}, setErrors }) => {
+  const handleAnonymousToggle = () => {
+    const nextAnonymous = !formData.isAnonymous;
+
+    setFormData((prev) => ({
+      ...prev,
+      isAnonymous: nextAnonymous,
+      additionalEmail: nextAnonymous ? "" : prev.additionalEmail,
+    }));
+
+    if (nextAnonymous) {
+      setErrors?.((prev) => ({
+        ...prev,
+        additionalEmail: "",
+      }));
+    }
+  };
+
+  const handleEmailChange = (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      additionalEmail: value,
+    }));
+
+    setErrors?.((prev) => ({
+      ...prev,
+      additionalEmail: "",
+    }));
+  };
+
   return (
     <div className="relative rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl shadow-slate-200/60 dark:shadow-black/40">
-
       {/* ── Gradient top accent ── */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
 
@@ -61,13 +91,12 @@ const AnonymityToggle = ({ formData, setFormData, errors }) => {
               </div>
             </div>
 
-            {/* Right: Toggle */}
+            {/* Right: Accessible Toggle Switch */}
             <button
               type="button"
-              onClick={() =>
-                setFormData({ ...formData, isAnonymous: !formData.isAnonymous })
-              }
-              aria-pressed={formData.isAnonymous}
+              role="switch"
+              aria-checked={formData.isAnonymous}
+              onClick={handleAnonymousToggle}
               className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-200/60 dark:focus:ring-emerald-800/40 ${
                 formData.isAnonymous
                   ? "bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600 border-emerald-500 shadow-md shadow-emerald-500/30"
@@ -83,57 +112,73 @@ const AnonymityToggle = ({ formData, setFormData, errors }) => {
           </div>
         </div>
 
-        {/* ── Section divider ── */}
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Contact</span>
-          <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
-        </div>
-
-        {/* ── Email input ── */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label
-              htmlFor="email"
-              className="block text-sm font-bold text-slate-700 dark:text-slate-300 tracking-wide"
-            >
-              Additional Email Address
-            </label>
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-              Optional
-            </span>
-          </div>
-
-          <div className="relative" data-tutorial="anonymity-email">
-            <Mail
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
-              size={16}
-            />
-            <input
-              type="email"
-              id="email"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, additionalEmail: e.target.value })
-              }
-              placeholder="your.email@example.com"
-              className={`w-full pl-10 pr-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
-                errors.additionalEmail
-                  ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10"
-                  : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80"
-              } text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
-            />
-          </div>
-          {errors.additionalEmail && (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium">
-              <AlertCircle size={13} />
-              {errors.additionalEmail}
+        {/* ── ANONYMOUS CONFIRMATION INFO CARD ── */}
+        {formData.isAnonymous && (
+          <div className="p-4 rounded-2xl bg-teal-50/80 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/50 text-teal-900 dark:text-teal-200 text-xs space-y-1 animate-in fade-in duration-200">
+            <div className="font-bold flex items-center gap-1.5 text-teal-800 dark:text-teal-300">
+              <Shield size={15} className="flex-shrink-0" />
+              Anonymous Reporting Enabled
+            </div>
+            <p className="font-medium text-teal-700/90 dark:text-teal-300/90 leading-relaxed">
+              Your identity and additional contact information will not be displayed with this report. CityPoints will still be credited to your account.
             </p>
-          )}
-          <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
-            Receive status updates and resolution notifications
-          </p>
-        </div>
+          </div>
+        )}
+
+        {/* ── NON-ANONYMOUS: CONTACT SECTION ── */}
+        {!formData.isAnonymous && (
+          <>
+            {/* Section divider */}
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Contact</span>
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-200 dark:via-slate-700 to-transparent" />
+            </div>
+
+            {/* Email input */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-bold text-slate-700 dark:text-slate-300 tracking-wide"
+                >
+                  Additional Email Address
+                </label>
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                  Optional
+                </span>
+              </div>
+
+              <div className="relative" data-tutorial="anonymity-email">
+                <Mail
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
+                  size={16}
+                />
+                <input
+                  type="email"
+                  id="email"
+                  value={formData.additionalEmail || ""}
+                  onChange={handleEmailChange}
+                  placeholder="your.email@example.com"
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border-2 transition-all outline-none focus:ring-4 font-medium ${
+                    errors?.additionalEmail
+                      ? "border-red-300 dark:border-red-500 focus:border-red-500 focus:ring-red-200/40 dark:focus:ring-red-800/30 bg-red-50/30 dark:bg-red-950/10 text-red-900 dark:text-red-100"
+                      : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-800/30 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
+                  } placeholder-slate-400 dark:placeholder-slate-500`}
+                />
+              </div>
+              {errors?.additionalEmail && (
+                <div className="mt-2 text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1.5 font-bold tracking-wide animate-in fade-in slide-in-from-top-1 duration-200 bg-red-50 dark:bg-red-900/10 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900/20">
+                  <AlertCircle size={14} className="flex-shrink-0" />
+                  {errors.additionalEmail}
+                </div>
+              )}
+              <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+                Optional — provide another email if you would like additional status and resolution notifications.
+              </p>
+            </div>
+          </>
+        )}
 
         {/* ── Section divider ── */}
         <div className="flex items-center gap-3">
@@ -189,26 +234,28 @@ const AnonymityToggle = ({ formData, setFormData, errors }) => {
           ))}
         </div>
 
-        {/* ── Amber tip banner ── */}
-        <div className="relative overflow-hidden rounded-2xl border border-amber-200/70 dark:border-amber-700/40 bg-amber-50/70 dark:bg-amber-900/15">
-          {/* Left accent strip */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-orange-400" />
-          <div className="flex gap-3 items-start pl-5 pr-4 py-4">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700/40 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-300 mb-1">
-                Why provide contact info?
-              </h3>
-              <p className="text-xs text-amber-800/90 dark:text-amber-400/80 leading-relaxed">
-                While optional, sharing your email helps us reach out for clarification
-                and keeps you informed about resolution. It also builds community trust
-                and accountability.
-              </p>
+        {/* ── NON-ANONYMOUS: Amber tip banner ── */}
+        {!formData.isAnonymous && (
+          <div className="relative overflow-hidden rounded-2xl border border-amber-200/70 dark:border-amber-700/40 bg-amber-50/70 dark:bg-amber-900/15">
+            {/* Left accent strip */}
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-orange-400" />
+            <div className="flex gap-3 items-start pl-5 pr-4 py-4">
+              <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900 dark:text-amber-300 mb-1">
+                  Why provide contact info?
+                </h3>
+                <p className="text-xs text-amber-800/90 dark:text-amber-400/80 leading-relaxed">
+                  While optional, sharing your email helps us reach out for clarification
+                  and keeps you informed about resolution. It also builds community trust
+                  and accountability.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>

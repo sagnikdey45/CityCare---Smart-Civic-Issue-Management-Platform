@@ -129,8 +129,8 @@ const IssueForm = () => {
     city: "",
     state: "",
     postal: "",
-    latitude: 20.5937,
-    longitude: 78.9629,
+    latitude: null,
+    longitude: null,
     googleMapUrl: "",
 
     // Reporter details
@@ -182,27 +182,54 @@ const IssueForm = () => {
     }
 
     if (step === 2) {
-      if (!formData.address.trim()) {
+      if (!formData.address?.trim()) {
         newErrors.address = "Address is required";
       }
 
-      if (!formData.city.trim()) {
+      if (!formData.city?.trim()) {
         newErrors.city = "City is required";
       }
 
-      if (!formData.state.trim()) {
+      if (!formData.state?.trim()) {
         newErrors.state = "State is required";
       }
 
-      if (!formData.postal.trim()) {
+      if (!formData.postal?.trim()) {
         newErrors.postal = "Postal Code is required";
+      }
+
+      const rawLat = formData.latitude;
+      const rawLng = formData.longitude;
+
+      if (rawLat === null || rawLat === undefined || rawLat === "") {
+        newErrors.latitude = "Latitude is required";
+      } else {
+        const lat = Number(rawLat);
+        if (!Number.isFinite(lat)) {
+          newErrors.latitude = "Latitude must be a valid number";
+        } else if (lat < -90 || lat > 90) {
+          newErrors.latitude = "Latitude must be between -90 and 90";
+        }
+      }
+
+      if (rawLng === null || rawLng === undefined || rawLng === "") {
+        newErrors.longitude = "Longitude is required";
+      } else {
+        const lng = Number(rawLng);
+        if (!Number.isFinite(lng)) {
+          newErrors.longitude = "Longitude must be a valid number";
+        } else if (lng < -180 || lng > 180) {
+          newErrors.longitude = "Longitude must be between -180 and 180";
+        }
       }
     }
 
     if (step === 3) {
-      if (!formData.isAnonymous) {
-        if (!formData.additionalEmail.trim()) {
-          newErrors.additionalEmail = "Email is required";
+      const additionalEmail = formData.additionalEmail?.trim() || "";
+      if (additionalEmail) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(additionalEmail)) {
+          newErrors.additionalEmail = "Please enter a valid email address";
         }
       }
     }
@@ -269,7 +296,9 @@ const IssueForm = () => {
 
         isAnonymous: formData.isAnonymous,
 
-        additionalEmail: formData.additionalEmail || null,
+        additionalEmail: formData.isAnonymous
+          ? null
+          : formData.additionalEmail?.trim() || null,
 
         reportedBy: session?.user?.id || null,
 
@@ -284,7 +313,7 @@ const IssueForm = () => {
       setLastSubmissionHadVideo(hasVideoEvidence);
       setLastSubmittedIssueTitle(formData.title);
       setLastSubmittedIssueCode(
-        res?.issueCode || res?.issue?.issueCode || res?.ticketId || "",
+        res?.issueCode || res?.issue?.issueCode || res?.ticketId || ""
       );
 
       // Reset after success
@@ -304,8 +333,8 @@ const IssueForm = () => {
         city: "",
         state: "",
         postal: "",
-        latitude: 20.5937,
-        longitude: 78.9629,
+        latitude: null,
+        longitude: null,
         googleMapUrl: "",
 
         isAnonymous: false,
@@ -454,6 +483,7 @@ const IssueForm = () => {
                 formData={formData}
                 setFormData={setFormData}
                 errors={errors}
+                setErrors={setErrors}
               />
             )}
           </div>
