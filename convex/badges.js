@@ -1,4 +1,7 @@
-import { calculateCitizenLevel, POINT_RULES } from "../lib/gamificationConstants";
+import {
+  calculateCitizenLevel,
+  POINT_RULES,
+} from "../lib/gamificationConstants";
 import { internalMutation } from "./_generated/server";
 import { awardCitizenPoints } from "../lib/gamificationAwards";
 
@@ -108,16 +111,18 @@ export const rebuildAllCitizenStats = internalMutation({
       }).length;
 
       const duplicateReports = pointTransactions.filter(
-        (transaction) => transaction.type === "duplicate_report"
+        (transaction) => transaction.type === "duplicate_report",
       ).length;
 
-      const commentsAdded = comments.filter((comment) => !comment.isHidden).length;
+      const commentsAdded = comments.filter(
+        (comment) => !comment.isHidden,
+      ).length;
 
       const videoEvidenceAdded = issues.filter(hasVideoEvidence).length;
 
       const totalPoints = pointTransactions.reduce(
         (sum, transaction) => sum + transaction.points,
-        0
+        0,
       );
 
       const points = Math.max(0, totalPoints);
@@ -151,29 +156,22 @@ export const rebuildAllCitizenStats = internalMutation({
   },
 });
 
-async function hasCitizenBadge(
-  ctx,
-  citizenId,
-  badgeCode
-) {
+async function hasCitizenBadge(ctx, citizenId, badgeCode) {
   const existingBadge = await ctx.db
     .query("citizenBadges")
     .withIndex("by_citizen_badge_code", (q) =>
-      q.eq("citizenId", citizenId).eq("badgeCode", badgeCode)
+      q.eq("citizenId", citizenId).eq("badgeCode", badgeCode),
     )
     .first();
 
   return Boolean(existingBadge);
 }
 
-async function awardCronBadge(
-  ctx,
-  args
-) {
+async function awardCronBadge(ctx, args) {
   const alreadyEarned = await hasCitizenBadge(
     ctx,
     args.citizenId,
-    args.badge.code
+    args.badge.code,
   );
 
   if (alreadyEarned) {
@@ -268,7 +266,10 @@ export const rebuildCitizenBadges = internalMutation({
           continue;
         }
 
-        const citizenValue = getCitizenCriteriaValue(citizen, badge.criteriaType);
+        const citizenValue = getCitizenCriteriaValue(
+          citizen,
+          badge.criteriaType,
+        );
         const requiredCount = badge.requiredCount ?? 0;
 
         if (citizenValue >= requiredCount) {
@@ -304,6 +305,85 @@ export const rebuildCitizenBadges = internalMutation({
       totalBadgesAwarded,
       awarded,
       skipped,
+      ranAt: Date.now(),
+    };
+  },
+});
+
+export const ensureDefaultBadges = internalMutation({
+  args: {},
+
+  handler: async (ctx) => {
+    const created = [];
+    const updated = [];
+    const alreadyValid = [];
+
+    for (const badge of DEFAULT_BADGES) {
+      const existing = await ctx.db
+        .query("badges")
+        .withIndex("by_code", (q) => q.eq("code", badge.code))
+        .first();
+
+      if (!existing) {
+        const badgeId = await ctx.db.insert("badges", {
+          code: badge.code,
+          name: badge.name,
+          description: badge.description,
+          icon: badge.icon,
+          category: badge.category,
+          criteriaType: badge.criteriaType,
+          requiredCount: badge.requiredCount,
+          rewardPoints: badge.rewardPoints,
+          isActive: true,
+          isSystemBadge: true,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+
+        created.push({
+          code: badge.code,
+          badgeId,
+        });
+
+        continue;
+      }
+
+      const needsUpdate =
+        existing.name !== badge.name ||
+        existing.description !== badge.description ||
+        existing.icon !== badge.icon ||
+        existing.category !== badge.category ||
+        existing.criteriaType !== badge.criteriaType ||
+        existing.requiredCount !== badge.requiredCount ||
+        existing.rewardPoints !== badge.rewardPoints ||
+        existing.isActive !== true ||
+        existing.isSystemBadge !== true;
+
+      if (needsUpdate) {
+        await ctx.db.patch(existing._id, {
+          name: badge.name,
+          description: badge.description,
+          icon: badge.icon,
+          category: badge.category,
+          criteriaType: badge.criteriaType,
+          requiredCount: badge.requiredCount,
+          rewardPoints: badge.rewardPoints,
+          isActive: true,
+          isSystemBadge: true,
+          updatedAt: Date.now(),
+        });
+
+        updated.push(badge.code);
+      } else {
+        alreadyValid.push(badge.code);
+      }
+    }
+
+    return {
+      success: true,
+      created,
+      updated,
+      alreadyValid,
       ranAt: Date.now(),
     };
   },
