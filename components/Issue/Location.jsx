@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Navigation, Link2, AlertCircle, Info, Lock } from "lucide-react";
+import {
+  MapPin,
+  Navigation,
+  Link2,
+  AlertCircle,
+  Info,
+  Lock,
+} from "lucide-react";
 
 const DEFAULT_MAP_CENTER = {
   lat: 20.5937,
@@ -80,7 +87,13 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
         setFormData((prev) => ({ ...prev, googleMapUrl: "" }));
       }
     }
-  }, [manualMode, formData.latitude, formData.longitude, setFormData, formData.googleMapUrl]);
+  }, [
+    manualMode,
+    formData.latitude,
+    formData.longitude,
+    setFormData,
+    formData.googleMapUrl,
+  ]);
 
   /* --------------------------------------------------
      Load Google Maps Script (ONLY WHEN manualMode === false)
@@ -115,10 +128,16 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
       // Script tag already injected (concurrent renders) — wait for it
       if (document.getElementById("google-maps-script")) {
         const existing = document.getElementById("google-maps-script");
-        existing.addEventListener("load", () => setTimeout(tryInit, 0), { once: true });
-        existing.addEventListener("error", () => {
-          if (isMounted) setMapError("Unable to load Google Maps.");
-        }, { once: true });
+        existing.addEventListener("load", () => setTimeout(tryInit, 0), {
+          once: true,
+        });
+        existing.addEventListener(
+          "error",
+          () => {
+            if (isMounted) setMapError("Unable to load Google Maps.");
+          },
+          { once: true },
+        );
         return;
       }
 
@@ -279,7 +298,10 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
             sr.appendChild(s);
           }
         } catch (e) {
-          console.debug("[Location] Shadow root not accessible — using CSS props only.", e);
+          console.debug(
+            "[Location] Shadow root not accessible — using CSS props only.",
+            e,
+          );
         }
       };
 
@@ -416,7 +438,8 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
     if (!navigator.geolocation) {
       setErrors((prev) => ({
         ...prev,
-        location: "Geolocation is not supported by your browser. Switch to Manual Mode.",
+        location:
+          "Geolocation is not supported by your browser. Switch to Manual Mode.",
       }));
       return;
     }
@@ -441,7 +464,7 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
           location:
             "Unable to access your current location. You can search for the location or use Manual Mode.",
         }));
-      }
+      },
     );
   }
 
@@ -540,10 +563,12 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
               Manual Location Entry
             </div>
             <p className="font-medium text-amber-700/90 dark:text-amber-300/90 leading-relaxed">
-              Enter the latitude and longitude of the issue directly. You must also provide the address, city, state, and postal code manually.
+              Enter the latitude and longitude of the issue directly. You must
+              also provide the address, city, state, and postal code manually.
             </p>
             <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 italic pt-0.5">
-              Coordinates will not be automatically validated against Google Maps.
+              Coordinates will not be automatically validated against Google
+              Maps.
             </p>
           </div>
         )}
@@ -555,10 +580,16 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
             {mapError && (
               <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 text-red-800 dark:text-red-300 text-xs flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
+                  <AlertCircle
+                    size={16}
+                    className="text-red-500 flex-shrink-0"
+                  />
                   <div>
-                    <span className="font-bold">Map services are currently unavailable.</span>{" "}
-                    You can switch to Manual Mode and enter the location details directly.
+                    <span className="font-bold">
+                      Map services are currently unavailable.
+                    </span>{" "}
+                    You can switch to Manual Mode and enter the location details
+                    directly.
                   </div>
                 </div>
                 <button
@@ -669,14 +700,18 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
                 readOnly={!manualMode}
                 aria-readonly={!manualMode}
                 value={formData.latitude ?? ""}
-                onChange={(e) => handleManualCoordinateChange("latitude", e.target.value)}
-                placeholder={manualMode ? "e.g. 25.3176" : "Auto-filled from map"}
+                onChange={(e) =>
+                  handleManualCoordinateChange("latitude", e.target.value)
+                }
+                placeholder={
+                  manualMode ? "e.g. 25.3176" : "Auto-filled from map"
+                }
                 className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none font-medium ${
                   errors?.latitude
                     ? "border-red-300 dark:border-red-500/50 focus:border-red-500 dark:focus:border-red-400 bg-red-50/30 dark:bg-red-900/10 text-red-900 dark:text-red-100"
                     : !manualMode
-                    ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-4 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
+                      ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-4 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
                 } placeholder-slate-400 dark:placeholder-slate-500`}
               />
               {errors?.latitude && (
@@ -705,14 +740,18 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
                 readOnly={!manualMode}
                 aria-readonly={!manualMode}
                 value={formData.longitude ?? ""}
-                onChange={(e) => handleManualCoordinateChange("longitude", e.target.value)}
-                placeholder={manualMode ? "e.g. 82.9739" : "Auto-filled from map"}
+                onChange={(e) =>
+                  handleManualCoordinateChange("longitude", e.target.value)
+                }
+                placeholder={
+                  manualMode ? "e.g. 82.9739" : "Auto-filled from map"
+                }
                 className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none font-medium ${
                   errors?.longitude
                     ? "border-red-300 dark:border-red-500/50 focus:border-red-500 dark:focus:border-red-400 bg-red-50/30 dark:bg-red-900/10 text-red-900 dark:text-red-100"
                     : !manualMode
-                    ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-4 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
+                      ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-4 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
                 } placeholder-slate-400 dark:placeholder-slate-500`}
               />
               {errors?.longitude && (
@@ -771,15 +810,21 @@ export default function Location({ formData, setFormData, errors, setErrors }) {
                     readOnly={!manualMode}
                     aria-readonly={!manualMode}
                     value={formData[field] || ""}
-                    onChange={(e) => handleManualAddressChange(field, e.target.value)}
+                    onChange={(e) =>
+                      handleManualAddressChange(field, e.target.value)
+                    }
                     className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none font-medium ${
                       errors?.[field]
                         ? "border-red-300 dark:border-red-500/50 focus:border-red-500 dark:focus:border-red-400 focus:ring-red-200/40 dark:focus:ring-red-500/20 bg-red-50/30 dark:bg-red-900/10"
                         : !manualMode
-                        ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                        : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
+                          ? "border-slate-200 dark:border-slate-700/60 bg-slate-100/80 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                          : "border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-emerald-200/50 dark:focus:ring-emerald-500/10 bg-white/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100"
                     } placeholder-slate-400 dark:placeholder-slate-500`}
-                    placeholder={manualMode ? `Enter ${labelMap[field].toLowerCase()}` : labelMap[field]}
+                    placeholder={
+                      manualMode
+                        ? `Enter ${labelMap[field].toLowerCase()}`
+                        : labelMap[field]
+                    }
                   />
 
                   {errors?.[field] && (

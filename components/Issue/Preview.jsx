@@ -57,14 +57,16 @@ const PreviewModal = ({
   const [dialogType, setDialogType] = useState(null);
 
   const hasStrongDuplicate = duplicates.some((dup) => dup.strongDuplicate);
-  const hasAlmostCertainDuplicate = duplicates.some((dup) => dup.almostCertainDuplicate);
+  const hasAlmostCertainDuplicate = duplicates.some(
+    (dup) => dup.almostCertainDuplicate,
+  );
 
   const highestDuplicateScore = duplicates.length
     ? Math.max(...duplicates.map((dup) => dup.score || 0))
     : 0;
 
   const highestDuplicate = duplicates.find(
-    (dup) => dup.score === highestDuplicateScore
+    (dup) => dup.score === highestDuplicateScore,
   );
 
   // Only run query when:
@@ -212,7 +214,10 @@ const PreviewModal = ({
       case "public_health":
         return (
           <span className="inline-flex items-center gap-1">
-            <HeartPulse className="text-rose-600 dark:text-rose-400" size={18} />
+            <HeartPulse
+              className="text-rose-600 dark:text-rose-400"
+              size={18}
+            />
             Public Health
           </span>
         );
@@ -246,7 +251,7 @@ const PreviewModal = ({
         iconBg: "bg-red-100 dark:bg-red-900/30",
       };
     }
-  
+
     if (dup.strongDuplicate || dup.score >= 80) {
       return {
         level: "Strong",
@@ -257,7 +262,7 @@ const PreviewModal = ({
         iconBg: "bg-orange-100 dark:bg-orange-900/30",
       };
     }
-  
+
     return {
       level: "Possible",
       border: "border-yellow-300 dark:border-yellow-700",
@@ -537,14 +542,17 @@ const PreviewModal = ({
                         {duplicates.length > 0 && (
                           <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-800/40 px-3 py-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
                             Highest:{" "}
-                            <span className="font-extrabold">{highestDuplicateScore}/100</span>
+                            <span className="font-extrabold">
+                              {highestDuplicateScore}/100
+                            </span>
                           </span>
                         )}
 
                         {highestDuplicate && (
                           <span className="inline-flex items-center gap-2 rounded-full border border-red-200 dark:border-red-700/60 bg-red-50/70 dark:bg-red-900/20 px-3 py-1 text-xs font-semibold text-red-700 dark:text-red-300">
                             <AlertTriangle size={14} />
-                            {highestDuplicate.duplicateLevel || "Possible Duplicate"}
+                            {highestDuplicate.duplicateLevel ||
+                              "Possible Duplicate"}
                           </span>
                         )}
                       </div>
@@ -581,7 +589,7 @@ const PreviewModal = ({
 
                         {/* Subtle hover wash */}
                         <div
-                          className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${style.bg.split(' ')[0]} via-transparent to-transparent`}
+                          className={`pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${style.bg.split(" ")[0]} via-transparent to-transparent`}
                         />
 
                         <div className="relative p-5">
@@ -715,8 +723,10 @@ const PreviewModal = ({
                                     }}
                                   />
                                 </div>
-                                
-                                <p className={`mt-2 font-bold text-[12px] ${style.text}`}>
+
+                                <p
+                                  className={`mt-2 font-bold text-[12px] ${style.text}`}
+                                >
                                   {dup.duplicateLevel || style.level}
                                 </p>
 
@@ -751,43 +761,64 @@ const PreviewModal = ({
                               </ul>
                             </div>
                           )}
-                          
+
                           {/* Similarity Breakdown */}
                           {dup.debug && (
                             <div className="mt-5 border-t border-gray-200/60 dark:border-gray-700/60 pt-4">
                               <div className="flex items-center gap-2 mb-3 px-1">
-                                <BarChart2 size={16} className="text-indigo-500 dark:text-indigo-400" />
+                                <BarChart2
+                                  size={16}
+                                  className="text-indigo-500 dark:text-indigo-400"
+                                />
                                 <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
                                   Similarity Breakdown
                                 </p>
                               </div>
-                              
+
                               <div className="grid grid-cols-2 gap-3">
                                 {/* Location */}
                                 <div className="rounded-xl bg-gray-50/80 dark:bg-gray-800/40 p-3 border border-gray-100 dark:border-gray-700/50 hover:border-gray-200 dark:hover:border-gray-600 transition-colors">
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                                       <MapPin size={12} />
-                                      <span className="text-[10px] font-bold uppercase tracking-wider">Location</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                                        Location
+                                      </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{dup.debug.locationScore ?? 0}/50</span>
+                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
+                                      {dup.debug.locationScore ?? 0}/50
+                                    </span>
                                   </div>
                                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700/60 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, ((dup.debug.locationScore ?? 0) / 50) * 100)}%` }} />
+                                    <div
+                                      className="h-full bg-indigo-500 rounded-full"
+                                      style={{
+                                        width: `${Math.min(100, ((dup.debug.locationScore ?? 0) / 50) * 100)}%`,
+                                      }}
+                                    />
                                   </div>
                                 </div>
-                                
+
                                 {/* Category */}
                                 <div className="rounded-xl bg-gray-50/80 dark:bg-gray-800/40 p-3 border border-gray-100 dark:border-gray-700/50 hover:border-gray-200 dark:hover:border-gray-600 transition-colors">
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                                       <Tag size={12} />
-                                      <span className="text-[10px] font-bold uppercase tracking-wider">Category</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                                        Category
+                                      </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{dup.debug.categoryScore ?? 0}/15</span>
+                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
+                                      {dup.debug.categoryScore ?? 0}/15
+                                    </span>
                                   </div>
                                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700/60 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, ((dup.debug.categoryScore ?? 0) / 15) * 100)}%` }} />
+                                    <div
+                                      className="h-full bg-indigo-500 rounded-full"
+                                      style={{
+                                        width: `${Math.min(100, ((dup.debug.categoryScore ?? 0) / 15) * 100)}%`,
+                                      }}
+                                    />
                                   </div>
                                 </div>
 
@@ -796,12 +827,23 @@ const PreviewModal = ({
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                                       <Type size={12} />
-                                      <span className="text-[10px] font-bold uppercase tracking-wider">Title Match</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                                        Title Match
+                                      </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{dup.debug.titleSimilarity?.percentage ?? 0}%</span>
+                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
+                                      {dup.debug.titleSimilarity?.percentage ??
+                                        0}
+                                      %
+                                    </span>
                                   </div>
                                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700/60 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${dup.debug.titleSimilarity?.percentage ?? 0}%` }} />
+                                    <div
+                                      className="h-full bg-indigo-500 rounded-full"
+                                      style={{
+                                        width: `${dup.debug.titleSimilarity?.percentage ?? 0}%`,
+                                      }}
+                                    />
                                   </div>
                                 </div>
 
@@ -810,40 +852,64 @@ const PreviewModal = ({
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                                       <AlignLeft size={12} />
-                                      <span className="text-[10px] font-bold uppercase tracking-wider">Desc Match</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                                        Desc Match
+                                      </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">{dup.debug.descriptionSimilarity?.percentage ?? 0}%</span>
+                                    <span className="text-[11px] font-bold text-gray-900 dark:text-gray-100">
+                                      {dup.debug.descriptionSimilarity
+                                        ?.percentage ?? 0}
+                                      %
+                                    </span>
                                   </div>
                                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700/60 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${dup.debug.descriptionSimilarity?.percentage ?? 0}%` }} />
+                                    <div
+                                      className="h-full bg-indigo-500 rounded-full"
+                                      style={{
+                                        width: `${dup.debug.descriptionSimilarity?.percentage ?? 0}%`,
+                                      }}
+                                    />
                                   </div>
                                 </div>
                               </div>
 
                               {/* Subcategory Match (Full width) */}
-                              {((dup.debug.subcategoryScore ?? 0) > 0 || (dup.debug.matchedSubcategories && dup.debug.matchedSubcategories.length > 0)) && (
+                              {((dup.debug.subcategoryScore ?? 0) > 0 ||
+                                (dup.debug.matchedSubcategories &&
+                                  dup.debug.matchedSubcategories.length >
+                                    0)) && (
                                 <div className="mt-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-900/10 p-3 border border-indigo-100/60 dark:border-indigo-800/30">
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
                                       <Target size={12} />
-                                      <span className="text-[10px] font-bold uppercase tracking-wider">Subcategory Overlap</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                                        Subcategory Overlap
+                                      </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">{dup.debug.subcategoryScore ?? 0}/10 Pts</span>
+                                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                                      {dup.debug.subcategoryScore ?? 0}/10 Pts
+                                    </span>
                                   </div>
-                                  {dup.debug.matchedSubcategories && dup.debug.matchedSubcategories.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
-                                      {dup.debug.matchedSubcategories.map(sub => (
-                                        <span key={sub} className="inline-flex px-2.5 py-1 bg-white/80 dark:bg-slate-800 border border-indigo-200/80 dark:border-indigo-700/50 rounded-md text-[10px] font-bold text-indigo-700 dark:text-indigo-300 shadow-sm">
-                                          {sub}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                                  {dup.debug.matchedSubcategories &&
+                                    dup.debug.matchedSubcategories.length >
+                                      0 && (
+                                      <div className="flex flex-wrap gap-2">
+                                        {dup.debug.matchedSubcategories.map(
+                                          (sub) => (
+                                            <span
+                                              key={sub}
+                                              className="inline-flex px-2.5 py-1 bg-white/80 dark:bg-slate-800 border border-indigo-200/80 dark:border-indigo-700/50 rounded-md text-[10px] font-bold text-indigo-700 dark:text-indigo-300 shadow-sm"
+                                            >
+                                              {sub}
+                                            </span>
+                                          ),
+                                        )}
+                                      </div>
+                                    )}
                                 </div>
                               )}
                             </div>
                           )}
-
                         </div>
                       </div>
                     );
@@ -880,7 +946,9 @@ const PreviewModal = ({
 
           {/* ── Contact / Anonymous ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className={`relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60 p-4 ${formData.isAnonymous ? "sm:col-span-2" : ""}`}>
+            <div
+              className={`relative overflow-hidden rounded-2xl border border-emerald-200/70 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-slate-800/60 p-4 ${formData.isAnonymous ? "sm:col-span-2" : ""}`}
+            >
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-500 to-emerald-500" />
               <div className="flex items-center gap-2 mb-2 pl-1">
                 <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -1026,8 +1094,8 @@ const PreviewModal = ({
                 {dialogType === "cancel"
                   ? "Cancel This Report?"
                   : hasAlmostCertainDuplicate
-                  ? "Submit Almost Certain Duplicate?"
-                  : "Submit Similar Issue?"}
+                    ? "Submit Almost Certain Duplicate?"
+                    : "Submit Similar Issue?"}
               </h2>
             </div>
           </div>
@@ -1038,8 +1106,8 @@ const PreviewModal = ({
               {dialogType === "cancel"
                 ? "This will permanently delete all uploaded media and completely clear your report data. This action cannot be undone."
                 : hasAlmostCertainDuplicate
-                ? "An almost identical active issue already exists. Submitting this may create redundancy and affect report quality. Are you sure you want to proceed?"
-                : "A strong duplicate issue already exists. Are you sure this report is genuinely different?"}
+                  ? "An almost identical active issue already exists. Submitting this may create redundancy and affect report quality. Are you sure you want to proceed?"
+                  : "A strong duplicate issue already exists. Are you sure this report is genuinely different?"}
             </p>
 
             {dialogType === "submit" && (

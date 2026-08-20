@@ -7,13 +7,17 @@ import {
 } from "../lib/gamificationAwards";
 
 function normalizeText(str) {
-  return String(str || "").trim().toLowerCase();
+  return String(str || "")
+    .trim()
+    .toLowerCase();
 }
 
 async function requireCityAdmin(ctx, userId) {
   const user = await ctx.db.get(userId);
   if (!user || user.role !== "city_admin") {
-    throw new Error("CITY_ADMIN_REQUIRED: City Administrator access is required.");
+    throw new Error(
+      "CITY_ADMIN_REQUIRED: City Administrator access is required.",
+    );
   }
 
   const profile = await ctx.db
@@ -22,7 +26,9 @@ async function requireCityAdmin(ctx, userId) {
     .unique();
 
   if (!profile) {
-    throw new Error("CITY_ADMIN_PROFILE_NOT_FOUND: City Admin profile not found.");
+    throw new Error(
+      "CITY_ADMIN_PROFILE_NOT_FOUND: City Admin profile not found.",
+    );
   }
 
   return { user, profile };
@@ -131,7 +137,9 @@ export const getCityCitizenRewardsOverview = query({
 
     const totalCitizens = leaderboard.length;
     const averagePoints =
-      totalCitizens > 0 ? Math.round(totalPointsInCirculation / totalCitizens) : 0;
+      totalCitizens > 0
+        ? Math.round(totalPointsInCirculation / totalCitizens)
+        : 0;
 
     return {
       city,
@@ -202,7 +210,9 @@ export const getCityCitizenRewardDetails = query({
       .collect();
 
     // Sort transactions newest first
-    const transactions = [...rawTransactions].sort((a, b) => b.createdAt - a.createdAt);
+    const transactions = [...rawTransactions].sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
 
     // Calculate point breakdown by category
     const pointBreakdown = {
@@ -239,17 +249,19 @@ export const getCityCitizenRewardDetails = query({
           pointBreakdown.manualDeductions += tx.points; // negative
         }
       } else if (tx.points > 0) {
-        if (tx.type === "issue_submitted" || tx.type === "video_evidence_added") {
+        if (
+          tx.type === "issue_submitted" ||
+          tx.type === "video_evidence_added"
+        ) {
           pointBreakdown.reporting += tx.points;
-        } else if (tx.type === "issue_verified" || tx.type === "issue_assigned") {
+        } else if (
+          tx.type === "issue_verified" ||
+          tx.type === "issue_assigned"
+        ) {
           pointBreakdown.verification += tx.points;
         } else if (tx.type === "issue_resolved" || tx.type === "issue_closed") {
           pointBreakdown.resolution += tx.points;
-        } else if (
-          tx.type === "comment_added" ||
-          tx.type === "comment_liked" ||
-          tx.type === "report_upvoted"
-        ) {
+        } else if (tx.type === "comment_added" || tx.type === "comment_liked") {
           pointBreakdown.community += tx.points;
         } else if (tx.type === "streak_bonus") {
           pointBreakdown.streaks += tx.points;
@@ -321,24 +333,30 @@ export const adjustCitizenPoints = mutation({
     }
 
     if (normalizeText(citizen.city) !== normalizeText(profile.city)) {
-      throw new Error("CITY_SCOPE_VIOLATION: You cannot modify rewards for a citizen outside your city.");
+      throw new Error(
+        "CITY_SCOPE_VIOLATION: You cannot modify rewards for a citizen outside your city.",
+      );
     }
 
     const adjustment = Math.round(args.adjustment);
 
     if (!Number.isFinite(adjustment) || adjustment === 0) {
-      throw new Error("POINT_ADJUSTMENT_REQUIRED: Adjustment must be a non-zero integer.");
+      throw new Error(
+        "POINT_ADJUSTMENT_REQUIRED: Adjustment must be a non-zero integer.",
+      );
     }
 
     const trimmedReason = args.reason.trim();
     if (trimmedReason.length < 5) {
       throw new Error(
-        "ADJUSTMENT_REASON_REQUIRED: Please provide a meaningful reason (at least 5 characters)."
+        "ADJUSTMENT_REASON_REQUIRED: Please provide a meaningful reason (at least 5 characters).",
       );
     }
 
     if (Math.abs(adjustment) > 5000) {
-      throw new Error("POINT_ADJUSTMENT_TOO_LARGE: Manual point adjustments cannot exceed ±5,000 points per transaction.");
+      throw new Error(
+        "POINT_ADJUSTMENT_TOO_LARGE: Manual point adjustments cannot exceed ±5,000 points per transaction.",
+      );
     }
 
     const currentPoints = Number(citizen.points ?? 0);
@@ -346,7 +364,7 @@ export const adjustCitizenPoints = mutation({
 
     if (nextPoints < 0) {
       throw new Error(
-        `INSUFFICIENT_POINTS: This deduction (${adjustment} pts) would reduce the citizen's balance below zero (current: ${currentPoints} pts).`
+        `INSUFFICIENT_POINTS: This deduction (${adjustment} pts) would reduce the citizen's balance below zero (current: ${currentPoints} pts).`,
       );
     }
 
@@ -414,7 +432,9 @@ export const awardCityCitizenManualBadge = mutation({
     }
 
     if (normalizeText(citizen.city) !== normalizeText(profile.city)) {
-      throw new Error("CITY_SCOPE_VIOLATION: You cannot award badges to a citizen outside your city.");
+      throw new Error(
+        "CITY_SCOPE_VIOLATION: You cannot award badges to a citizen outside your city.",
+      );
     }
 
     const badge = await ctx.db
@@ -427,18 +447,23 @@ export const awardCityCitizenManualBadge = mutation({
     }
 
     if (!badge.isActive) {
-      throw new Error("BADGE_INACTIVE: This badge is inactive and cannot be awarded.");
+      throw new Error(
+        "BADGE_INACTIVE: This badge is inactive and cannot be awarded.",
+      );
     }
 
     if (badge.criteriaType !== "manual") {
-      throw new Error("MANUAL_BADGE_ONLY: Only manual criteria badges can be manually awarded.");
+      throw new Error(
+        "MANUAL_BADGE_ONLY: Only manual criteria badges can be manually awarded.",
+      );
     }
 
     return await awardBadgeIfNotExists(ctx, {
       citizenId: citizen._id,
       userId: citizen.userId,
       badgeCode: badge.code,
-      reason: args.reason ?? `Manual badge awarded by City Admin: ${badge.name}`,
+      reason:
+        args.reason ?? `Manual badge awarded by City Admin: ${badge.name}`,
     });
   },
 });

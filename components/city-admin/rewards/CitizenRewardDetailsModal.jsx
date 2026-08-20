@@ -34,7 +34,6 @@ const POINT_TYPE_LABELS = {
   issue_withdrawn: "Issue Withdrawn",
   comment_added: "Discussion Comment",
   comment_liked: "Comment Liked",
-  report_upvoted: "Report Upvoted",
   streak_bonus: "Civic Streak Bonus",
   badge_bonus: "Badge Achievement Reward",
   manual_adjustment: "Manual Admin Adjustment",

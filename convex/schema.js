@@ -88,7 +88,6 @@ export default defineSchema({
       v.literal("issue_withdrawn"),
       v.literal("comment_added"),
       v.literal("comment_liked"),
-      v.literal("report_upvoted"),
       v.literal("streak_bonus"),
       v.literal("badge_bonus"),
       v.literal("manual_adjustment"),

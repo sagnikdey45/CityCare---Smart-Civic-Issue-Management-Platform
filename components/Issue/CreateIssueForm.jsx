@@ -313,7 +313,7 @@ const IssueForm = () => {
       setLastSubmissionHadVideo(hasVideoEvidence);
       setLastSubmittedIssueTitle(formData.title);
       setLastSubmittedIssueCode(
-        res?.issueCode || res?.issue?.issueCode || res?.ticketId || ""
+        res?.issueCode || res?.issue?.issueCode || res?.ticketId || "",
       );
 
       // Reset after success
