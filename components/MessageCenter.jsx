@@ -152,13 +152,18 @@ export function MessagesCenter({ user, profile }) {
   }, [rawMessages.length]);
 
   useEffect(() => {
-    if (selectedThreadId && CURRENT_USER_ID) {
+    if (selectedThreadId && selectedThreadId !== "draft" && CURRENT_USER_ID) {
       markMessagesAsReadMutation({
         conversationId: selectedThreadId,
         userId: CURRENT_USER_ID,
       }).catch((err) => console.error("Error marking messages as read:", err));
     }
-  }, [selectedThreadId, rawMessages.length, CURRENT_USER_ID]);
+  }, [
+    selectedThreadId,
+    rawMessages.length,
+    CURRENT_USER_ID,
+    markMessagesAsReadMutation,
+  ]);
 
   useEffect(() => {
     if (CURRENT_USER_ID && dbUser?.role === "city_admin") {

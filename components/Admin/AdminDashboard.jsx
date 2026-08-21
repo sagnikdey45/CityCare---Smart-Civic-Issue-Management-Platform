@@ -1154,7 +1154,6 @@ function OfficerDetailsDialog({
 // Main Dashboard
 
 export function AdminDashboard() {
-  const user = { id: "2" };
   const profile = { full_name: "Sagnik Dey", role: "Administrator" };
   const [activeTab, setActiveTab] = useState("officers");
   const [filteredIssues, setFilteredIssues] = useState([]);
@@ -1198,6 +1197,7 @@ export function AdminDashboard() {
   const [isOfficerDialogOpen, setIsOfficerDialogOpen] = useState(false);
 
   const { data: session } = useSession();
+  const user = session?.user
   const dbUser = useQuery(api.users.getUserByEmail, {
     email: session?.user?.email || "ankit@example.com",
   });
@@ -1575,16 +1575,6 @@ export function AdminDashboard() {
                   Refresh
                 </span>
               </button>
-              <div className="relative">
-                <button className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
-                  <Bell size={18} />
-                </button>
-                {stats.escalated > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {stats.escalated}
-                  </span>
-                )}
-              </div>
               <ModeToggle />
               <div className="flex items-center gap-3 pl-3 border-l border-slate-300 dark:border-slate-700">
                 <div className="hidden sm:block text-right">
