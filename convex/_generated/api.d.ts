@@ -11,6 +11,7 @@
 import type * as accountProvisioning from "../accountProvisioning.js";
 import type * as accountProvisioningActions from "../accountProvisioningActions.js";
 import type * as admin from "../admin.js";
+import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
 import type * as badges from "../badges.js";
 import type * as cityAdmin from "../cityAdmin.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   accountProvisioning: typeof accountProvisioning;
   accountProvisioningActions: typeof accountProvisioningActions;
   admin: typeof admin;
+  auditLogs: typeof auditLogs;
   auth: typeof auth;
   badges: typeof badges;
   cityAdmin: typeof cityAdmin;

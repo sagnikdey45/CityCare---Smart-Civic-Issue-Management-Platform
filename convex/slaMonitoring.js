@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireCityAdmin } from "./helpers/cityAdminAuth";
+import { auditIssueAction } from "../lib/auditLogger";
 
 const TERMINAL_ISSUE_STATUSES = new Set([
   "resolved",
@@ -896,6 +897,23 @@ export const reviewEscalation = mutation({
       timestamp: now,
     });
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      action: "review_escalation",
+      actionCategory: "escalation",
+      oldValue: {
+        adminReviewStatus: "pending",
+      },
+      newValue: {
+        adminReviewStatus: "reviewed",
+      },
+      description: "City Admin started handling the escalation.",
+      source: "web",
+    });
+
     const notifyUsers = [
       issue.assignedUnitOfficer,
       issue.assignedFieldOfficer,
@@ -982,6 +1000,22 @@ export const requestCorrectiveAction = mutation({
       });
     }
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      action: "request_corrective_action",
+      actionCategory: "escalation",
+      oldValue: undefined,
+      newValue: {
+        instruction: actionRequest,
+      },
+      reason: actionRequest,
+      description: "City Admin requested corrective action from assigned officers.",
+      source: "web",
+    });
+
     return {
       success: true,
       notifiedOfficerCount: uniqueOfficerRecipientIds.length,
@@ -1051,6 +1085,27 @@ export const approveEscalation = mutation({
       newValue: "resolved",
       reason: args.notes,
       timestamp: now,
+    });
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      action: "approve_escalation",
+      actionCategory: "escalation",
+      oldValue: {
+        status: issue.status,
+        escalatedToAdmin: true,
+      },
+      newValue: {
+        status: issue.escalation?.prevIssueStatus || "pending",
+        escalatedToAdmin: false,
+        resolved: true,
+      },
+      reason: args.notes,
+      description: `Escalation approved by City Admin for issue ${issue.issueCode}.`,
+      source: "web",
     });
 
     const notifyUsers = [
@@ -1137,6 +1192,27 @@ export const rejectEscalationResponse = mutation({
       newValue: "rejected",
       reason: args.reason,
       timestamp: now,
+    });
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.cityAdminUserId,
+      performerRole: "city_admin",
+      action: "reject_escalation",
+      actionCategory: "escalation",
+      oldValue: {
+        status: issue.status,
+        escalatedToAdmin: true,
+      },
+      newValue: {
+        status: issue.escalation?.prevIssueStatus || "pending",
+        escalatedToAdmin: false,
+        resolved: true,
+      },
+      reason: args.reason,
+      description: `Escalation rejected by City Admin for issue ${issue.issueCode}.`,
+      source: "web",
     });
 
     const notifyUsers = [
@@ -1244,6 +1320,24 @@ export const bulkAcknowledgeEscalations = mutation({
         newValue: "reviewed",
         reason: args.note || "Bulk Acknowledgement",
         timestamp: now,
+      });
+
+      // Universal Audit Log per affected issue
+      await auditIssueAction(ctx, {
+        issue,
+        performedByUserId: args.cityAdminUserId,
+        performerRole: "city_admin",
+        action: "review_escalation",
+        actionCategory: "escalation",
+        oldValue: {
+          adminReviewStatus: "pending",
+        },
+        newValue: {
+          adminReviewStatus: "reviewed",
+        },
+        reason: args.note || "Bulk Acknowledgement",
+        description: `City Admin bulk acknowledged escalation for issue ${issue.issueCode}.`,
+        source: "web",
       });
 
       successfulIssueIds.push(issueId);

@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { auditIssueAction } from "../lib/auditLogger";
 
 // Helper function to resolve the admin's database user ID (v.id("users"))
 async function resolveAdminUserId(ctx, adminUserIdStr) {
@@ -77,9 +78,7 @@ function isOfficerCompatible({ issue, profile }) {
   const issueCity = normalizeText(issue?.city);
   const officerCity = normalizeText(profile?.city);
 
-  const issueDepartment = normalizeDepartment(
-    issue?.department || issue?.category,
-  );
+  const issueDepartment = normalizeDepartment(issue?.department || issue?.category);
   const officerDepartment = normalizeDepartment(profile?.department);
 
   return (
@@ -132,21 +131,13 @@ export const getOfficerCommandCenterData = query({
     adminUserId: v.optional(v.id("users")),
     cityFilter: v.optional(v.string()),
     departmentFilter: v.optional(v.string()),
-    roleFilter: v.optional(
-      v.union(
-        v.literal("all"),
-        v.literal("unit_officer"),
-        v.literal("field_officer"),
-      ),
-    ),
+    roleFilter: v.optional(v.union(v.literal("all"), v.literal("unit_officer"), v.literal("field_officer"))),
   },
   handler: async (ctx, args) => {
     if (args.adminUserId) {
       const user = await ctx.db.get(args.adminUserId);
       if (!user || user.role !== "admin") {
-        throw new Error(
-          "Unauthorized. Only System Admins can access this command center data.",
-        );
+        throw new Error("Unauthorized. Only System Admins can access this command center data.");
       }
     }
 
@@ -272,11 +263,7 @@ export const getOfficerCommandCenterData = query({
           overdue++;
         }
 
-        if (
-          issue.escalatedToAdmin === true ||
-          status === "escalated" ||
-          !!issue.escalation
-        ) {
+        if (issue.escalatedToAdmin === true || status === "escalated" || !!issue.escalation) {
           escalated++;
         }
 
@@ -325,15 +312,12 @@ export const getOfficerCommandCenterData = query({
         }
       });
 
-      const completionRate =
-        total > 0 ? Math.round((resolved / total) * 100) : 0;
+      const completionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
       const resolutionRate = total > 0 ? (resolved / total) * 100 : 0;
 
       // Avg Resolution Time calculations
-      const completedIssues = assignedIssues.filter(
-        (i) => i.resolvedAt || i.closedAt,
-      );
-
+      const completedIssues = assignedIssues.filter((i) => i.resolvedAt || i.closedAt);
+      
       let sumResolutionTimeHours = 0;
       let sumLifecycleHours = 0;
 
@@ -347,18 +331,9 @@ export const getOfficerCommandCenterData = query({
         if (officer.role === "field_officer") {
           // Field Officer: assignedAt to resolvedAt/closedAt
           const updates = updatesByIssue[issue._id] || [];
-          const sortedUpdates = [...updates].sort(
-            (a, b) =>
-              (a.createdAt || a._creationTime || 0) -
-              (b.createdAt || b._creationTime || 0),
-          );
-          const assignedUpdate = sortedUpdates.find(
-            (u) => u.status === "assigned",
-          );
-          const startTime =
-            assignedUpdate?.createdAt ??
-            assignedUpdate?._creationTime ??
-            issue.createdAt;
+          const sortedUpdates = [...updates].sort((a, b) => (a.createdAt || a._creationTime || 0) - (b.createdAt || b._creationTime || 0));
+          const assignedUpdate = sortedUpdates.find((u) => u.status === "assigned");
+          const startTime = assignedUpdate?.createdAt ?? assignedUpdate?._creationTime ?? issue.createdAt;
           const durationMs = endTime - startTime;
           sumResolutionTimeHours += durationMs / (1000 * 60 * 60);
         } else {
@@ -367,113 +342,51 @@ export const getOfficerCommandCenterData = query({
         }
       });
 
-      const avgResolutionTime =
-        completedIssues.length > 0
-          ? Number((sumResolutionTimeHours / completedIssues.length).toFixed(1))
-          : 0;
-      const lifecycleAvgResolutionTime =
-        completedIssues.length > 0
-          ? Number((sumLifecycleHours / completedIssues.length).toFixed(1))
-          : 0;
+      const avgResolutionTime = completedIssues.length > 0 ? Number((sumResolutionTimeHours / completedIssues.length).toFixed(1)) : 0;
+      const lifecycleAvgResolutionTime = completedIssues.length > 0 ? Number((sumLifecycleHours / completedIssues.length).toFixed(1)) : 0;
 
       // SLA compliance rate
-      const completedIssuesWithSla = completedIssues.filter(
-        (i) => i.slaDeadline,
-      );
-      const resolvedOnTime = completedIssuesWithSla.filter(
-        (i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline,
-      );
-      const slaComplianceRate =
-        completedIssuesWithSla.length > 0
-          ? Math.round(
-              (resolvedOnTime.length / completedIssuesWithSla.length) * 100,
-            )
-          : 0;
-      const slaBreaches = assignedIssues.filter(
-        (i) =>
-          i.slaDeadline &&
-          (i.resolvedAt || i.closedAt
-            ? (i.resolvedAt ?? i.closedAt) > i.slaDeadline
-            : now > i.slaDeadline),
-      ).length;
+      const completedIssuesWithSla = completedIssues.filter((i) => i.slaDeadline);
+      const resolvedOnTime = completedIssuesWithSla.filter((i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline);
+      const slaComplianceRate = completedIssuesWithSla.length > 0 ? Math.round((resolvedOnTime.length / completedIssuesWithSla.length) * 100) : 0;
+      const slaBreaches = assignedIssues.filter((i) => i.slaDeadline && (i.resolvedAt || i.closedAt ? (i.resolvedAt ?? i.closedAt) > i.slaDeadline : now > i.slaDeadline)).length;
 
       // Citizen rating
-      const ratedIssues = completedIssues.filter(
-        (i) => i.citizenRating !== null && i.citizenRating !== undefined,
-      );
-      const citizenRating =
-        ratedIssues.length > 0
-          ? Number(
-              (
-                ratedIssues.reduce((sum, i) => sum + i.citizenRating, 0) /
-                ratedIssues.length
-              ).toFixed(1),
-            )
-          : 0;
+      const ratedIssues = completedIssues.filter((i) => i.citizenRating !== null && i.citizenRating !== undefined);
+      const citizenRating = ratedIssues.length > 0 ? Number((ratedIssues.reduce((sum, i) => sum + i.citizenRating, 0) / ratedIssues.length).toFixed(1)) : 0;
 
       // First-time fix rate
       const firstTimeFixCount = completedIssues.filter(
-        (i) =>
-          !i.isReopened &&
-          (i.reopenCount ?? 0) === 0 &&
-          !i.reworkReasons?.length &&
-          i.status !== "rework_required",
+        (i) => !i.isReopened && (i.reopenCount ?? 0) === 0 && !i.reworkReasons?.length && i.status !== "rework_required"
       ).length;
-      const firstTimeFixRate =
-        completedIssues.length > 0
-          ? Math.round((firstTimeFixCount / completedIssues.length) * 100)
-          : 0;
+      const firstTimeFixRate = completedIssues.length > 0 ? Math.round((firstTimeFixCount / completedIssues.length) * 100) : 0;
 
       // Quality score
       const reworkRate = total > 0 ? (rework / total) * 100 : 0;
       const reopenRate = total > 0 ? (reopened / total) * 100 : 0;
       const escalationRate = total > 0 ? (escalated / total) * 100 : 0;
       const slaBreachRate = 100 - slaComplianceRate;
-      const penalty =
-        reworkRate * 0.2 +
-        reopenRate * 0.3 +
-        escalationRate * 0.2 +
-        slaBreachRate * 0.3;
-      const qualityScore = Math.max(
-        0,
-        Math.min(100, Math.round(100 - penalty)),
-      );
+      const penalty = (reworkRate * 0.2) + (reopenRate * 0.3) + (escalationRate * 0.2) + (slaBreachRate * 0.3);
+      const qualityScore = Math.max(0, Math.min(100, Math.round(100 - penalty)));
 
       // Efficiency score
       const ratingScore = (citizenRating / 5) * 100;
       let efficiencyScore = 0;
       if (officer.role === "field_officer") {
-        efficiencyScore =
-          slaComplianceRate * 0.3 +
-          resolutionRate * 0.25 +
-          firstTimeFixRate * 0.2 +
-          ratingScore * 0.15 +
-          qualityScore * 0.1;
+        efficiencyScore = (slaComplianceRate * 0.30) + (resolutionRate * 0.25) + (firstTimeFixRate * 0.20) + (ratingScore * 0.15) + (qualityScore * 0.10);
       } else {
-        efficiencyScore =
-          completionRate * 0.25 +
-          slaComplianceRate * 0.25 +
-          firstTimeFixRate * 0.2 +
-          ratingScore * 0.15 +
-          qualityScore * 0.15;
+        efficiencyScore = (completionRate * 0.25) + (slaComplianceRate * 0.25) + (firstTimeFixRate * 0.20) + (ratingScore * 0.15) + (qualityScore * 0.15);
       }
       efficiencyScore = clampPercent(efficiencyScore);
 
       // Workload Percentage
       const activeIssuesCount = assignedIssues.filter((i) =>
-        [
-          "assigned",
-          "in_progress",
-          "pending_uo_verification",
-          "rework_required",
-        ].includes((i.status || "").toLowerCase().trim()),
+        ["assigned", "in_progress", "pending_uo_verification", "rework_required"].includes((i.status || "").toLowerCase().trim())
       ).length;
 
       let workloadPercentage = 0;
       if (officer.role === "field_officer") {
-        workloadPercentage = Math.round(
-          (activeIssuesCount / (officer.maxIssueCapacity || 15)) * 100,
-        );
+        workloadPercentage = Math.round((activeIssuesCount / (officer.maxIssueCapacity || 15)) * 100);
       } else {
         workloadPercentage = Math.round((activeIssuesCount / 50) * 100);
       }
@@ -488,19 +401,9 @@ export const getOfficerCommandCenterData = query({
 
       // Risk level
       let riskLevel = "Good";
-      if (
-        efficiencyScore < 50 ||
-        slaComplianceRate < 60 ||
-        workloadPercentage >= 95 ||
-        overdue >= 5
-      ) {
+      if (efficiencyScore < 50 || slaComplianceRate < 60 || workloadPercentage >= 95 || overdue >= 5) {
         riskLevel = "High Risk";
-      } else if (
-        efficiencyScore < 70 ||
-        slaComplianceRate < 75 ||
-        workloadPercentage >= 85 ||
-        overdue >= 2
-      ) {
+      } else if (efficiencyScore < 70 || slaComplianceRate < 75 || workloadPercentage >= 85 || overdue >= 2) {
         riskLevel = "Needs Attention";
       }
 
@@ -544,19 +447,13 @@ export const getOfficerCommandCenterData = query({
     // 2. Filter data if filters are specified in the backend query args
     let filteredWorkload = officerWorkload;
     if (args.cityFilter && args.cityFilter !== "all") {
-      filteredWorkload = filteredWorkload.filter(
-        (ow) => ow.officer.city === args.cityFilter,
-      );
+      filteredWorkload = filteredWorkload.filter((ow) => ow.officer.city === args.cityFilter);
     }
     if (args.departmentFilter && args.departmentFilter !== "all") {
-      filteredWorkload = filteredWorkload.filter(
-        (ow) => ow.officer.department === args.departmentFilter,
-      );
+      filteredWorkload = filteredWorkload.filter((ow) => ow.officer.department === args.departmentFilter);
     }
     if (args.roleFilter && args.roleFilter !== "all") {
-      filteredWorkload = filteredWorkload.filter(
-        (ow) => ow.officer.role === args.roleFilter,
-      );
+      filteredWorkload = filteredWorkload.filter((ow) => ow.officer.role === args.roleFilter);
     }
 
     // 3. Stats & Summary Calculations
@@ -565,27 +462,12 @@ export const getOfficerCommandCenterData = query({
     const totalFieldOfficers = fieldOfficers.length;
 
     const totalIssues = rawIssues.length;
-    const assignedIssuesCount = rawIssues.filter(
-      (i) => i.assignedUnitOfficer || i.assignedFieldOfficer,
-    ).length;
-    const resolvedIssuesCount = rawIssues.filter((i) =>
-      ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()),
-    ).length;
-    const activeIssuesCount = rawIssues.filter((i) =>
-      [
-        "assigned",
-        "in_progress",
-        "pending_uo_verification",
-        "rework_required",
-      ].includes((i.status || "").toLowerCase().trim()),
-    ).length;
-    const pendingIssuesCount = rawIssues.filter((i) =>
-      ["pending", "verified"].includes((i.status || "").toLowerCase().trim()),
-    ).length;
-    const rejectedIssuesCount = rawIssues.filter(
-      (i) => (i.status || "").toLowerCase().trim() === "rejected",
-    ).length;
-
+    const assignedIssuesCount = rawIssues.filter((i) => i.assignedUnitOfficer || i.assignedFieldOfficer).length;
+    const resolvedIssuesCount = rawIssues.filter((i) => ["resolved", "closed"].includes((i.status || "").toLowerCase().trim())).length;
+    const activeIssuesCount = rawIssues.filter((i) => ["assigned", "in_progress", "pending_uo_verification", "rework_required"].includes((i.status || "").toLowerCase().trim())).length;
+    const pendingIssuesCount = rawIssues.filter((i) => ["pending", "verified"].includes((i.status || "").toLowerCase().trim())).length;
+    const rejectedIssuesCount = rawIssues.filter((i) => (i.status || "").toLowerCase().trim() === "rejected").length;
+    
     const overdueIssuesCount = rawIssues.filter((issue) => {
       const status = (issue.status || "").toLowerCase().trim();
       return (
@@ -595,70 +477,33 @@ export const getOfficerCommandCenterData = query({
       );
     }).length;
 
-    const escalatedIssuesCount = rawIssues.filter(
-      (i) =>
-        i.escalatedToAdmin === true ||
-        (i.status || "").toLowerCase().trim() === "escalated" ||
-        !!i.escalation,
-    ).length;
-    const reworkIssuesCount = rawIssues.filter(
-      (i) => i.status === "rework_required" || !!i.reworkReasons?.length,
-    ).length;
-    const reopenedIssuesCount = rawIssues.filter(
-      (i) => i.isReopened === true || (i.reopenCount ?? 0) > 0,
-    ).length;
+    const escalatedIssuesCount = rawIssues.filter((i) => i.escalatedToAdmin === true || (i.status || "").toLowerCase().trim() === "escalated" || !!i.escalation).length;
+    const reworkIssuesCount = rawIssues.filter((i) => i.status === "rework_required" || !!i.reworkReasons?.length).length;
+    const reopenedIssuesCount = rawIssues.filter((i) => i.isReopened === true || (i.reopenCount ?? 0) > 0).length;
 
-    const resolvedIssuesList = rawIssues.filter(
-      (i) =>
-        ["resolved", "closed"].includes(
-          (i.status || "").toLowerCase().trim(),
-        ) &&
-        (i.resolvedAt || i.closedAt),
-    );
+    const resolvedIssuesList = rawIssues.filter((i) => ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()) && (i.resolvedAt || i.closedAt));
     const systemAvgResolutionTime = safeNumber(
       resolvedIssuesList.length > 0
-        ? Number(
-            (
-              resolvedIssuesList.reduce(
-                (sum, i) => sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt),
-                0,
-              ) /
-              (resolvedIssuesList.length * 1000 * 60 * 60)
-            ).toFixed(1),
-          )
-        : 0,
+        ? Number((resolvedIssuesList.reduce((sum, i) => sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt), 0) / (resolvedIssuesList.length * 1000 * 60 * 60)).toFixed(1))
+        : 0
     );
 
-    const resolvedIssuesWithDeadline = resolvedIssuesList.filter(
-      (i) => i.slaDeadline,
-    );
-    const resolvedOnTimeCount = resolvedIssuesWithDeadline.filter(
-      (i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline,
-    ).length;
-    const systemAvgSlaComplianceRate = safePercent(
-      resolvedOnTimeCount,
-      resolvedIssuesWithDeadline.length,
-    );
+    const resolvedIssuesWithDeadline = resolvedIssuesList.filter((i) => i.slaDeadline);
+    const resolvedOnTimeCount = resolvedIssuesWithDeadline.filter((i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline).length;
+    const systemAvgSlaComplianceRate = safePercent(resolvedOnTimeCount, resolvedIssuesWithDeadline.length);
 
-    const systemRatedIssues = resolvedIssuesList.filter(
-      (i) => i.citizenRating !== null && i.citizenRating !== undefined,
-    );
+    const systemRatedIssues = resolvedIssuesList.filter((i) => i.citizenRating !== null && i.citizenRating !== undefined);
     const systemAvgCitizenRating = safeNumber(
       systemRatedIssues.length > 0
-        ? Number(
-            (
-              systemRatedIssues.reduce((sum, i) => sum + i.citizenRating, 0) /
-              systemRatedIssues.length
-            ).toFixed(1),
-          )
-        : 0,
+        ? Number((systemRatedIssues.reduce((sum, i) => sum + i.citizenRating, 0) / systemRatedIssues.length).toFixed(1))
+        : 0
     );
-
+    
     const systemAvgEfficiencyScore = averageScore(
-      officerWorkload.map((ow) => ow.efficiencyScore),
+      officerWorkload.map((ow) => ow.efficiencyScore)
     );
     const systemAvgCompletionRate = averageScore(
-      officerWorkload.map((ow) => ow.completionRate),
+      officerWorkload.map((ow) => ow.completionRate)
     );
 
     const performanceSummary = {
@@ -690,92 +535,39 @@ export const getOfficerCommandCenterData = query({
     ]);
     const cityPerformance = cities.map((city) => {
       const cityIssues = rawIssues.filter((i) => i.city === city);
-      const cityOfficers = officerWorkload.filter(
-        (ow) => ow.officer.city === city,
-      );
-      const cityResolved = cityIssues.filter((i) =>
-        ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()),
-      );
+      const cityOfficers = officerWorkload.filter((ow) => ow.officer.city === city);
+      const cityResolved = cityIssues.filter((i) => ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()));
 
-      const cityResolvedWithDeadline = cityResolved.filter(
-        (i) => i.slaDeadline,
-      );
-      const cityResolvedOnTime = cityResolvedWithDeadline.filter(
-        (i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline,
-      );
-      const citySla = safePercent(
-        cityResolvedOnTime.length,
-        cityResolvedWithDeadline.length,
-      );
+      const cityResolvedWithDeadline = cityResolved.filter((i) => i.slaDeadline);
+      const cityResolvedOnTime = cityResolvedWithDeadline.filter((i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline);
+      const citySla = safePercent(cityResolvedOnTime.length, cityResolvedWithDeadline.length);
 
-      const cityRated = cityResolved.filter(
-        (i) => i.citizenRating !== null && i.citizenRating !== undefined,
-      );
+      const cityRated = cityResolved.filter((i) => i.citizenRating !== null && i.citizenRating !== undefined);
       const cityRating = safeNumber(
-        cityRated.length > 0
-          ? Number(
-              (
-                cityRated.reduce((sum, i) => sum + i.citizenRating, 0) /
-                cityRated.length
-              ).toFixed(1),
-            )
-          : 0,
+        cityRated.length > 0 ? Number((cityRated.reduce((sum, i) => sum + i.citizenRating, 0) / cityRated.length).toFixed(1)) : 0
       );
 
-      const cityCompletedIssues = cityResolved.filter(
-        (i) => i.resolvedAt || i.closedAt,
-      );
+      const cityCompletedIssues = cityResolved.filter((i) => i.resolvedAt || i.closedAt);
       const cityResolutionTime = safeNumber(
         cityCompletedIssues.length > 0
-          ? Number(
-              (
-                cityCompletedIssues.reduce(
-                  (sum, i) =>
-                    sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt),
-                  0,
-                ) /
-                (cityCompletedIssues.length * 1000 * 60 * 60)
-              ).toFixed(1),
-            )
-          : 0,
+          ? Number((cityCompletedIssues.reduce((sum, i) => sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt), 0) / (cityCompletedIssues.length * 1000 * 60 * 60)).toFixed(1))
+          : 0
       );
 
       return {
         city,
         totalIssues: cityIssues.length,
         resolvedIssues: cityResolved.length,
-        activeIssues: cityIssues.filter((i) =>
-          [
-            "assigned",
-            "in_progress",
-            "pending_uo_verification",
-            "rework_required",
-          ].includes((i.status || "").toLowerCase().trim()),
-        ).length,
-        overdueIssues: cityIssues.filter(
-          (i) =>
-            i.slaDeadline &&
-            i.slaDeadline < now &&
-            !["resolved", "closed", "rejected", "withdrawn"].includes(
-              (i.status || "").toLowerCase().trim(),
-            ),
-        ).length,
+        activeIssues: cityIssues.filter((i) => ["assigned", "in_progress", "pending_uo_verification", "rework_required"].includes((i.status || "").toLowerCase().trim())).length,
+        overdueIssues: cityIssues.filter((i) => i.slaDeadline && i.slaDeadline < now && !["resolved", "closed", "rejected", "withdrawn"].includes((i.status || "").toLowerCase().trim())).length,
         totalOfficers: cityOfficers.length,
-        unitOfficers: cityOfficers.filter(
-          (ow) => ow.officer.role === "unit_officer",
-        ).length,
-        fieldOfficers: cityOfficers.filter(
-          (ow) => ow.officer.role === "field_officer",
-        ).length,
-        avgCompletionRate: averageScore(
-          cityOfficers.map((ow) => ow.completionRate),
-        ),
+        unitOfficers: cityOfficers.filter((ow) => ow.officer.role === "unit_officer").length,
+        fieldOfficers: cityOfficers.filter((ow) => ow.officer.role === "field_officer").length,
+        avgCompletionRate: averageScore(cityOfficers.map((ow) => ow.completionRate)),
         avgResolutionTime: cityResolutionTime,
         avgSlaComplianceRate: citySla,
         avgCitizenRating: cityRating,
-        avgEfficiencyScore: averageScore(
-          cityOfficers.map((ow) => ow.efficiencyScore),
-        ),
+        avgEfficiencyScore: averageScore(cityOfficers.map((ow) => ow.efficiencyScore)),
       };
     });
 
@@ -787,179 +579,78 @@ export const getOfficerCommandCenterData = query({
     ]);
     const departmentPerformance = departments.map((dept) => {
       const deptIssues = rawIssues.filter((i) => i.category === dept);
-      const deptOfficers = officerWorkload.filter(
-        (ow) => ow.officer.department === dept,
-      );
-      const deptResolved = deptIssues.filter((i) =>
-        ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()),
-      );
+      const deptOfficers = officerWorkload.filter((ow) => ow.officer.department === dept);
+      const deptResolved = deptIssues.filter((i) => ["resolved", "closed"].includes((i.status || "").toLowerCase().trim()));
 
-      const deptResolvedWithDeadline = deptResolved.filter(
-        (i) => i.slaDeadline,
-      );
-      const deptResolvedOnTime = deptResolvedWithDeadline.filter(
-        (i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline,
-      );
-      const deptSla = safePercent(
-        deptResolvedOnTime.length,
-        deptResolvedWithDeadline.length,
-      );
+      const deptResolvedWithDeadline = deptResolved.filter((i) => i.slaDeadline);
+      const deptResolvedOnTime = deptResolvedWithDeadline.filter((i) => (i.resolvedAt ?? i.closedAt) <= i.slaDeadline);
+      const deptSla = safePercent(deptResolvedOnTime.length, deptResolvedWithDeadline.length);
 
-      const deptRated = deptResolved.filter(
-        (i) => i.citizenRating !== null && i.citizenRating !== undefined,
-      );
+      const deptRated = deptResolved.filter((i) => i.citizenRating !== null && i.citizenRating !== undefined);
       const deptRating = safeNumber(
-        deptRated.length > 0
-          ? Number(
-              (
-                deptRated.reduce((sum, i) => sum + i.citizenRating, 0) /
-                deptRated.length
-              ).toFixed(1),
-            )
-          : 0,
+        deptRated.length > 0 ? Number((deptRated.reduce((sum, i) => sum + i.citizenRating, 0) / deptRated.length).toFixed(1)) : 0
       );
 
-      const deptCompletedIssues = deptResolved.filter(
-        (i) => i.resolvedAt || i.closedAt,
-      );
+      const deptCompletedIssues = deptResolved.filter((i) => i.resolvedAt || i.closedAt);
       const deptResolutionTime = safeNumber(
         deptCompletedIssues.length > 0
-          ? Number(
-              (
-                deptCompletedIssues.reduce(
-                  (sum, i) =>
-                    sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt),
-                  0,
-                ) /
-                (deptCompletedIssues.length * 1000 * 60 * 60)
-              ).toFixed(1),
-            )
-          : 0,
+          ? Number((deptCompletedIssues.reduce((sum, i) => sum + ((i.resolvedAt ?? i.closedAt) - i.createdAt), 0) / (deptCompletedIssues.length * 1000 * 60 * 60)).toFixed(1))
+          : 0
       );
 
       return {
         department: dept,
         totalIssues: deptIssues.length,
         resolvedIssues: deptResolved.length,
-        activeIssues: deptIssues.filter((i) =>
-          [
-            "assigned",
-            "in_progress",
-            "pending_uo_verification",
-            "rework_required",
-          ].includes((i.status || "").toLowerCase().trim()),
-        ).length,
-        overdueIssues: deptIssues.filter(
-          (i) =>
-            i.slaDeadline &&
-            i.slaDeadline < now &&
-            !["resolved", "closed", "rejected", "withdrawn"].includes(
-              (i.status || "").toLowerCase().trim(),
-            ),
-        ).length,
+        activeIssues: deptIssues.filter((i) => ["assigned", "in_progress", "pending_uo_verification", "rework_required"].includes((i.status || "").toLowerCase().trim())).length,
+        overdueIssues: deptIssues.filter((i) => i.slaDeadline && i.slaDeadline < now && !["resolved", "closed", "rejected", "withdrawn"].includes((i.status || "").toLowerCase().trim())).length,
         totalOfficers: deptOfficers.length,
-        unitOfficers: deptOfficers.filter(
-          (ow) => ow.officer.role === "unit_officer",
-        ).length,
-        fieldOfficers: deptOfficers.filter(
-          (ow) => ow.officer.role === "field_officer",
-        ).length,
-        avgCompletionRate: averageScore(
-          deptOfficers.map((ow) => ow.completionRate),
-        ),
+        unitOfficers: deptOfficers.filter((ow) => ow.officer.role === "unit_officer").length,
+        fieldOfficers: deptOfficers.filter((ow) => ow.officer.role === "field_officer").length,
+        avgCompletionRate: averageScore(deptOfficers.map((ow) => ow.completionRate)),
         avgResolutionTime: deptResolutionTime,
         avgSlaComplianceRate: deptSla,
         avgCitizenRating: deptRating,
-        avgEfficiencyScore: averageScore(
-          deptOfficers.map((ow) => ow.efficiencyScore),
-        ),
+        avgEfficiencyScore: averageScore(deptOfficers.map((ow) => ow.efficiencyScore)),
       };
     });
 
     // Officer leaderboards
     const officerLeaderboards = {
-      topOverall: [...officerWorkload]
-        .sort((a, b) => b.efficiencyScore - a.efficiencyScore)
-        .slice(0, 10),
-      topUnitOfficers: officerWorkload
-        .filter((ow) => ow.officer.role === "unit_officer")
-        .sort((a, b) => b.efficiencyScore - a.efficiencyScore)
-        .slice(0, 10),
-      topFieldOfficers: officerWorkload
-        .filter((ow) => ow.officer.role === "field_officer")
-        .sort((a, b) => b.efficiencyScore - a.efficiencyScore)
-        .slice(0, 10),
-      needsAttention: officerWorkload
-        .filter((ow) => ow.riskLevel === "Needs Attention")
-        .sort((a, b) => a.efficiencyScore - b.efficiencyScore)
-        .slice(0, 10),
-      highRisk: officerWorkload
-        .filter((ow) => ow.riskLevel === "High Risk")
-        .sort((a, b) => a.efficiencyScore - b.efficiencyScore)
-        .slice(0, 10),
-      overloaded: officerWorkload
-        .filter((ow) => ow.workloadStatus === "overloaded")
-        .sort((a, b) => b.workloadPercentage - a.workloadPercentage)
-        .slice(0, 10),
-      underutilized: officerWorkload
-        .filter((ow) => ow.workloadStatus === "underutilized")
-        .sort((a, b) => a.workloadPercentage - b.workloadPercentage)
-        .slice(0, 10),
-      bestSla: [...officerWorkload]
-        .sort((a, b) => b.slaComplianceRate - a.slaComplianceRate)
-        .slice(0, 10),
-      bestRated: [...officerWorkload]
-        .sort((a, b) => b.citizenRating - a.citizenRating)
-        .slice(0, 10),
-      fastestResolution: officerWorkload
-        .filter((ow) => ow.resolved > 0)
-        .sort((a, b) => a.avgResolutionTime - b.avgResolutionTime)
-        .slice(0, 10),
+      topOverall: [...officerWorkload].sort((a, b) => b.efficiencyScore - a.efficiencyScore).slice(0, 10),
+      topUnitOfficers: officerWorkload.filter((ow) => ow.officer.role === "unit_officer").sort((a, b) => b.efficiencyScore - a.efficiencyScore).slice(0, 10),
+      topFieldOfficers: officerWorkload.filter((ow) => ow.officer.role === "field_officer").sort((a, b) => b.efficiencyScore - a.efficiencyScore).slice(0, 10),
+      needsAttention: officerWorkload.filter((ow) => ow.riskLevel === "Needs Attention").sort((a, b) => a.efficiencyScore - b.efficiencyScore).slice(0, 10),
+      highRisk: officerWorkload.filter((ow) => ow.riskLevel === "High Risk").sort((a, b) => a.efficiencyScore - b.efficiencyScore).slice(0, 10),
+      overloaded: officerWorkload.filter((ow) => ow.workloadStatus === "overloaded").sort((a, b) => b.workloadPercentage - a.workloadPercentage).slice(0, 10),
+      underutilized: officerWorkload.filter((ow) => ow.workloadStatus === "underutilized").sort((a, b) => a.workloadPercentage - b.workloadPercentage).slice(0, 10),
+      bestSla: [...officerWorkload].sort((a, b) => b.slaComplianceRate - a.slaComplianceRate).slice(0, 10),
+      bestRated: [...officerWorkload].sort((a, b) => b.citizenRating - a.citizenRating).slice(0, 10),
+      fastestResolution: officerWorkload.filter((ow) => ow.resolved > 0).sort((a, b) => a.avgResolutionTime - b.avgResolutionTime).slice(0, 10),
     };
 
     // Risk Analysis
-    const highRiskCount = officerWorkload.filter(
-      (ow) => ow.riskLevel === "High Risk",
-    ).length;
-    const needsAttentionCount = officerWorkload.filter(
-      (ow) => ow.riskLevel === "Needs Attention",
-    ).length;
-    const overloadedCount = officerWorkload.filter(
-      (ow) => ow.workloadStatus === "overloaded",
-    ).length;
-    const underutilizedCount = officerWorkload.filter(
-      (ow) => ow.workloadStatus === "underutilized",
-    ).length;
-    const slaBreachCount = officerWorkload.reduce(
-      (sum, ow) => sum + ow.slaBreaches,
-      0,
-    );
+    const highRiskCount = officerWorkload.filter((ow) => ow.riskLevel === "High Risk").length;
+    const needsAttentionCount = officerWorkload.filter((ow) => ow.riskLevel === "Needs Attention").length;
+    const overloadedCount = officerWorkload.filter((ow) => ow.workloadStatus === "overloaded").length;
+    const underutilizedCount = officerWorkload.filter((ow) => ow.workloadStatus === "underutilized").length;
+    const slaBreachCount = officerWorkload.reduce((sum, ow) => sum + ow.slaBreaches, 0);
 
     const riskByCity = cities.map((city) => {
-      const cityOfficers = officerWorkload.filter(
-        (ow) => ow.officer.city === city,
-      );
+      const cityOfficers = officerWorkload.filter((ow) => ow.officer.city === city);
       return {
         city,
-        highRiskCount: cityOfficers.filter((ow) => ow.riskLevel === "High Risk")
-          .length,
-        needsAttentionCount: cityOfficers.filter(
-          (ow) => ow.riskLevel === "Needs Attention",
-        ).length,
+        highRiskCount: cityOfficers.filter((ow) => ow.riskLevel === "High Risk").length,
+        needsAttentionCount: cityOfficers.filter((ow) => ow.riskLevel === "Needs Attention").length,
       };
     });
 
     const riskByDepartment = departments.map((dept) => {
-      const deptOfficers = officerWorkload.filter(
-        (ow) => ow.officer.department === dept,
-      );
+      const deptOfficers = officerWorkload.filter((ow) => ow.officer.department === dept);
       return {
         department: dept,
-        highRiskCount: deptOfficers.filter((ow) => ow.riskLevel === "High Risk")
-          .length,
-        needsAttentionCount: deptOfficers.filter(
-          (ow) => ow.riskLevel === "Needs Attention",
-        ).length,
+        highRiskCount: deptOfficers.filter((ow) => ow.riskLevel === "High Risk").length,
+        needsAttentionCount: deptOfficers.filter((ow) => ow.riskLevel === "Needs Attention").length,
       };
     });
 
@@ -973,50 +664,18 @@ export const getOfficerCommandCenterData = query({
       escalationCount: escalatedIssuesCount,
       reworkCount: reworkIssuesCount,
       reopenCount: reopenedIssuesCount,
-      highRiskOfficers: officerWorkload.filter(
-        (ow) => ow.riskLevel === "High Risk",
-      ),
+      highRiskOfficers: officerWorkload.filter((ow) => ow.riskLevel === "High Risk"),
       riskByCity,
       riskByDepartment,
     };
 
     // Workload Distribution
-    const balancedCount = officerWorkload.filter(
-      (ow) => ow.workloadStatus === "balanced",
-    ).length;
-    const averageWorkloadPercentage =
-      totalOfficers > 0
-        ? Math.round(
-            officerWorkload.reduce(
-              (sum, ow) => sum + ow.workloadPercentage,
-              0,
-            ) / totalOfficers,
-          )
-        : 0;
-    const fieldOfficersList = officerWorkload.filter(
-      (ow) => ow.officer.role === "field_officer",
-    );
-    const fieldOfficerCapacityUsage =
-      fieldOfficersList.length > 0
-        ? Math.round(
-            fieldOfficersList.reduce(
-              (sum, ow) => sum + ow.workloadPercentage,
-              0,
-            ) / fieldOfficersList.length,
-          )
-        : 0;
-    const unitOfficersList = officerWorkload.filter(
-      (ow) => ow.officer.role === "unit_officer",
-    );
-    const unitOfficerActiveLoad =
-      unitOfficersList.length > 0
-        ? Math.round(
-            unitOfficersList.reduce(
-              (sum, ow) => sum + ow.workloadPercentage,
-              0,
-            ) / unitOfficersList.length,
-          )
-        : 0;
+    const balancedCount = officerWorkload.filter((ow) => ow.workloadStatus === "balanced").length;
+    const averageWorkloadPercentage = totalOfficers > 0 ? Math.round(officerWorkload.reduce((sum, ow) => sum + ow.workloadPercentage, 0) / totalOfficers) : 0;
+    const fieldOfficersList = officerWorkload.filter((ow) => ow.officer.role === "field_officer");
+    const fieldOfficerCapacityUsage = fieldOfficersList.length > 0 ? Math.round(fieldOfficersList.reduce((sum, ow) => sum + ow.workloadPercentage, 0) / fieldOfficersList.length) : 0;
+    const unitOfficersList = officerWorkload.filter((ow) => ow.officer.role === "unit_officer");
+    const unitOfficerActiveLoad = unitOfficersList.length > 0 ? Math.round(unitOfficersList.reduce((sum, ow) => sum + ow.workloadPercentage, 0) / unitOfficersList.length) : 0;
 
     const workloadDistribution = {
       balanced: balancedCount,
@@ -1040,9 +699,7 @@ export const getOfficerCommandCenterData = query({
 
     const systemFirstTimeFixRate =
       resolvedIssuesList.length > 0
-        ? Math.round(
-            (systemFirstTimeFixCount / resolvedIssuesList.length) * 100,
-          )
+        ? Math.round((systemFirstTimeFixCount / resolvedIssuesList.length) * 100)
         : 0;
 
     const qualityMetrics = {
@@ -1091,6 +748,7 @@ export const getOfficerCommandCenterData = query({
     };
   },
 });
+
 
 export const getAssignableOfficers = query({
   args: {
@@ -1249,8 +907,7 @@ export const getAssignableOfficers = query({
 
         if (targetCity) {
           const cityMatch = Boolean(
-            o.city &&
-              normalizeLocation(o.city) === normalizeLocation(targetCity),
+            o.city && normalizeLocation(o.city) === normalizeLocation(targetCity),
           );
           if (!cityMatch) return false;
         }
@@ -1258,8 +915,7 @@ export const getAssignableOfficers = query({
         if (targetDept) {
           const departmentMatch = Boolean(
             o.department &&
-              normalizeDepartment(o.department) ===
-                normalizeDepartment(targetDept),
+              normalizeDepartment(o.department) === normalizeDepartment(targetDept),
           );
           if (!departmentMatch) return false;
         }
@@ -1359,17 +1015,13 @@ export const adminAssignIssue = mutation({
 
       if (!isOfficerCompatible({ issue, profile: uo })) {
         throw new Error(
-          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`
         );
       }
 
-      const currentWorkload = Array.isArray(uo.activeIssueIds)
-        ? uo.activeIssueIds.length
-        : 0;
+      const currentWorkload = Array.isArray(uo.activeIssueIds) ? uo.activeIssueIds.length : 0;
       if (currentWorkload >= 50) {
-        throw new Error(
-          "Selected Unit Officer is currently at maximum workload capacity.",
-        );
+        throw new Error("Selected Unit Officer is currently at maximum workload capacity.");
       }
 
       await ctx.db.patch(args.issueId, {
@@ -1417,6 +1069,24 @@ export const adminAssignIssue = mutation({
         read: false,
         createdAt: now,
       });
+
+      // Universal Audit Log
+      await auditIssueAction(ctx, {
+        issue,
+        performedByUserId: adminDbId,
+        performerRole: "admin",
+        action: "assign_unit_officer",
+        actionCategory: "assignment",
+        oldValue: {
+          assignedUnitOfficer: issue.assignedUnitOfficer ?? null,
+        },
+        newValue: {
+          assignedUnitOfficer: args.officerUserId,
+        },
+        reason: args.comment,
+        description: `System Admin assigned Unit Officer ${uo.fullName} to issue ${issue.issueCode}.`,
+        source: "web",
+      });
     } else {
       const fo = await ctx.db
         .query("fieldOfficers")
@@ -1430,16 +1100,14 @@ export const adminAssignIssue = mutation({
 
       if (!isOfficerCompatible({ issue, profile: fo })) {
         throw new Error(
-          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`
         );
       }
 
       const currentWorkload = fo.currentActiveIssues ?? 0;
       const maxCap = fo.maxIssueCapacity ?? 10;
       if (currentWorkload >= maxCap) {
-        throw new Error(
-          "Selected Field Officer is currently at maximum workload capacity.",
-        );
+        throw new Error("Selected Field Officer is currently at maximum workload capacity.");
       }
 
       await ctx.db.patch(args.issueId, {
@@ -1490,6 +1158,25 @@ export const adminAssignIssue = mutation({
         read: false,
         createdAt: now,
       });
+
+      // Universal Audit Log
+      const isReassign = Boolean(issue.assignedFieldOfficer);
+      await auditIssueAction(ctx, {
+        issue,
+        performedByUserId: adminDbId,
+        performerRole: "admin",
+        action: isReassign ? "reassign_field_officer" : "assign_field_officer",
+        actionCategory: "assignment",
+        oldValue: {
+          assignedFieldOfficer: issue.assignedFieldOfficer ?? null,
+        },
+        newValue: {
+          assignedFieldOfficer: args.officerUserId,
+        },
+        reason: args.comment,
+        description: `System Admin ${isReassign ? "reassigned" : "assigned"} Field Officer ${fo.fullName} to issue ${issue.issueCode}.`,
+        source: "web",
+      });
     }
 
     return { success: true };
@@ -1515,9 +1202,7 @@ export const adminReassignIssue = mutation({
     if (args.role === "unit_officer") {
       const oldOfficerUserId = issue.assignedUnitOfficer;
       if (String(oldOfficerUserId || "") === String(args.newOfficerUserId)) {
-        throw new Error(
-          "The selected Unit Officer is already assigned to this issue.",
-        );
+        throw new Error("The selected Unit Officer is already assigned to this issue.");
       }
       const newUO = await ctx.db
         .query("unitOfficers")
@@ -1531,17 +1216,13 @@ export const adminReassignIssue = mutation({
 
       if (!isOfficerCompatible({ issue, profile: newUO })) {
         throw new Error(
-          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+          `Selected Unit Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`
         );
       }
 
-      const currentWorkload = Array.isArray(newUO.activeIssueIds)
-        ? newUO.activeIssueIds.length
-        : 0;
+      const currentWorkload = Array.isArray(newUO.activeIssueIds) ? newUO.activeIssueIds.length : 0;
       if (currentWorkload >= 50) {
-        throw new Error(
-          "Selected Unit Officer is currently at maximum workload capacity.",
-        );
+        throw new Error("Selected Unit Officer is currently at maximum workload capacity.");
       }
 
       // Revoke old officer
@@ -1576,17 +1257,12 @@ export const adminReassignIssue = mutation({
       if (issue.assignedFieldOfficer) {
         const currentFoProfile = await ctx.db
           .query("fieldOfficers")
-          .withIndex("by_user", (q) =>
-            q.eq("userId", issue.assignedFieldOfficer),
-          )
+          .withIndex("by_user", (q) => q.eq("userId", issue.assignedFieldOfficer))
           .unique();
-        if (
-          currentFoProfile &&
-          !isOfficerCompatible({ issue, profile: currentFoProfile })
-        ) {
+        if (currentFoProfile && !isOfficerCompatible({ issue, profile: currentFoProfile })) {
           keepFieldOfficer = null;
           const assigned = (currentFoProfile.assignedIssueIds || []).filter(
-            (id) => String(id) !== String(args.issueId),
+            (id) => String(id) !== String(args.issueId)
           );
           await ctx.db.patch(currentFoProfile._id, {
             assignedIssueIds: assigned,
@@ -1638,20 +1314,35 @@ export const adminReassignIssue = mutation({
         read: false,
         createdAt: now,
       });
+
+      // Universal Audit Log
+      await auditIssueAction(ctx, {
+        issue,
+        performedByUserId: adminDbId,
+        performerRole: "admin",
+        action: "reassign_unit_officer",
+        actionCategory: "assignment",
+        oldValue: {
+          assignedUnitOfficer: oldOfficerUserId ?? null,
+        },
+        newValue: {
+          assignedUnitOfficer: args.newOfficerUserId,
+        },
+        reason: args.reason,
+        description: `System Admin reassigned Unit Officer ${newUO.fullName} to issue ${issue.issueCode}.`,
+        source: "web",
+      });
     } else {
       // field_officer
       const oldOfficerUserId = issue.assignedFieldOfficer;
       if (String(oldOfficerUserId || "") === String(args.newOfficerUserId)) {
-        throw new Error(
-          "The selected Field Officer is already assigned to this issue.",
-        );
+        throw new Error("The selected Field Officer is already assigned to this issue.");
       }
       const newFO = await ctx.db
         .query("fieldOfficers")
         .withIndex("by_user", (q) => q.eq("userId", args.newOfficerUserId))
         .unique();
-      if (!newFO)
-        throw new Error("Selected user is not a valid Field Officer.");
+      if (!newFO) throw new Error("Selected user is not a valid Field Officer.");
 
       if (newFO.accountApproved === false) {
         throw new Error("Selected Field Officer account is not approved.");
@@ -1659,16 +1350,14 @@ export const adminReassignIssue = mutation({
 
       if (!isOfficerCompatible({ issue, profile: newFO })) {
         throw new Error(
-          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`,
+          `Selected Field Officer is not eligible for this issue. Officer must belong to the same city (${issue.city || "Unknown"}) and exact department (${issue.department || issue.category || "Unknown"}).`
         );
       }
 
       const currentWorkload = newFO.currentActiveIssues ?? 0;
       const maxCap = newFO.maxIssueCapacity ?? 10;
       if (currentWorkload >= maxCap) {
-        throw new Error(
-          "Selected Field Officer is currently at maximum workload capacity.",
-        );
+        throw new Error("Selected Field Officer is currently at maximum workload capacity.");
       }
 
       // Revoke old officer
@@ -1743,6 +1432,24 @@ export const adminReassignIssue = mutation({
         type: "assigned",
         read: false,
         createdAt: now,
+      });
+
+      // Universal Audit Log
+      await auditIssueAction(ctx, {
+        issue,
+        performedByUserId: adminDbId,
+        performerRole: "admin",
+        action: "reassign_field_officer",
+        actionCategory: "assignment",
+        oldValue: {
+          assignedFieldOfficer: oldOfficerUserId ?? null,
+        },
+        newValue: {
+          assignedFieldOfficer: args.newOfficerUserId,
+        },
+        reason: args.reason,
+        description: `System Admin reassigned Field Officer ${newFO.fullName} to issue ${issue.issueCode}.`,
+        source: "web",
       });
     }
 
@@ -2036,6 +1743,24 @@ export const adminExtendSLA = mutation({
       createdAt: now,
     });
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: adminDbId,
+      performerRole: "admin",
+      action: "extend_sla",
+      actionCategory: "sla",
+      oldValue: {
+        slaDeadline: issue.slaDeadline,
+      },
+      newValue: {
+        slaDeadline: args.newDeadline,
+      },
+      reason: args.reason,
+      description: `System Admin extended SLA deadline to ${new Date(args.newDeadline).toLocaleDateString()}.`,
+      source: "web",
+    });
+
     return { success: true };
   },
 });
@@ -2108,6 +1833,24 @@ export const adminSendForRework = mutation({
       type: "rework",
       read: false,
       createdAt: now,
+    });
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: adminDbId,
+      performerRole: "admin",
+      action: "rework_requested",
+      actionCategory: "rework",
+      oldValue: {
+        status: issue.status,
+      },
+      newValue: {
+        status: "rework_required",
+      },
+      reason: args.reworkReason,
+      description: `System Admin requested rework for issue ${issue.issueCode}.`,
+      source: "web",
     });
 
     return { success: true };
@@ -2213,6 +1956,24 @@ export const adminCloseIssue = mutation({
       type: "closed",
       read: false,
       createdAt: now,
+    });
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: adminDbId,
+      performerRole: "admin",
+      action: "issue_closed",
+      actionCategory: "resolution",
+      oldValue: {
+        status: issue.status,
+      },
+      newValue: {
+        status: "closed",
+      },
+      reason: args.comment,
+      description: `System Admin closed issue ${issue.issueCode}.`,
+      source: "web",
     });
 
     return { success: true };
@@ -2352,6 +2113,28 @@ export const adminEscalateIssue = mutation({
       createdAt: now,
     });
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.escalatedBy,
+      performerRole: "admin",
+      action: "issue_escalated",
+      actionCategory: "escalation",
+      oldValue: {
+        status: issue.status,
+        escalatedToAdmin: false,
+      },
+      newValue: {
+        status: "escalated",
+        escalatedToAdmin: true,
+        escalationCategory: args.category,
+        escalationPriority: args.priority,
+      },
+      reason: args.reason,
+      description: `Issue ${issue.issueCode} escalated to Admin.`,
+      source: "web",
+    });
+
     // Notify Admin Team (All Admins)
     const admins = await ctx.db
       .query("users")
@@ -2454,3 +2237,5 @@ export const adminReopenIssue = mutation({
     return { success: true };
   },
 });
+
+

@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { auditIssueAction } from "../lib/auditLogger";
 
 const CATEGORY_PREFIX = {
   road: "RD",
@@ -238,6 +239,29 @@ export const internalCreateIssue = internalMutation({
       });
     }
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue: {
+        _id: issueId,
+        issueCode,
+        city: args.city,
+        department: args.category,
+        category: args.category,
+      },
+      performedByUserId: args.reportedBy,
+      performerRole: "citizen",
+      action: "issue_created",
+      actionCategory: "issue",
+      oldValue: null,
+      newValue: {
+        status: "pending",
+        category: args.category,
+        priority: args.priority,
+      },
+      description: `Citizen reported issue ${issueCode}.`,
+      source: "web",
+    });
+
     return {
       success: true,
       issueCode,
@@ -454,6 +478,24 @@ export const withdrawIssue = mutation({
       }
     }
 
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.userId,
+      performerRole: "citizen",
+      action: "issue_withdrawn",
+      actionCategory: "withdrawal",
+      oldValue: {
+        status: issue.status,
+      },
+      newValue: {
+        status: "withdrawn",
+      },
+      reason: args.withdrawalReason,
+      description: `Citizen withdrew issue ${issue.issueCode}.`,
+      source: "web",
+    });
+
     return { success: true };
   },
 });
@@ -514,6 +556,24 @@ export const reopenIssue = mutation({
         createdAt: Date.now(),
       });
     }
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: args.userId,
+      performerRole: "citizen",
+      action: "issue_reopened",
+      actionCategory: "reopen",
+      oldValue: {
+        status: issue.status,
+      },
+      newValue: {
+        status: "reopened",
+      },
+      reason: args.reason,
+      description: `Issue ${issue.issueCode} reopened by citizen.`,
+      source: "web",
+    });
   },
 });
 
@@ -582,6 +642,23 @@ export const submitIssueFeedback = mutation({
       type: "feedback_confirmation",
       read: false,
       createdAt: now,
+    });
+
+    // Universal Audit Log
+    await auditIssueAction(ctx, {
+      issue,
+      performedByUserId: userId,
+      performerRole: "citizen",
+      action: "citizen_feedback_submitted",
+      actionCategory: "issue",
+      oldValue: {
+        rating: issue.citizenRating ?? null,
+      },
+      newValue: {
+        rating: rating,
+      },
+      description: "Citizen submitted resolution feedback.",
+      source: "web",
     });
 
     return { success: true };
