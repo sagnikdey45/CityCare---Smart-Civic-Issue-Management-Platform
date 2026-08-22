@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accountProvisioning from "../accountProvisioning.js";
+import type * as accountProvisioningActions from "../accountProvisioningActions.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as badges from "../badges.js";
@@ -44,6 +46,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountProvisioning: typeof accountProvisioning;
+  accountProvisioningActions: typeof accountProvisioningActions;
   admin: typeof admin;
   auth: typeof auth;
   badges: typeof badges;

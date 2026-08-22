@@ -30,6 +30,7 @@ import {
   Star,
   Layers,
   Trophy,
+  UserPlus,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { signOut, useSession } from "next-auth/react";
@@ -42,6 +43,7 @@ import { ModeToggle } from "../ModeToggle";
 import SLAMonitoringDashboard from "./SLAMonitoringDashboard";
 import { BadgeManagementSection } from "./BadgeManagementSystem";
 import SLAAnalyticsDashboard from "./SLAAnalyticsDashboard";
+import AccountProvisioningDashboard from "./AccountProvisioning/AccountProvisioningDashboard";
 // import ComprehensiveAuditLog from './ComprehensiveAuditLog';
 
 function displayPercent(value) {
@@ -1154,6 +1156,7 @@ function OfficerDetailsDialog({
 // Main Dashboard
 
 export function AdminDashboard() {
+  const user = { id: "2" };
   const profile = { full_name: "Sagnik Dey", role: "Administrator" };
   const [activeTab, setActiveTab] = useState("officers");
   const [filteredIssues, setFilteredIssues] = useState([]);
@@ -1197,7 +1200,6 @@ export function AdminDashboard() {
   const [isOfficerDialogOpen, setIsOfficerDialogOpen] = useState(false);
 
   const { data: session } = useSession();
-  const user = session?.user
   const dbUser = useQuery(api.users.getUserByEmail, {
     email: session?.user?.email || "ankit@example.com",
   });
@@ -1696,6 +1698,11 @@ export function AdminDashboard() {
             <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent dark:from-white/5 pointer-events-none rounded-[2.5rem]"></div>
             <div className="flex items-center gap-2 hide-scrollbar relative z-10 px-1">
               {tabBtn("officers", <Users size={20} />, "Officers")}
+              {tabBtn(
+                "provisioning",
+                <UserPlus size={20} />,
+                "Account Provisioning",
+              )}
               {tabBtn("messages", <MessageSquare size={20} />, "Messages")}
               {tabBtn("sla", <Clock size={20} />, "SLA")}
               {tabBtn("badges", <Trophy size={20} />, "Badges")}
@@ -2295,6 +2302,11 @@ export function AdminDashboard() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Account Provisioning Tab */}
+          {activeTab === "provisioning" && (
+            <AccountProvisioningDashboard adminUserId={dbUser?._id} />
           )}
 
           {/* Messages tab */}

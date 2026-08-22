@@ -446,7 +446,7 @@ export default defineSchema({
             v.literal("pending"),
             v.literal("reviewed"),
             v.literal("resolved"),
-            v.literal("rejected"),
+            v.literal("rejected")
           ),
         ),
         escalationCount: v.optional(v.number()),
@@ -785,4 +785,20 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_request", ["requestId"])
     .index("by_token_hash", ["tokenHash"]),
+
+  accountProvisioningImports: defineTable({
+    importType: v.union(v.literal("officers"), v.literal("city_admins")),
+    fileName: v.string(),
+    uploadedBy: v.id("users"),
+    totalRows: v.number(),
+    validRows: v.number(),
+    createdRows: v.number(),
+    skippedRows: v.number(),
+    failedRows: v.number(),
+    status: v.string(), // "completed", "partially_completed", "failed"
+    details: v.optional(v.string()), // JSON string of row results
+    createdAt: v.number(),
+  })
+    .index("by_uploaded_by", ["uploadedBy"])
+    .index("by_created_at", ["createdAt"]),
 });
