@@ -258,21 +258,6 @@ export const seedDemoDataOnce = internalMutation({
       let issuesCreated = 0;
 
       // Existing records check for safe additive policy
-      const existingUOs = await ctx.db
-        .query("unitOfficers")
-        .withIndex("by_city", (q) => q.eq("city", cityName))
-        .collect();
-
-      const existingFOs = await ctx.db
-        .query("fieldOfficers")
-        .withIndex("by_city", (q) => q.eq("city", cityName))
-        .collect();
-
-      const existingCityAdminProfile = await ctx.db
-        .query("cityAdmins")
-        .withIndex("by_city", (q) => q.eq("city", cityName))
-        .first();
-
       const existingCityIssues = await ctx.db
         .query("issues")
         .withIndex("by_city", (q) => q.eq("city", cityName))
@@ -366,7 +351,7 @@ export const seedDemoDataOnce = internalMutation({
           .withIndex("by_email", (q) => q.eq("email", uoEmail))
           .unique();
 
-        if (!uoUser && existingUOs.length === 0) {
+        if (!uoUser) {
           const newUserId = await ctx.db.insert("users", {
             fullName: `${deptLabel} Ward Officer - ${cityName}`,
             email: uoEmail,
@@ -375,45 +360,36 @@ export const seedDemoDataOnce = internalMutation({
             createdAt: new Date(now).toISOString(),
           });
           uoUser = { _id: newUserId };
-        } else if (!uoUser) {
-          uoUser = existingUOs.find((u) => u.department === dept);
-          if (uoUser) uoUser = { _id: uoUser.userId };
         }
 
-        let uoProfile = null;
-        if (uoUser) {
-          uoProfile = await ctx.db
-            .query("unitOfficers")
-            .withIndex("by_user", (q) => q.eq("userId", uoUser._id))
-            .first();
+        let uoProfile = await ctx.db
+          .query("unitOfficers")
+          .withIndex("by_user", (q) => q.eq("userId", uoUser._id))
+          .first();
 
-          if (!uoProfile && existingUOs.length === 0) {
-            const uoProfileId = await ctx.db.insert("unitOfficers", {
-              userId: uoUser._id,
-              fullName: `${deptLabel} Ward Officer - ${cityName}`,
-              email: uoEmail,
-              phone: `+91987${cityIndex}00${dIdx + 1}1`,
-              state: cityConfig.state,
-              city: cityName,
-              district: cityConfig.district,
-              department: dept,
-              totalVerifiedIssues: 0,
-              totalRejectedIssues: 0,
-              avgResolutionTime: 0,
-              accountApproved: true,
-              rating: 0,
-              efficiencyScore: 0,
-              assignedFieldOfficers: [],
-              activeIssueIds: [],
-              resolvedIssueIds: [],
-              mustChangePassword: false,
-            });
-            unitOfficersCreated++;
-            uoProfile = await ctx.db.get(uoProfileId);
-          }
-        } else if (existingUOs.length > 0) {
-          uoProfile = existingUOs.find((u) => u.department === dept) || existingUOs[0];
-          uoUser = { _id: uoProfile.userId };
+        if (!uoProfile) {
+          const uoProfileId = await ctx.db.insert("unitOfficers", {
+            userId: uoUser._id,
+            fullName: `${deptLabel} Ward Officer - ${cityName}`,
+            email: uoEmail,
+            phone: `+91987${cityIndex}00${dIdx + 1}1`,
+            state: cityConfig.state,
+            city: cityName,
+            district: cityConfig.district,
+            department: dept,
+            totalVerifiedIssues: 0,
+            totalRejectedIssues: 0,
+            avgResolutionTime: 0,
+            accountApproved: true,
+            rating: 0,
+            efficiencyScore: 0,
+            assignedFieldOfficers: [],
+            activeIssueIds: [],
+            resolvedIssueIds: [],
+            mustChangePassword: false,
+          });
+          unitOfficersCreated++;
+          uoProfile = await ctx.db.get(uoProfileId);
         }
 
         if (uoProfile && uoUser) {
@@ -448,7 +424,7 @@ export const seedDemoDataOnce = internalMutation({
             .withIndex("by_email", (q) => q.eq("email", foEmail))
             .unique();
 
-          if (!foUser && existingFOs.length === 0) {
+          if (!foUser) {
             const newUserId = await ctx.db.insert("users", {
               fullName: `${deptLabel} Field Officer 0${foIdx} - ${cityName}`,
               email: foEmail,
@@ -459,42 +435,39 @@ export const seedDemoDataOnce = internalMutation({
             foUser = { _id: newUserId };
           }
 
-          let foProfile = null;
-          if (foUser) {
-            foProfile = await ctx.db
-              .query("fieldOfficers")
-              .withIndex("by_user", (q) => q.eq("userId", foUser._id))
-              .first();
+          let foProfile = await ctx.db
+            .query("fieldOfficers")
+            .withIndex("by_user", (q) => q.eq("userId", foUser._id))
+            .first();
 
-            if (!foProfile && existingFOs.length === 0) {
-              const foProfileId = await ctx.db.insert("fieldOfficers", {
-                userId: foUser._id,
-                fullName: `${deptLabel} Field Officer 0${foIdx} - ${cityName}`,
-                email: foEmail,
-                phone: `+91987${cityIndex}0${dIdx + 1}${foIdx}2`,
-                state: cityConfig.state,
-                city: cityName,
-                district: cityConfig.district,
-                department: dept,
-                specialisations: SPECIALISATIONS[dept] || [
-                  "General Civic Maintenance",
-                ],
-                reportingUnitOfficerId: uoProfile ? uoProfile._id : undefined,
-                currentActiveIssues: 0,
-                maxIssueCapacity: 10,
-                assignedIssueIds: [],
-                completedIssueIds: [],
-                totalResolvedIssues: 0,
-                avgResolutionTime: 0,
-                onTimeCompletionRate: 0,
-                accountApproved: true,
-                rating: 0,
-                efficiencyScore: 0,
-                mustChangePassword: false,
-              });
-              fieldOfficersCreated++;
-              foProfile = await ctx.db.get(foProfileId);
-            }
+          if (!foProfile) {
+            const foProfileId = await ctx.db.insert("fieldOfficers", {
+              userId: foUser._id,
+              fullName: `${deptLabel} Field Officer 0${foIdx} - ${cityName}`,
+              email: foEmail,
+              phone: `+91987${cityIndex}0${dIdx + 1}${foIdx}2`,
+              state: cityConfig.state,
+              city: cityName,
+              district: cityConfig.district,
+              department: dept,
+              specialisations: SPECIALISATIONS[dept] || [
+                "General Civic Maintenance",
+              ],
+              reportingUnitOfficerId: uoProfile ? uoProfile._id : undefined,
+              currentActiveIssues: 0,
+              maxIssueCapacity: 10,
+              assignedIssueIds: [],
+              completedIssueIds: [],
+              totalResolvedIssues: 0,
+              avgResolutionTime: 0,
+              onTimeCompletionRate: 0,
+              accountApproved: true,
+              rating: 0,
+              efficiencyScore: 0,
+              mustChangePassword: false,
+            });
+            fieldOfficersCreated++;
+            foProfile = await ctx.db.get(foProfileId);
           }
 
           if (foProfile && foUser) {
@@ -534,7 +507,7 @@ export const seedDemoDataOnce = internalMutation({
         .withIndex("by_email", (q) => q.eq("email", cityAdminEmail))
         .unique();
 
-      if (!cityAdminUser && !existingCityAdminProfile) {
+      if (!cityAdminUser) {
         const newUserId = await ctx.db.insert("users", {
           fullName: `Demo City Admin - ${cityName}`,
           email: cityAdminEmail,
@@ -545,7 +518,14 @@ export const seedDemoDataOnce = internalMutation({
         cityAdminUser = { _id: newUserId };
       }
 
-      let cityAdminProfile = existingCityAdminProfile;
+      let cityAdminProfile = null;
+      if (cityAdminUser) {
+        cityAdminProfile = await ctx.db
+          .query("cityAdmins")
+          .withIndex("by_user", (q) => q.eq("userId", cityAdminUser._id))
+          .first();
+      }
+
       if (cityAdminUser && !cityAdminProfile) {
         const profileId = await ctx.db.insert("cityAdmins", {
           userId: cityAdminUser._id,

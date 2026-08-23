@@ -204,7 +204,7 @@ export const bulkCreatePreProvisionedOfficers = action({
 
         const specs = row.specialisation
           ? row.specialisation
-              .split(",")
+              .split(/[;,]+/)
               .map((s) => s.trim())
               .filter(Boolean)
           : [];

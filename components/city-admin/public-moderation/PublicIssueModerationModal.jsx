@@ -17,7 +17,7 @@ import {
   CircleX,
   ChevronRight,
   Loader2,
-  Sparkles,
+  ImageIcon,
 } from "lucide-react";
 import PublicIssuePreviewModal from "./PublicIssuePreviewModal";
 
