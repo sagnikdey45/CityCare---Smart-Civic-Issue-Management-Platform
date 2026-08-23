@@ -283,10 +283,10 @@ export const getCitizenDashboardIssues = query({
 
     if (!citizen || !citizen.city) return [];
 
-    // 2. Fetch ALL issues in same city (includes user's issues automatically)
+    // 2. Fetch ONLY issues reported by this citizen
     const issues = await ctx.db
       .query("issues")
-      .withIndex("by_city", (q) => q.eq("city", citizen.city))
+      .withIndex("by_reporter", (q) => q.eq("reportedBy", args.userId))
       .collect();
 
     // 3. Attach photo preview

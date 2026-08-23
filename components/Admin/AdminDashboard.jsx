@@ -38,6 +38,7 @@ import { api } from "@/convex/_generated/api";
 import { AdminIssueModal } from "./AdminIssueModal";
 import { AdminMessageModal } from "./AdminMessageModal";
 import { AdminReassignModal } from "./AdminReassignModal";
+import SystemAdminAuditLogs from "./AuditLogs/SystemAdminAuditLogs";
 import { MessagesCenter } from "../MessageCenter";
 import { ModeToggle } from "../ModeToggle";
 import SLAMonitoringDashboard from "./SLAMonitoringDashboard";
@@ -2360,14 +2361,9 @@ export function AdminDashboard() {
           )}
 
           {/* Audit tab */}
-          {/* {activeTab === 'audit' && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <div className="bg-gradient-to-r from-slate-600 to-slate-700 p-4">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Shield size={24} />Audit Logs</h2>
-              </div>
-              <div className="p-6"><ComprehensiveAuditLog /></div>
-            </div>
-          )} */}
+          {activeTab === 'audit' && dbUser?._id && (
+            <SystemAdminAuditLogs adminUserId={dbUser._id} />
+          )}
         </div>
       </div>
 
