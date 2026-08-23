@@ -227,15 +227,15 @@ export function generateDepartmentReportPdf({
 
     const statusRows = reportData.departments.map((dept) => [
       dept.label,
-      String(dept.statusBreakdown.pending ?? 0),
-      String(dept.statusBreakdown.verified ?? 0),
-      String(dept.statusBreakdown.assigned ?? 0),
-      String(dept.statusBreakdown.in_progress ?? 0),
-      String(dept.statusBreakdown.resolved ?? 0),
-      String(dept.statusBreakdown.closed ?? 0),
-      String(dept.statusBreakdown.rejected ?? 0),
-      String(dept.priorityBreakdown.critical ?? 0),
-      String(dept.priorityBreakdown.high ?? 0),
+      String(dept?.statusBreakdown?.pending ?? 0),
+      String(dept?.statusBreakdown?.verified ?? 0),
+      String(dept?.statusBreakdown?.assigned ?? 0),
+      String(dept?.statusBreakdown?.in_progress ?? 0),
+      String(dept?.statusBreakdown?.resolved ?? 0),
+      String(dept?.statusBreakdown?.closed ?? 0),
+      String(dept?.statusBreakdown?.rejected ?? 0),
+      String(dept?.priorityBreakdown?.critical ?? 0),
+      String(dept?.priorityBreakdown?.high ?? 0),
     ]);
 
     autoTable(doc, {
