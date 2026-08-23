@@ -682,11 +682,6 @@ export default function CityAdminDashboard() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all group">
-          <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-gradient-to-br from-red-500 to-rose-600 rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse"></span>
-        </button>
-
         <ModeToggle />
 
         <div className="flex items-center gap-3 pl-4 ml-2 border-l border-slate-200 dark:border-slate-700">
