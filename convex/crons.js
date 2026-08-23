@@ -31,4 +31,12 @@ crons.interval(
   {},
 );
 
+// Demo baseline data seeding & password repair (runs every 24 hours)
+crons.interval(
+  "ensure demo baseline data",
+  { hours: 24 },
+  internal.demoSeedPasswords.ensureDemoBaseline,
+  {},
+);
+
 export default crons;

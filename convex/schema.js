@@ -512,7 +512,8 @@ export default defineSchema({
     .index("by_city", ["city"])
     .index("by_category", ["category"])
     .index("by_assigned_unit_officer", ["assignedUnitOfficer"])
-    .index("by_assigned_field_officer", ["assignedFieldOfficer"]),
+    .index("by_assigned_field_officer", ["assignedFieldOfficer"])
+    .index("by_issue_code", ["issueCode"]),
 
   issueUpdates: defineTable({
     // Reference
