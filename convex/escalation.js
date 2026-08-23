@@ -188,7 +188,7 @@ export const escalateIssue = mutation({
       v.literal("critical"),
     ),
     escalationReason: v.string(),
-    adminUserId: v.string(),
+    adminUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
@@ -312,14 +312,15 @@ export const escalateIssue = mutation({
 export const reviewEscalation = mutation({
   args: {
     issueId: v.id("issues"),
-    reviewedBy: v.string(),
+    adminUserId: v.optional(v.string()),
+    reviewedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.reviewedBy);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminUserId || args.reviewedBy);
 
     await ctx.db.patch(args.issueId, {
       escalation: issue.escalation
@@ -376,14 +377,15 @@ export const extendIssueSla = mutation({
     issueId: v.id("issues"),
     newDeadline: v.number(),
     notes: v.string(),
-    adminId: v.string(),
+    adminId: v.optional(v.string()),
+    adminUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.adminId);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminId || args.adminUserId);
 
     // Auto-log review if pending
     const currentStatus = issue.escalation?.adminReviewStatus;
@@ -469,7 +471,8 @@ export const reassignIssueOfficer = mutation({
     newUnitOfficerId: v.optional(v.string()),
     newFieldOfficerId: v.optional(v.string()),
     notes: v.string(),
-    adminId: v.string(),
+    adminId: v.optional(v.string()),
+    adminUserId: v.optional(v.string()),
     confirmCrossCity: v.optional(v.boolean()),
     confirmDepartmentMismatch: v.optional(v.boolean()),
   },
@@ -478,7 +481,7 @@ export const reassignIssueOfficer = mutation({
     if (!issue) throw new Error("Issue not found");
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.adminId);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminId || args.adminUserId);
 
     const currentStatus = issue.escalation?.adminReviewStatus;
     if (currentStatus === "pending" || !currentStatus) {
@@ -682,14 +685,15 @@ export const changeIssueCategory = mutation({
     issueId: v.id("issues"),
     newCategory: v.string(),
     notes: v.string(),
-    adminId: v.string(),
+    adminId: v.optional(v.string()),
+    adminUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.adminId);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminId || args.adminUserId);
 
     const oldCategory = issue.category;
 
@@ -737,14 +741,15 @@ export const approveEscalation = mutation({
   args: {
     issueId: v.id("issues"),
     notes: v.string(),
-    adminId: v.string(),
+    adminId: v.optional(v.string()),
+    adminUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
     if (!issue) throw new Error("Issue not found");
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.adminId);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminId || args.adminUserId);
 
     const targetStatus =
       issue.status === "escalated"
@@ -805,7 +810,8 @@ export const rejectEscalation = mutation({
   args: {
     issueId: v.id("issues"),
     reason: v.string(),
-    adminId: v.string(),
+    adminId: v.optional(v.string()),
+    adminUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const issue = await ctx.db.get(args.issueId);
@@ -820,7 +826,7 @@ export const rejectEscalation = mutation({
     }
 
     const now = Date.now();
-    const adminDbId = await resolveAdminUserId(ctx, args.adminId);
+    const adminDbId = await resolveAdminUserId(ctx, args.adminId || args.adminUserId);
 
     await ctx.db.patch(args.issueId, {
       escalatedToAdmin: true,
