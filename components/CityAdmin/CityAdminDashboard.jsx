@@ -24,7 +24,6 @@ import {
   LogOut,
   Bell,
   Search,
-  ChevronDown,
   TrendingUp,
   TrendingDown,
   Filter,
@@ -699,7 +698,6 @@ export default function CityAdminDashboard() {
               Administrator
             </p>
           </div>
-          <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
         </div>
       </div>
     </div>

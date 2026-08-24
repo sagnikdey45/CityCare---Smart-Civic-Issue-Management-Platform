@@ -442,14 +442,6 @@ function CityIssueMap({
             <option value="public_health">Public Health</option>
             <option value="other">Other</option>
           </select>
-
-          <button
-            disabled
-            title="Ward boundary spatial data is currently unavailable for this region."
-            className="px-4 py-2 text-sm rounded-xl font-semibold bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-700 cursor-not-allowed shadow-sm"
-          >
-            Ward Boundaries (N/A)
-          </button>
         </div>
 
         <div className="relative h-[420px] md:h-[520px] bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-2xl mb-6 overflow-hidden border border-slate-200 dark:border-slate-700">

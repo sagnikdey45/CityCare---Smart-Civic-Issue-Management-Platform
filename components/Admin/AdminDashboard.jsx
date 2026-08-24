@@ -57,7 +57,7 @@ function displayPercent(value) {
 function RoleBadge({ role }) {
   return role === "unit_officer" ? (
     <span className="inline-flex items-center gap-1 bg-cyan-50 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-lg text-xs font-bold border border-cyan-150 dark:border-cyan-900/50">
-      <Shield size={11} /> Ward Officer
+      <Shield size={11} /> Unit Officer
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-lg text-xs font-bold border border-emerald-150 dark:border-emerald-900/50">
@@ -425,7 +425,7 @@ function OfficerCard({ ow, onOpen, onMessage, isBusy }) {
               </span>
             </div>
             <div className="text-[10px] text-slate-505 mt-0.5 truncate font-semibold">
-              {ow.officer.city || ow.officer.district || "General Ward"}
+              {ow.officer.city || ow.officer.district || "General Unit"}
             </div>
           </div>
           {/* Grade Badge */}
@@ -781,7 +781,7 @@ function OfficerDetailsDialog({
                   <span className="inline-flex items-center gap-1.5 bg-white/20 text-white px-3 py-1 rounded-full text-xs font-bold border border-white/30">
                     {ow.officer.role === "unit_officer" ? (
                       <>
-                        <Shield size={13} /> Ward Officer
+                        <Shield size={13} /> Unit Officer
                       </>
                     ) : (
                       <>
@@ -1306,7 +1306,7 @@ export function AdminDashboard() {
     const newOfficer = officers.find((o) => o.id === newOfficerId);
     if (oldOfficer && newOfficer && oldOfficer.role !== newOfficer.role) {
       alert(
-        `Invalid reassignment!\n\n${oldOfficer.role === "unit_officer" ? "Ward Officers" : "Field Officers"} can only be reassigned to other ${oldOfficer.role === "unit_officer" ? "Ward Officers" : "Field Officers"}.`,
+        `Invalid reassignment!\n\n${oldOfficer.role === "unit_officer" ? "Unit Officers" : "Field Officers"} can only be reassigned to other ${oldOfficer.role === "unit_officer" ? "Unit Officers" : "Field Officers"}.`,
       );
       return;
     }
@@ -1778,7 +1778,7 @@ export function AdminDashboard() {
                     <div className="flex gap-3 flex-wrap">
                       {[
                         {
-                          label: "Ward Officers",
+                          label: "Unit Officers",
                           value: performanceSummary.totalUnitOfficers ?? 0,
                         },
                         {
@@ -1933,7 +1933,7 @@ export function AdminDashboard() {
                           onChange: setOfficerFilter,
                           options: [
                             ["all", "All Roles"],
-                            ["unit_officer", "Ward Officers"],
+                            ["unit_officer", "Unit Officers"],
                             ["field_officer", "Field Officers"],
                           ],
                           color:
@@ -2078,7 +2078,7 @@ export function AdminDashboard() {
                     suffix="%"
                   />
                   <LeaderboardList
-                    title="Top Ward Officers"
+                    title="Top Unit Officers"
                     list={officerLeaderboards.topUnitOfficers}
                     metricKey="efficiencyScore"
                     suffix="%"
