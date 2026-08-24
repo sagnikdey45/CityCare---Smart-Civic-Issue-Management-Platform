@@ -1199,6 +1199,38 @@ export function AdminDashboard() {
 
   const [selectedOfficerWorkload, setSelectedOfficerWorkload] = useState(null);
   const [isOfficerDialogOpen, setIsOfficerDialogOpen] = useState(false);
+  const [issueOpenedFromOfficer, setIssueOpenedFromOfficer] = useState(false);
+  const [reassignOpenedFromOfficer, setReassignOpenedFromOfficer] = useState(false);
+
+  function handleViewOfficerIssue(issue) {
+    if (!issue) return;
+    setIssueOpenedFromOfficer(true);
+    setIsOfficerDialogOpen(false);
+    handleSelectIssue(issue);
+  }
+
+  function handleOfficerIssueReassign(issue) {
+    if (!issue) return;
+    setReassignOpenedFromOfficer(true);
+    setIsOfficerDialogOpen(false);
+    setReassignIssue(issue);
+  }
+
+  function handleCloseIssueModal() {
+    setSelectedIssue(null);
+    if (issueOpenedFromOfficer && selectedOfficerWorkload) {
+      setIsOfficerDialogOpen(true);
+    }
+    setIssueOpenedFromOfficer(false);
+  }
+
+  function handleCloseReassignModal() {
+    setReassignIssue(null);
+    if (reassignOpenedFromOfficer && selectedOfficerWorkload) {
+      setIsOfficerDialogOpen(true);
+    }
+    setReassignOpenedFromOfficer(false);
+  }
 
   const { data: session } = useSession();
   const dbUser = useQuery(api.users.getUserByEmail, {
@@ -1231,6 +1263,10 @@ export function AdminDashboard() {
       ),
     );
     setSelectedIssue(null);
+    if (issueOpenedFromOfficer && selectedOfficerWorkload) {
+      setIsOfficerDialogOpen(true);
+    }
+    setIssueOpenedFromOfficer(false);
   }
 
   async function handleSendMessage(officerId, message, issueIds) {
@@ -2375,12 +2411,8 @@ export function AdminDashboard() {
             setIsOfficerDialogOpen(false);
             setSelectedOfficerWorkload(null);
           }}
-          onViewIssue={(issue) => {
-            handleSelectIssue(issue);
-          }}
-          onReassignIssue={(issue) => {
-            setReassignIssue(issue);
-          }}
+          onViewIssue={handleViewOfficerIssue}
+          onReassignIssue={handleOfficerIssueReassign}
           onMessage={() =>
             openMessageModal(
               liveSelectedOfficerWorkload.officer,
@@ -2395,10 +2427,13 @@ export function AdminDashboard() {
         <AdminIssueModal
           issue={selectedIssue}
           adminUserId={dbUser?._id}
-          onClose={() => setSelectedIssue(null)}
+          onClose={handleCloseIssueModal}
           onUpdated={handleIssueUpdated}
           onOpenEscalation={(issue) => {
+            setIssueOpenedFromOfficer(false);
             setSelectedIssue(null);
+            setIsOfficerDialogOpen(false);
+            setSelectedOfficerWorkload(null);
             setActiveTab("sla");
           }}
         />
@@ -2422,7 +2457,7 @@ export function AdminDashboard() {
         <AdminReassignModal
           issue={reassignIssue}
           officers={officers}
-          onClose={() => setReassignIssue(null)}
+          onClose={handleCloseReassignModal}
           onReassign={handleReassign}
         />
       )}

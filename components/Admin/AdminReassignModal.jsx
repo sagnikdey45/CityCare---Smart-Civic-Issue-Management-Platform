@@ -96,14 +96,14 @@ export function AdminReassignModal({ issue, officers, onClose, onReassign }) {
                   </code>
                   <span
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm ${
-                      issue.severity === "high"
+                      issue.priority === "high"
                         ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
-                        : issue.severity === "medium"
+                        : issue.priority === "medium"
                           ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800"
                           : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                     }`}
                   >
-                    {issue.severity.toUpperCase()} PRIORITY
+                    {issue.priority.toUpperCase()} PRIORITY
                   </span>
                   <span
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm ${

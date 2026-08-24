@@ -9,7 +9,7 @@ const GoogleMapsContext = createContext({
   hasApiKey: false,
 });
 
-const GOOGLE_MAP_LIBRARIES = ["places", "visualization"];
+const GOOGLE_MAP_LIBRARIES = ["places"];
 
 export function GoogleMapsProvider({ children }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;

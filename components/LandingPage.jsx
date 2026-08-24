@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Users2,
 } from "lucide-react";
-import { Leaderboard } from "./LeaderBoard";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
@@ -518,28 +517,6 @@ export function LandingPage({ onGetStarted }) {
                 privacy standards.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-20 bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900 transition-colors duration-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-4">
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 dark:from-yellow-500 dark:to-orange-600 rounded-full p-3 shadow-md dark:shadow-yellow-700/20">
-                <Award className="text-white" size={32} />
-              </div>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Community Champions
-            </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Recognizing our most active contributors making our city better
-              every day
-            </p>
-          </div>
-          <div className="max-w-2xl mx-auto">
-            <Leaderboard />
           </div>
         </div>
       </section>

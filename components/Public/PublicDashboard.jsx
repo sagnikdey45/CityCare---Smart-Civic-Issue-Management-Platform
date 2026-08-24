@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   Search,
   Moon,
@@ -38,7 +38,7 @@ import { PublicNavbar } from "./PublicNavbar";
 import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../ui/button";
-import { GoogleMap, Marker, HeatmapLayer } from "@react-google-maps/api";
+import { GoogleMap, Marker, Circle } from "@react-google-maps/api";
 import { useGoogleMapsStatus } from "@/components/maps/GoogleMapsProvider";
 import IssueDiscussionForum from "./IssueDiscussionForum";
 import { useSession } from "next-auth/react";
@@ -271,6 +271,66 @@ export function PublicDashboard() {
       avgRating: avgRating.toFixed(1),
     };
   }, [publicIssues]);
+
+  const mapPoints = useMemo(() => {
+    return filteredIssues
+      .map((issue) => {
+        const lat = Number(issue.latitude);
+        const lng = Number(issue.longitude);
+
+        if (
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng) ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180
+        ) {
+          return null;
+        }
+
+        return {
+          issue,
+          lat,
+          lng,
+        };
+      })
+      .filter(Boolean);
+  }, [filteredIssues]);
+
+  const heatBuckets = useMemo(() => {
+    const bucketMap = new Map();
+
+    for (const point of mapPoints) {
+      const latKey = point.lat.toFixed(3);
+      const lngKey = point.lng.toFixed(3);
+      const key = `${latKey}:${lngKey}`;
+      const existing = bucketMap.get(key);
+
+      if (existing) {
+        existing.count += 1;
+        existing.issues.push(point.issue);
+      } else {
+        bucketMap.set(key, {
+          key,
+          lat: point.lat,
+          lng: point.lng,
+          count: 1,
+          issues: [point.issue],
+        });
+      }
+    }
+
+    return Array.from(bucketMap.values());
+  }, [mapPoints]);
+
+  const getHeatRadius = (count) => {
+    return Math.min(700, 180 + count * 90);
+  };
+
+  const getHeatOpacity = (count) => {
+    return Math.min(0.45, 0.12 + count * 0.06);
+  };
 
   if (status === "loading" || (session && isForbiddenRole)) {
     return (
@@ -515,7 +575,6 @@ export function PublicDashboard() {
                 </div>
               ) : (
                 <GoogleMap
-                  key={mapView}
                   zoom={13}
                   center={center}
                   mapContainerStyle={mapContainerStyle}
@@ -531,31 +590,68 @@ export function PublicDashboard() {
                   }}
                 >
                   {/* 🔴 Heatmap */}
-                  {mapView === "heatmap" && (
-                    <HeatmapLayer
-                      data={filteredIssues.map(
-                        (issue) =>
-                          new window.google.maps.LatLng(
-                            issue.latitude,
-                            issue.longitude,
-                          ),
-                      )}
-                      options={{
-                        radius: 40,
-                        opacity: 0.7,
-                      }}
-                    />
-                  )}
+                  {mapView === "heatmap" &&
+                    heatBuckets.map((bucket) => {
+                      const baseOpacity = getHeatOpacity(bucket.count);
+                      const baseRadius = getHeatRadius(bucket.count);
+                      const position = { lat: bucket.lat, lng: bucket.lng };
+                      return (
+                        <Fragment key={bucket.key}>
+                          <Circle
+                            center={position}
+                            radius={baseRadius}
+                            options={{
+                              fillColor: "#0d9488",
+                              fillOpacity: baseOpacity * 0.3,
+                              strokeOpacity: 0,
+                              clickable: true,
+                              zIndex: 1,
+                            }}
+                            onClick={() => {
+                              const issue = bucket.issues[0];
+                              setSelectedIssue(issue);
+                              router.push(
+                                `/public-dashboard?id=${issue.issueCode}&city=${encodeURIComponent(
+                                  issue.city || cityName
+                                )}`,
+                                {
+                                  scroll: false,
+                                }
+                              );
+                            }}
+                          />
+                          <Circle
+                            center={position}
+                            radius={baseRadius * 0.6}
+                            options={{
+                              fillColor: "#0d9488",
+                              fillOpacity: baseOpacity * 0.6,
+                              strokeOpacity: 0,
+                              clickable: false,
+                              zIndex: 1,
+                            }}
+                          />
+                          <Circle
+                            center={position}
+                            radius={baseRadius * 0.3}
+                            options={{
+                              fillColor: "#0d9488",
+                              fillOpacity: baseOpacity,
+                              strokeOpacity: 0,
+                              clickable: false,
+                              zIndex: 1,
+                            }}
+                          />
+                        </Fragment>
+                      );
+                    })}
 
                   {/* 📍 Pins */}
                   {mapView === "pins" &&
-                    filteredIssues.map((issue) => (
+                    mapPoints.map(({ issue, lat, lng }) => (
                       <Marker
-                        key={issue.id}
-                        position={{
-                          lat: issue.latitude,
-                          lng: issue.longitude,
-                        }}
+                        key={issue.id || issue._id || issue.issueCode}
+                        position={{ lat, lng }}
                         icon={{
                           url:
                             issue.status === "resolved"
@@ -565,7 +661,9 @@ export function PublicDashboard() {
                         onClick={() => {
                           setSelectedIssue(issue);
                           router.push(
-                            `/public-dashboard?id=${issue.issueCode}`,
+                            `/public-dashboard?id=${issue.issueCode}&city=${encodeURIComponent(
+                              issue.city || cityName
+                            )}`,
                             {
                               scroll: false,
                             },
@@ -578,21 +676,38 @@ export function PublicDashboard() {
             </div>
 
             {/* Legend */}
-            <div className="mt-6 flex justify-center gap-8 text-sm bg-white/50 dark:bg-slate-800/50 py-3 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-sm w-max mx-auto px-8 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-                <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
-                  Successfully Resolved
-                </span>
-              </div>
+            {mapView === "pins" ? (
+              <div className="mt-6 flex justify-center gap-8 text-sm bg-white/50 dark:bg-slate-800/50 py-3 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-sm w-max mx-auto px-8 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                  <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
+                    Successfully Resolved
+                  </span>
+                </div>
 
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
-                <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
-                  Rejected / Invalid
-                </span>
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                  <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
+                    Rejected / Invalid
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-6 flex justify-center gap-8 text-sm bg-white/50 dark:bg-slate-800/50 py-3 rounded-xl border border-white/50 dark:border-white/5 backdrop-blur-sm w-max mx-auto px-8 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded-full bg-teal-500/20 border-2 border-teal-500/40"></div>
+                  <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
+                    Lower Issue Density
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 rounded-full bg-teal-500/50 border-2 border-teal-500/70"></div>
+                  <span className="text-gray-700 dark:text-gray-300 font-bold tracking-wide">
+                    Higher Issue Density
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Search and Filters Row */}
