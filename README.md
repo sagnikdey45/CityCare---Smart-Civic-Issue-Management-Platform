@@ -1,248 +1,103 @@
-# CityCare — Smart Civic Issue Management Platform
+# CityCare – Smart Civic Issue Management Platform
 
-**CityCare** is a full-stack civic issue reporting and transparency platform designed to streamline communication between citizens and city authorities.
+CityCare is a smart civic issue reporting and management platform that will be enabling the citizens to report civic issues and also allowing the municipal officers and administrators to verify, assign, resolve, monitor and analyse those issues through a structured resolution workflow. This is the web version of the CityCare project which is specifically being created for the Citizens and Administrators (City & System). 
 
-It enables structured reporting, intelligent duplicate detection, role-based issue management, and a public transparency dashboard — ensuring accountability, efficiency, and trust in civic governance.
+## About the Project
 
----
+Urban municipal administration often suffers from fragmented communication, unverified issue reports, opaque resolution tracking, and lack of real-time operational visibility. CityCare addresses these challenges by providing a centralized digital platform that will be bridging the gap between citizens, field workers and municipal administrative tiers.
 
-## Project Context
+The CityCare platform provides an end-to-end civic governance issue lifecycle. From the moment the citizen submits an issue and the automated duplicate issue checks to the Unit Officer verifies the issue, assigns to Field Officer, approves or request reworks of the evidence based issue resolution submitted by Field Officers till the citizen feedback and rating, everything is being tracked with full transparency, very strict SLA Deadline monitoring and role based accountability. 
 
-CityCare is developed as part of an academic Study Project / Capstone progression model, with:
+## Key Features
 
-- Phase 1: Problem Identification & Planning
-- Phase 2: System Design & Proof of Concept
-- Phase 3: Implementation & Validation (In Progress)
+* **Citizen Features:-** The citizens can use the platform to report civic issues, track their progress, communicating with the officers to clarify doubts and participate in public discussions. 
+* **City Administrator Features:-** The City Admins are responsible for managing all the civic operations that are within their assigned city by monitoring the KPIs, reviewing and filtering all the city complaints, reassignment of officer, updation of issue priority or category, managing SLA Deadline and Issue Escalations, viewing audit logs of the city wide actions being taken by citizens and officers, analysing department wise performance and monitoring distribution of issue through the city map. 
+* **System Administrator Features:-** The System Admins are responsible for handling all the platform wide administration across the different cities and officer management by provisioning and mapping officer accounts, monitoring the SLA breaches and issue escalations, maintaining or creating citizen badges and analysing civic issue trend across all the different cities. 
 
-The system follows structured workflows, RBAC architecture, and transparency-first design principles.
+## Issue Workflow
 
----
+### Primary Lifecycle
+`Pending` → `Verified` → `Assigned` → `In Progress` → `Pending UO Verification` → `Resolved / Closed`
 
-# Core Features
+### Secondary & Exception States
+* `Rejected`: Issues deemed invalid, out-of-scope, or insufficient evidence during Unit Officer verification.
+* `Rework Required`: Issues sent back to the assigned Field Officer when submitted work is unsatisfactory.
+* `Reopened`: Resolved issues reopened by citizens due to recurring or incomplete resolution.
+* `Escalated`: Issues escalated to City/System Administrators due to SLA breach or operational blockers.
+* `Withdrawn`: Issues withdrawn by the reporting citizen prior to verification.
 
-## Citizen Module
+## Core Algorithms
 
-- Report civic issues with:
-  - Title
-  - Description
-  - Category & Subcategory
-  - Location (Google Maps auto-pin)
-  - Photo evidence
-- Anonymous reporting option
-- Upvote & community interaction
-- Real-time status tracking
-- Duplicate issue detection before submission
-- Public transparency access (Resolved & Rejected issues)
+The CityCare makes use of core algorithms for **duplicate detection, geographical distance calculation, assignment of officers (Unit Officer / Field Officer), SLA deadline & Issue Escalation, trend analysis, evaluation of officer performance** and **citizen rate limiting**. All these together help in automating the **issue routing, reduce redundant issues, monitor deadlines** and maintaining a consistent issue resolution workflow. 
 
----
+## Getting Started
 
-## Officer Modules
+### Prerequisites
 
-### Field Officer
-- View assigned issues
-- Update issue progress
-- Upload before & after resolution photos
-- Add public resolution notes
-- Change status (In Progress → Resolved)
+Ensure you have the following installed and configured before setting up the project:
 
-### Unit Officer
-- Verify reported issues
-- Assign issues to field officers
-- Reassign issues if required
-- Approve final resolution
-- Manage regional workload
+* **Node.js**
+* **Git**
+* A **Convex** account and project setup
+* Google Cloud Platform API key with enabled Maps JavaScript API, Places API and Geocoding API
+* API keys for configured third party services (Gemini AI, Upstash Redis, Resend)
 
----
-
-### City Administrator Dashboard
-
-- View city-wide analytics
-- Heatmap & pin-based issue visualization
-- Role management & account approval
-- Audit logs of actions
-- Public transparency controls
-- KPI metrics:
-  - Total Resolved
-  - Total Rejected
-  - Avg Resolution Time
-  - Citizen Satisfaction Rating
-
----
-
-# Public Transparency Dashboard
-
-Accessible without login.
-
-Displays:
-- Resolved issues with before/after proof
-- Rejected issues with official reason
-- Interactive Google Maps:
-  - Heatmap view
-  - Pin view (toggle)
-- Filters (Category, Status)
-- Trust & Transparency metrics
-- Shareable issue links
-
----
-
-# Intelligent Layer (Implemented & Planned)
-
-## Implemented
-- Rule-based duplicate detection system
-  - Location proximity scoring (Haversine distance)
-  - Category & subcategory matching
-  - Title & description similarity scoring
-  - Weighted scoring threshold logic
-
----
-
-# Role-Based Access Control (RBAC)
-
-| Role | Permissions |
-|------|-------------|
-| Citizen | Report, view, upvote, comment |
-| Field Officer | Update assigned issues |
-| Unit Officer | Verify & assign issues |
-| City Admin | Full system access |
-
-Authentication handled via **NextAuth.js** with role-based route protection.
-
-Account approval system implemented for officers.
-
----
-
-# HCI & UX Principles Applied
-
-- Consistency in layout & color semantics
-- Status color coding (Green = Resolved, Red = Rejected, Yellow = Pending)
-- Immediate feedback (toasts, loaders, transitions)
-- Accessibility-first design (ARIA ready)
-- Responsive mobile-first UI
-- Structured workflow lifecycle
-
----
-
-# Tech Stack
-
-## Frontend
-- Next.js (Full-stack React framework)
-- TailwindCSS
-- ShadCN UI Components
-- Lucide Icons
-- Google Maps API
-
-## Backend / Data Layer
-- ConvexDB (Real-time reactive database)
-- Convex functions (queries & mutations)
-- Rule-based duplicate detection engine
-
-## Authentication
-- NextAuth.js
-- Role-based session validation
-
-## Notifications
-- In-app toasts
-- Email integration ready
-
----
-
-# Structured Issue Lifecycle
-
-1. Citizen Reports Issue
-2. Unit Officer Verifies
-3. Issue Assigned to Field Officer
-4. Field Officer Resolves & Uploads Evidence
-5. Unit Officer Confirms
-6. Status Updated Publicly
-7. Citizen Feedback (Optional)
-
-No arbitrary time limits — resolution based on workflow completion.
-
----
-
-# Installation & Setup Guide
-
-## Step 1: Clone Repository
+### Clone Repository
 
 ```bash
-git clone https://github.com/sagnikdey45/CityCare---Smart-Civic-Issue-Management-Platform.git
-cd CityCare
+git clone https://github.com/sagnikdey45/CityCare---Smart-Civic-Issue-Management-Platform
+cd CityCare---Smart-Civic-Issue-Management-Platform
 ```
 
----
-
-## Step 2: Install Dependencies
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
----
+## Environment Variables
 
-## Step 3: Configure Environment Variables
+Create an `.env.local` file in the root directory. Actual secret keys and credentials must never be committed to source control.
 
-Create a `.env.local` file:
+```env
+CONVEX_DEPLOYMENT=your_convex_deployment
+NEXT_PUBLIC_CONVEX_URL=your_convex_url
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+NEXTAUTH_SECRET=your_nextauth_secret
+NEXTAUTH_URL=http://localhost:3000
 
-```
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=
-CONVEX_DEPLOYMENT=
-NEXT_PUBLIC_CONVEX_URL=
-```
-
----
-
-## Step 4: Install Convex
-
-```bash
-npm install convex
+# Additional Service Credentials
+GEMINI_API_KEY=your_gemini_api_key
+UPSTASH_REDIS_REST_URL=your_upstash_redis_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token
+RESEND_API_KEY=your_resend_api_key
 ```
 
----
-## Step 5: Start Convex
+## Running the Application
+
+Convex backend services and the Next.js development web server must run concurrently in separate terminal sessions.
+
+**Terminal 1 (Convex Backend):**
 
 ```bash
 npx convex dev
 ```
 
----
-
-## Step 6: Run Development Server
+**Terminal 2 (Next.js Development Server):**
 
 ```bash
 npm run dev
 ```
 
-Open:
+Once started, open your browser and navigate to:
 
+`http://localhost:3000`
+## Deployment
+
+The Next.js frontend can be deployed to **Vercel** by connecting your GitHub repository and configuring all environment variables in the project settings.
+
+The production Convex backend functions and schema can be deployed using:
+
+```bash
+npx convex deploy
 ```
-http://localhost:3000
-```
-
----
-
-# Current Implementation Status
-
-| Module | Status |
-|--------|--------|
-| Citizen Reporting | Completed |
-| Duplicate Detection | Completed |
-| Officer Workflow | Completed (with dummy data) |
-| Public Dashboard | Completed (with dummy data) |
-| Heatmap & Pins | Completed (with dummy data) |
-| Account Approval System | Planned for Capstone Project |
-<!-- | AI Layer | Planned for Capstone Project | -->
-
----
-
-# Vision of Our CityCare Project
-
-CityCare aims to evolve into a scalable civic-tech platform capable of:
-
-- Multi-city deployment
-- AI-powered governance analytics
-- Transparent civic performance scoring
-- Smart municipal workflow automation
-
----
