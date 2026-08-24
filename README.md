@@ -46,6 +46,8 @@ Ensure you have the following installed and configured before setting up the pro
 
 ```bash
 git clone https://github.com/sagnikdey45/CityCare---Smart-Civic-Issue-Management-Platform
+```
+```bash
 cd CityCare---Smart-Civic-Issue-Management-Platform
 ```
 
