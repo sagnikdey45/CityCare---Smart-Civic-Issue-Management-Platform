@@ -16,7 +16,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
 
-export function LandingPage({ onGetStarted }) {
+export function LandingPage() {
   const router = useRouter();
 
   return (
@@ -559,7 +559,7 @@ export function LandingPage({ onGetStarted }) {
             Start reporting issues today.
           </p>
           <button
-            onClick={onGetStarted}
+            onClick={() => {router.push("sign-up")}}
             className="group px-10 py-4 bg-white text-teal-600 rounded-full font-semibold text-lg hover:bg-teal-50 dark:bg-gray-100 dark:text-teal-700 dark:hover:bg-gray-200 transition-all transform hover:scale-105 hover:shadow-2xl inline-flex items-center space-x-2"
           >
             <span>Get Started Now</span>
